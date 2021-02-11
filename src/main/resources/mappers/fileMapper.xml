@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.alibaba.server.nio.repository.file.mapper.FileRepository">
+
+    <!--查询当前文件夹-->
+    <select id="getAssignFiles" parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
+
+        SELECT f.* FROM file f WHERE 1 = 1 AND f.del = 'N'
+
+        <if test="pId != null">
+            AND f.p_id = #{pId}
+        </if>
+
+        <if test="fileName != null and fileName != ''">
+            AND f.file_name = #{fileName}
+        </if>
+
+        <if test="filePath != null and filePath != ''">
+            AND f.file_path = #{filePath}
+        </if>
+
+        <if test="fileType != null and fileType != ''">
+            AND f.file_type = #{fileType}
+        </if>
+
+        <if test="isFile != null and isFile != ''">
+            AND f.is_file = #{isFile}
+        </if>
+
+        <if test="isExist != null and isExist != ''">
+            AND f.is_exist = #{isExist}
+        </if>
+
+        <if test="hasChild != null and hasChild != ''">
+            AND f.has_child = #{hasChild}
+        </if>
+
+        ORDER BY f.id DESC
+    </select>
+
+    <!--查询当前文件夹下的文件-->
+    <select id="queryFilesBelongCurrentFolder" parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
+
+        SELECT f.* FROM file f WHERE
+            0 = 0 AND
+            f.p_id = #{pId} AND
+            f.del = #{del} AND
+            f.is_file = #{isFile} AND
+            f.is_exist = #{isExist} AND
+        ORDER BY f.gmt_create DESC LIMIT #{currentPage}, #{pageSize}
+    </select>
+
+    <!-- 批量更新 -->
+    <!--<update id="updateBatch"  parameterType="java.util.List">
+        <foreach collection="list" item="item" index="index" open="" close="" separator=";">
+            update file f
+            <set>
+                <if test="item.del != null and item.del != ''">
+                    f.del = #{item.del}
+                </if>
+                &lt;!&ndash;<if test="item.gmtModified != null">
+                    f.gmt_modified = #{item.gmtModified}
+                </if>
+                <if test="item.delTime != null">
+                    f.del_time = #{item.delTime}
+                </if>&ndash;&gt;
+            </set>
+            where f.id = #{item.id}
+        </foreach>
+    </update>-->
+</mapper>

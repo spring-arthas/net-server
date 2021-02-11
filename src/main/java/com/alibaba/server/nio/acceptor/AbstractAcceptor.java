@@ -1,0 +1,163 @@
+package com.alibaba.server.nio.acceptor;
+
+import com.alibaba.server.common.BasicConstant;
+import com.alibaba.server.nio.core.server.NioServerContext;
+import com.alibaba.server.nio.handler.pipe.standard.DefaultChannelPipeLine;
+import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
+import com.alibaba.server.nio.model.SocketChannelContext;
+import com.alibaba.server.nio.model.TransportProtocol;
+import com.alibaba.server.nio.model.constant.EventModelEnum;
+import com.alibaba.server.nio.reactor.GlobalMainReactor;
+import com.alibaba.server.nio.service.file.handler.*;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
+
+/**
+ * @Auther: YSFY
+ * @Date: 2020-11-21 11:30
+ * @Pacage_name: com.alibaba.server.nio.selector
+ * @Project_Name: net-server
+ * @Description: 公共Selector处理类
+ */
+
+@Slf4j
+@SuppressWarnings("all")
+public class AbstractAcceptor {
+
+    public Selector getCheck(String selectorName) {
+        Selector selector = NioServerContext.getSelector(selectorName);
+        if(!Optional.ofNullable(selector).isPresent()) {
+            throw new RuntimeException("can not get [ " + selectorName + " ] selector from cache");
+        }
+
+        if(!selector.isOpen()) {
+            throw new RuntimeException("[ " + selectorName + " ] selector is not open");
+        }
+
+        return selector;
+    }
+
+    /**
+     * 创建不同的ServerSocketChannel
+     * @param selector
+     * @param assign
+     * @return serverSocketChannel
+     * @throws IOException
+     * */
+    protected ServerSocketChannel initServerSocketChannel(Selector selector, String assign) throws IOException {
+        InetSocketAddress inetSocketAddress = this.create(assign);
+        ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+
+        serverSocketChannel.bind(inetSocketAddress);
+        serverSocketChannel.configureBlocking(false);
+        selector.wakeup();
+        serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+        log.info("[" + Thread.currentThread().getName() + " ] AbstractAcceptor | --> [ " + assign + " ] ServerSocketChannel init success, waiting for client conntect..., listener address = {}, thread = {}", (inetSocketAddress.toString()), Thread.currentThread().getName());
+        return serverSocketChannel;
+    }
+
+    /**
+     * 创建不同的InetSocketAddress
+     * @param assign
+     * @return serverSocketChannel
+     * @throws UnknownHostException
+     * */
+    private InetSocketAddress create(String assign) throws UnknownHostException {
+        String ip = NioServerContext.getValue(BasicConstant.SERVER_IP);
+        if(StringUtils.isBlank(ip) || StringUtils.isEmpty(ip)) {
+            throw new RuntimeException("ServerSocektChannle Listener Ip is empty or blank");
+        }
+
+        String port = "";
+        if(StringUtils.equals(EventModelEnum.CHAT_TASK.getName(), assign)) {
+            port = NioServerContext.getValue(BasicConstant.NIO_MESSAGE_PORT);
+        }
+
+        if(StringUtils.equals(EventModelEnum.FILE_UPLOAD_TASK.getName(), assign)) {
+            port = NioServerContext.getValue(BasicConstant.NIO_FILE_UPLOAD_PORT);
+        }
+
+        if(StringUtils.equals(EventModelEnum.FILE_DOWNLOAD_TASK.getName(), assign)) {
+            port = NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT);
+        }
+
+        if(StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR, assign)) {
+            port = NioServerContext.getValue(BasicConstant.NIO_WEBSOCKET_PORT);
+        }
+
+        if(StringUtils.isBlank(ip) || StringUtils.isEmpty(ip)) {
+            throw new RuntimeException("ServerSocektChannle Listener port is empty or blank");
+        }
+
+        return new InetSocketAddress(InetAddress.getByName(ip), Integer.valueOf(port));
+    }
+
+    /**
+     * 处理连接(配置socket参数，通道附件等)
+     * @param socketChannel
+     * @return
+     * @throws IOException
+     */
+    public SocketChannelContext createModel(SocketChannel socketChannel) throws IOException {
+        // 1、配置SocketChannel基本参数
+        socketChannel.configureBlocking(false);
+        // 是否启用TCP心跳机制 true：启用
+        socketChannel.socket().setKeepAlive(true);
+        // 是否一有数据就马上发送。 true：启用
+        socketChannel.socket().setTcpNoDelay(false);
+        // 优雅的关闭socket连接，并发送-1 (优雅地关闭套接字，或者立刻关闭)
+        /**
+         * 这个Socket选项可以影响close方法的行为。
+         *  在默认情况下，当调用close方法后，将立即返回；
+         *      1、如果这时仍然有未被送出的数据包，那么这些数据包将被丢弃。
+         *      2、如果将linger参数设为一个正整数n时(n的值最大是65,535)，在调用close方法后，将最多被阻塞n秒。在这n秒内，系统将尽量将未送出的数据包发送出去；
+         *          2.1、如果超过了n秒，如果还有未发送的数据包，这些数据包将全部被丢弃；而close方法会立即返回。
+         *      3、如果将linger设为0，和关闭SO_LINGER选项的作用是一样的。
+         * */
+        socketChannel.socket().setSoLinger(true, 20);
+        // 对ServerSocket来说表示等待连接的最长空等待时间; 对Socket来说表示读数据最长空等待时间。
+        socketChannel.socket().setSoTimeout(Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_TIMEOUT)));
+        socketChannel.socket().setReceiveBufferSize(Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_RECEIVE_BUFFER_SIZE)));
+        socketChannel.socket().setSendBufferSize(Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_SEND_BUFFER_SIZE)));
+
+        // 2、注册SocketChannel，并添加通道附件参数
+        SocketChannelContext socketChannelContext = new SocketChannelContext();
+        socketChannelContext.setLocalAddress(NioServerContext.getLocalAddress(socketChannel));
+        socketChannelContext.setRemoteAddress(NioServerContext.getRemoteAddress(socketChannel));
+        socketChannelContext.setChannelPipeLine(new DefaultChannelPipeLine());
+        socketChannelContext.setBlockingQueue(new LinkedBlockingQueue<>(1000));
+        TransportProtocol transportProtocol = new TransportProtocol();
+        transportProtocol.setSocketChannel(socketChannel);
+        transportProtocol.setRealList(new CopyOnWriteArrayList<>());
+        socketChannelContext.setTransportProtocol(transportProtocol);
+        socketChannelContext.setByteBuffer(ByteBuffer.allocateDirect(Integer.parseInt(NioServerContext.getValue(BasicConstant.BYTEBUFFER))));
+
+        // 3、注册通道连接处理器
+        socketChannelContext.setChannelFlag(BasicConstant.FILE_CHANNEL_CONTEXT);
+        // 文件头数据解析处理器Handler
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileHeadDecodeHandler());
+        // 文件头实际数据处理器Handler
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRealDataHandler());
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileReceiveHandler());
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRemoteTransportHandler());
+        // 文件上传或在线传输实时流处理
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadTransportStreamHandler());
+        // 文件下载实时流处理
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadTransportStreamHandler());
+        return socketChannelContext;
+    }
+}
