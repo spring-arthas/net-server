@@ -70,12 +70,12 @@ public class EventModel {
         private int length;
 
         /**
-         * 当前帧序号
+         * 当前bytes帧序号
          * */
         private int index;
 
         /**
-         * 当前数据
+         * 当前bytes数据
          * */
         private byte[] bytes;
 
