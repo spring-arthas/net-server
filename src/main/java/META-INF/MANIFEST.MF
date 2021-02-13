@@ -1,24 +1,3 @@
 Manifest-Version: 1.0
-Class-Path: spring-boot-2.1.5.RELEASE.jar commons-codec-1.10.jar mybat
- is-3.4.6.jar javax.servlet-api-3.0.1.jar checker-qual-3.5.0.jar guava
- -30.0-jre.jar log4j-to-slf4j-2.11.2.jar slf4j-log4j12-1.7.25.jar logb
- ack-classic-1.2.3.jar mybatis-spring-boot-starter-2.0.1.jar javax.ann
- otation-api-1.3.2.jar pagehelper-spring-boot-starter-1.2.12.jar sprin
- g-boot-starter-logging-2.1.5.RELEASE.jar jsqlparser-2.0.jar j2objc-an
- notations-1.3.jar spring-boot-starter-jdbc-2.0.9.RELEASE.jar commons-
- configuration-1.10.jar spring-jcl-5.3.1.jar protobuf-java-3.11.4.jar 
- spring-aop-5.3.1.jar mapstruct-1.4.1.Final.jar log4j-api-2.11.2.jar s
- pring-jdbc-5.3.1.jar pagehelper-spring-boot-autoconfigure-1.2.12.jar 
- commons-collections4-4.1.jar snakeyaml-1.23.jar mybatis-spring-boot-a
- utoconfigure-2.0.1.jar jsr305-3.0.2.jar error_prone_annotations-2.3.4
- .jar listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar c
- ommons-collections-3.2.2.jar spring-context-5.3.1.jar commons-logging
- -1.1.1.jar commons-lang-2.6.jar jul-to-slf4j-1.7.26.jar spring-beans-
- 5.3.1.jar pagehelper-5.1.10.jar HikariCP-2.7.9.jar lombok-1.18.12.jar
-  fastjson-1.2.71.jar mybatis-spring-2.0.6.jar slf4j-api-1.7.26.jar my
- sql-connector-java-8.0.22.jar spring-boot-starter-2.1.5.RELEASE.jar s
- pring-tx-5.3.1.jar spring-boot-autoconfigure-2.1.5.RELEASE.jar druid-
- 1.2.3.jar logback-core-1.2.3.jar spring-core-5.3.1.jar failureaccess-
- 1.0.1.jar log4j-1.2.17.jar spring-expression-5.3.1.jar
 Main-Class: com.alibaba.server.NetServer
 

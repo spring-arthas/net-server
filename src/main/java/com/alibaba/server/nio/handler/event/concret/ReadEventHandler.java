@@ -15,7 +15,9 @@ import com.alibaba.server.util.ByteOrderConvert;
 import com.alibaba.server.util.LocalTime;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
 import org.springframework.util.CollectionUtils;
+
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
@@ -133,8 +135,8 @@ public class ReadEventHandler extends AbstractEventHandler {
                     channelCacheDataModel.setIndex(groupData.getIndex() + 1);
 
                     // 验证及处理当前帧
-                    this.verificateHandleCurrentFrame(channelCacheDataModel, groupData, eventModel);
-                    //channelCacheDataModel.getList().add(groupData);
+                    this.verificateHandleCurrentGroupData(channelCacheDataModel, groupData, eventModel);
+
                     byteBuffer.clear();
                 }
             }
@@ -186,7 +188,7 @@ public class ReadEventHandler extends AbstractEventHandler {
     /**
      * 验证及处理当前帧
      * @param currentChannelCacheDataModel 当前通道缓存对象
-     * @param currentGroupData 当前通道新读入缓存数据
+     * @param currentGroupData 当前通道待处理缓存数据
      * @param currentEventModel 当前通道事件数据模型
      *      基本位数据: 2 + 1 + 4 + 3 + [动态大小] = 10 + [动态大小]
      *          帧组成: 2B : 当前帧总长度
@@ -195,18 +197,33 @@ public class ReadEventHandler extends AbstractEventHandler {
      *                 3B : 帧基本数据 [1B : 帧类型, 1B : 文件类型, 1B : 文件操作类型]
      *            动态大小 : [4B + 不确定大小]，其中4B为动态数据长度大小(int 4字节)
      */
-    private void verificateHandleCurrentFrame(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, EventModel currentEventModel) {
+    private void verificateHandleCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, EventModel currentEventModel) {
         // 1、判断当前数据长度是否能够处理，即校验基本位字节段 int orginStreamDataIndex = 2 + 1 + 4 + 3 + sendDataLengthBytes.Length + sendDataBytes.Length;
         List<EventModel.GroupData> cacheList = currentChannelCacheDataModel.getList();
         if(!CollectionUtils.isEmpty(cacheList)) {
+            // 先将新读入得数据追加至缓存
+            cacheList.add(currentGroupData);
             // 当前通道缓存数据不为空，需要先处理缓存数据，在处理当前缓存数据，处理缓存数据前先排序(升序排序)
             cacheList.stream().sorted(Comparator.comparing(EventModel.GroupData::getIndex));
             // 1.1、处理缓存和当前帧数据
-            for(int i = 0; i < cacheList.size(); i++) {
-                int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, i, currentEventModel);
+            int currentIndex = 0;
+            while (currentIndex < cacheList.size()) {
+                currentGroupData = cacheList.get(currentIndex);
+                int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, currentIndex, currentEventModel);
+                // 索引越界，则无法处理
                 if(nextIndex >= cacheList.size()) {
                     return;
                 }
+
+                // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
+                EventModel.GroupData nextIndexGroupData = cacheList.get(nextIndex);
+                if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
+                    // 设置i为当前返回索引，表明当前返回的索引指示的帧缓存数据一部分为上一帧，一部分为下一帧，所以此处需要再次处理
+                    currentIndex = nextIndex;
+                    continue;
+                }
+
+                currentIndex = nextIndex + 1;
             }
         }
 
@@ -222,13 +239,14 @@ public class ReadEventHandler extends AbstractEventHandler {
         }
 
         // 4、处理当前帧缓存数据
+        cacheList.add(currentGroupData);
         this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, -1, currentEventModel);
     }
 
     /**
      * 处理当前数据，此时当前帧数据必定大于14
      * @param currentChannelCacheDataModel 当前通道缓存对象
-     * @param currentGroupData 当前通道新读入缓存数据
+     * @param currentGroupData 当前通道待处理缓存数据
      * @param currentIndex 当前groupData对应在通道缓存对象中的索引
      * @param currentEventModel 当前通道事件数据模型
      */
@@ -242,92 +260,129 @@ public class ReadEventHandler extends AbstractEventHandler {
         // 2、如果当前帧指定的总长度(currentFrameSumLength) = 当前帧缓存数据长度  -->  刚好能够处理完整帧
         if(currentFrameSumLength == currentGroupDataLength) {
             addCompleteFrameData(currentChannelCacheDataModel, currentGroupData, currentFrameSumLength, currentEventModel);
-            return -1;
+            return currentIndex;
         }
 
         // 3、如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧的数据需要跨越多个groupData
         if(currentFrameSumLength > currentGroupDataLength) {
-            // 缓存中不存在下一个groupData则将当前帧缓存数据添加至当前通道缓存对象
-            if(CollectionUtils.isEmpty(currentChannelCacheDataModel.getList())) {
-                currentChannelCacheDataModel.getList().add(currentGroupData);
-                return -1;
-            }
-
-            // 先处理当前通道数据
-            EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
-            byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
-            System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, (currentGroupData.getLength() - 2));
-            newCompleteGroupData.setLength(currentGroupData.getLength() - 2);
-            newCompleteGroupData.setEndFrame(currentGroupData.getBytes()[0]);
-            byte[] indexBytes = new byte[4];
-            indexBytes[0] = currentGroupData.getBytes()[1];
-            indexBytes[1] = currentGroupData.getBytes()[2];
-            indexBytes[2] = currentGroupData.getBytes()[3];
-            indexBytes[3] = currentGroupData.getBytes()[4];
-            newCompleteGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
-            currentChannelCacheDataModel.getList().add(currentGroupData);
-            //currentEventModel.getCompleteList().add(newCompleteGroupData);
-
-            // 提前从当前通道缓存中根据当前索引获取下一份数据
-            int nextIndex = currentIndex + 1;
-            Boolean goOn = Boolean.TRUE;
-            EventModel.GroupData loopGroupData = null;
-            while (goOn) {
-                // 下一个帧缓存数据索引,并判断下一帧缓存数据是否存在，不存在则不处理
-                if(nextIndex >= currentChannelCacheDataModel.getList().size()) {
-                    // 如果获取的下一个缓存数据对应的索引越界，则将当前帧缓存数据添加至当前通道缓存对象
-                    break;
-                }
-
-                EventModel.GroupData nextGroupData = currentChannelCacheDataModel.getList().get(nextIndex);
-                int nextGroupDataLenth = nextGroupData.getLength();
-                if((nextGroupDataLenth + newCompleteGroupData.getLength()) == currentFrameSumLength) {
-                    System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupDataLenth);
-                    newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupData.getLength());
-                    newCompleteGroupData.setBytes(newCompleteGroupBytes);
-                    nextGroupData.setStatus("HANDLE_SUCCESS");
-                    currentChannelCacheDataModel.getList().add(nextGroupData);
-                    currentEventModel.getCompleteList().add(newCompleteGroupData);
-                    break;
-                }
-
-                if((nextGroupDataLenth + newCompleteGroupData.getLength()) < currentFrameSumLength) {
-                    System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupData.getLength());
-                    newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupData.getLength());
-                    nextGroupData.setStatus("HANDLE_SUCCESS");
-                    currentChannelCacheDataModel.getList().add(nextGroupData);
-                    nextIndex = nextIndex + 1;
-                    continue;
-                }
-
-                // 说明当前索引对应的帧数据存在跨越，一部分是上一帧，一部分是下一帧
-                if((nextGroupDataLenth + newCompleteGroupData.getLength()) < currentFrameSumLength) {
-                    // 处理上一帧剩余数据
-                    int restNeedReadBytesCount = currentFrameSumLength - newCompleteGroupData.getLength();
-                    System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), restNeedReadBytesCount);
-                    newCompleteGroupData.setLength(newCompleteGroupData.getLength() + restNeedReadBytesCount);
-                    newCompleteGroupData.setBytes(newCompleteGroupBytes);
-                    currentChannelCacheDataModel.getList().add(nextGroupData);
-
-                    // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组
-                    byte[] restBytes = new byte[nextGroupData.getLength() - restNeedReadBytesCount];
-                    System.arraycopy(restBytes, 0, nextGroupData.getBytes(), restNeedReadBytesCount, restBytes.length);
-                    nextGroupData.setLength(restBytes.length);
-                    nextGroupData.setBytes(restBytes);
-                    break;
-                }
-            }
-
-            currentGroupData.setStatus("HANDLE_SUCCESS");
-            return nextIndex;
+            return parseFrameSumLengthBiggerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
         }
 
-        // 如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧在当前帧中处理完还存在剩余
+        // 4、如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧在当前帧中处理完还存在剩余
         if(currentFrameSumLength < currentGroupDataLength) {
-
+            return parseFrameSumLengthSmallerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
         }
 
         return -1;
+    }
+
+    /**
+     * 当前帧总长度数据大于当前通道缓存数据处理逻辑
+     * @param currentChannelCacheDataModel 当前通道缓存对象
+     * @param currentGroupData 当前通道待处理缓存数据
+     * @param currentIndex 当前groupData对应在通道缓存对象中的索引
+     * @param currentFrameSumLength 当前通道待处理缓存数据解析出的帧总长度
+     * @param currentEventModel 当前通道事件数据模型
+     */
+    private int parseFrameSumLengthBiggerThanCurrentGroupDataLength(ChannelCacheDataModel currentChannelCacheDataModel,
+         EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
+        // 先处理当前通道数据
+        EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
+        byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
+        System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, (currentGroupData.getLength() - 2));
+        newCompleteGroupData.setLength(currentGroupData.getLength() - 2);
+        newCompleteGroupData.setEndFrame(newCompleteGroupBytes[0]);
+        byte[] indexBytes = new byte[4];
+        indexBytes[0] = newCompleteGroupBytes[1];
+        indexBytes[1] = newCompleteGroupBytes[2];
+        indexBytes[2] = newCompleteGroupBytes[3];
+        indexBytes[3] = newCompleteGroupBytes[4];
+        newCompleteGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
+
+        // 提前从当前通道缓存中根据当前索引获取下一份数据
+        int nextIndex = currentIndex + 1;
+        EventModel.GroupData loopGroupData = null;
+        while (true) {
+            // 下一个帧缓存数据索引,并判断下一帧缓存数据是否存在，不存在则不处理
+            if(nextIndex >= currentChannelCacheDataModel.getList().size()) {
+                // 如果获取的下一个缓存数据对应的索引越界，则将当前帧缓存数据添加至当前通道缓存对象
+                break;
+            }
+
+            EventModel.GroupData nextGroupData = currentChannelCacheDataModel.getList().get(nextIndex);
+            int nextGroupDataLenth = nextGroupData.getLength();
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) == currentFrameSumLength) {
+                System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupDataLenth);
+                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupData.getLength());
+                newCompleteGroupData.setBytes(newCompleteGroupBytes);
+                nextGroupData.setStatus("HANDLE_SUCCESS");
+                currentEventModel.getCompleteList().add(newCompleteGroupData);
+                break;
+            }
+
+            // 说明当前索引对应的帧数据存在跨越，即下一帧依旧未能获取到完整帧，需要再次循环
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) < currentFrameSumLength) {
+                System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupData.getLength());
+                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupData.getLength());
+                nextGroupData.setStatus("HANDLE_SUCCESS");
+                nextIndex = nextIndex + 1;
+                continue;
+            }
+
+            // 说明当前索引对应的帧数据存在跨越，一部分是上一帧，一部分是下一帧
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) > currentFrameSumLength) {
+                // 处理上一帧剩余数据，此处已经处理完
+                int restNeedReadBytesCount = currentFrameSumLength - newCompleteGroupData.getLength();
+                System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), restNeedReadBytesCount);
+                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + restNeedReadBytesCount);
+                newCompleteGroupData.setBytes(newCompleteGroupBytes);
+                currentEventModel.getCompleteList().add(newCompleteGroupData);
+
+                // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组
+                byte[] restBytes = new byte[nextGroupData.getLength() - restNeedReadBytesCount];
+                System.arraycopy(restBytes, 0, nextGroupData.getBytes(), restNeedReadBytesCount, restBytes.length);
+                System.arraycopy(nextGroupData.getBytes(), restNeedReadBytesCount, restBytes, 0, restBytes.length);
+                nextGroupData.setLength(restBytes.length);
+                nextGroupData.setBytes(restBytes);
+                break;
+            }
+        }
+
+        currentGroupData.setStatus("HANDLE_SUCCESS");
+        return nextIndex;
+    }
+
+    /**
+     * 当前帧总长度数据小于当前通道缓存数据处理逻辑
+     * @param currentChannelCacheDataModel 当前通道缓存对象
+     * @param currentGroupData 当前通道待处理缓存数据
+     * @param currentIndex 当前groupData对应在通道缓存对象中的索引
+     * @param currentFrameSumLength 当前通道待处理缓存数据解析出的帧总长度
+     * @param currentEventModel 当前通道事件数据模型
+     */
+    private int parseFrameSumLengthSmallerThanCurrentGroupDataLength(ChannelCacheDataModel currentChannelCacheDataModel,
+        EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
+        // 先处理上一帧数据
+        EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
+        byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
+        System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, newCompleteGroupBytes.length);
+        newCompleteGroupData.setLength(newCompleteGroupBytes.length);
+        newCompleteGroupData.setEndFrame(newCompleteGroupBytes[0]);
+        byte[] indexBytes = new byte[4];
+        indexBytes[0] = newCompleteGroupBytes[1];
+        indexBytes[1] = newCompleteGroupBytes[2];
+        indexBytes[2] = newCompleteGroupBytes[3];
+        indexBytes[3] = newCompleteGroupBytes[4];
+        newCompleteGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
+        currentEventModel.getCompleteList().add(newCompleteGroupData);
+
+        // 处理下一帧数据
+        // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组
+        byte[] restBytes = new byte[currentGroupData.getLength() - 2 - newCompleteGroupBytes.length];
+        System.arraycopy(currentGroupData.getBytes(), (2 + newCompleteGroupBytes.length), restBytes, 0, restBytes.length);
+        currentGroupData.setLength(restBytes.length);
+        currentGroupData.setBytes(restBytes);
+        return currentIndex;
     }
 
     /**
@@ -343,6 +398,7 @@ public class ReadEventHandler extends AbstractEventHandler {
         System.arraycopy(currentGroupData.getBytes(), 2, newCompleteBytesData, 0, (currentFrameSumLength - 2));
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
         newCompleteGroupData.setBytes(newCompleteBytesData);
+        newCompleteGroupData.setLength(newCompleteBytesData.length);
         // 设置结束帧标记 0
         newCompleteGroupData.setEndFrame(newCompleteBytesData[0]);
         // 序号采用客户端发送过来的帧数据进行设置 1~4
