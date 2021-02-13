@@ -108,7 +108,6 @@ public class NioServerContext {
 
     /**
      * 根据SocketChannel获取远程连接信息(ip:port)
-     *
      * @param socketChannel
      * @return
      * */
@@ -128,7 +127,6 @@ public class NioServerContext {
 
     /**
      * 根据SocketChannel获取本地连接信息(ip:port)
-     *
      * @param socketChannel
      * @return
      * */
@@ -178,30 +176,6 @@ public class NioServerContext {
         socketChannel.configureBlocking(false);
         selector.wakeup();
         return socketChannel.register(selector, opt);
-    }
-
-    /**
-     * 发送消息
-     * @param socketChannel
-     * @param message
-     * @return
-     * */
-    public static void sendMessage(SocketChannel socketChannel, String selectorName, Object o) throws IOException {
-        /*try {
-            if(!socketChannel.isConnected()) {
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] CoreServerContext | --> socketChannel is not connected, can not send data , remoteAddress = {}, localAddress = {}",
-                    CoreServerContext.getRemoteAddress(socketChannel), CoreServerContext.getLocalAddress(socketChannel));
-                CoreServerContext.closed(socketChannel);
-            }
-
-            Selector selector = ((Selector) ((Map) BasicServer.getMap().get(selectorName)).get(selectorName));
-            selector.wakeup();
-
-            // 1、为当前通道注册写事件，并返回写事件可选择键，并设置一个附件
-            CoreServerContext.EventRegister(socketChannel, selector, SelectionKey.OP_WRITE).attach(o);
-        } catch (IOException e) {
-            throw e;
-        }*/
     }
 
     /**

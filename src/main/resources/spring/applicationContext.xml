@@ -15,7 +15,10 @@
     http://www.springframework.org/schema/aop/spring-aop.xsd">
 
     <!-- 配置使Spring采用CGLIB代理 -->
-    <!--<aop:aspectj-autoproxy proxy-target-class="true" />-->
+    <!--<aop:aspectj-autoproxy proxy-target
+
+
+    -class="true" />-->
 
     <!-- 启用对事务注解的支持 -->
     <!--<tx:annotation-driven transaction-manager="transactionManager" />-->
@@ -23,9 +26,9 @@
     <!--创建jdbc数据源 -->
     <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
         <property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
-        <property name="url" value="jdbc:mysql://127.0.0.1:3306/net-server?serverTimezone=GMT%2B8&amp;characterEncoding=utf-8&amp;useSSL=false" />
+        <property name="url" value="jdbc:mysql://192.168.0.107:3306/net-server?serverTimezone=GMT%2B8&amp;characterEncoding=utf-8&amp;useSSL=false" />
         <property name="username" value="root" />
-        <property name="password" value="911025pfz" />
+        <property name="password" value="spring" />
         <!-- 配置初始化大小、最小、最大 -->
         <property name="initialSize" value="1" />
         <property name="minIdle" value="1" />

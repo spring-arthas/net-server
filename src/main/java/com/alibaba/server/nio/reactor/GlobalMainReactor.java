@@ -59,8 +59,7 @@ public class GlobalMainReactor {
 
                 thread.start();
 
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] GlobalMainReactor | --> socketChannel subReactor create success, online connections = {}, thread = {}",
-                    subReactorMap.size(),  Thread.currentThread().getName());
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] GlobalMainReactor | --> socketChannel subReactor create success, online connections = {}, thread = {}", subReactorMap.size(),  Thread.currentThread().getName());
             }
             return subReactor;
         } catch (Exception e) {

@@ -198,13 +198,12 @@ public class ReadEventHandler extends AbstractEventHandler {
                 channelCacheDataModel.setIndex(groupData.getIndex() + 1);
             }
 
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 当前通道 [{}] 数据处理部分成功，存在未处理成功的帧数据，个数为 [{}], 未成功处理的数据将会在下次读取时处理",
-                currentAddress, channelCacheDataModel.getList().size());
+            /*log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 当前通道 [{}] 数据处理部分成功，存在未处理成功的帧数据，个数为 [{}], 未成功处理的数据将会在下次读取时处理", currentAddress, channelCacheDataModel.getList().size());*/
         }
 
         // 3、如果待处理的业务数据流为空，则直接返回
         if(CollectionUtils.isEmpty(eventModel.getCompleteList())) {
-            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 当前通道 [{}] 待进行数据字节解析处理集合为空", currentAddress);
+            //log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 当前通道 [{}] 待进行数据字节解析处理集合为空", currentAddress);
             return Boolean.FALSE;
         }
 
@@ -225,6 +224,7 @@ public class ReadEventHandler extends AbstractEventHandler {
         // 1、合并数组
         int completeFrameIndex = 0; // 当前完整帧序号
         int copyIndex = 0;
+        int originListSize = originList.size();
         for(int i = 0; i < originList.size(); i++) { // 4000 4000 4000 4000 356
 
             /**
@@ -256,7 +256,7 @@ public class ReadEventHandler extends AbstractEventHandler {
 
             // 1.3、未发生粘包半包处理 ---> 能够解析出帧长度数据,判断是否发生粘包或半包
             if(frameSumLength == currentBytes.length) { // 当前帧长度指定的完整数据刚好等于当前byte[]除掉帧长度数据后剩余的字节数，即最理想情况
-                EventModel.GroupData groupData = this.readAssignBytes(originList.get(i), frameSumLength, eventModel);
+                EventModel.GroupData groupData = this.readAssignBytes(currentGroupData, frameSumLength, eventModel);
                 // 判断是否包含有结束帧
                 if(groupData.getEndFrame() == (byte) 1) {
                     return;
@@ -266,19 +266,21 @@ public class ReadEventHandler extends AbstractEventHandler {
             // 1.4、半包处理1 ---> 当前帧长度指定的完整数据小于当前byte[]除掉帧长度数据后剩余的字节数，发生粘包
             if(frameSumLength < currentBytes.length) {
                 // 粘包处理第一步: 先正常处理当前帧中一组数据
-                EventModel.GroupData groupData = this.readAssignBytes(originList.get(i), frameSumLength, eventModel);
+                EventModel.GroupData groupData = this.readAssignBytes(currentGroupData, frameSumLength, eventModel);
 
                 // 粘包处理第二步：再处理当前帧中粘连部分数据,判断粘连部分能否进行处理，临界情况为刚好粘连了第二个帧的第一个字节数据，其他数据都在第二个帧
-                if(!((i + 1) >= originList.size())) {
-                    this.stickyPackage(originList.get(i + 1), originList.get(i), frameSumLength, eventModel);
+                if(!((i + 1) >= originListSize)) {
+                    EventModel.GroupData nextGroupData = originList.get(i + 1);
+                    this.stickyPackage(nextGroupData, currentGroupData, frameSumLength, eventModel);
                 }
             }
 
             // 1.5、半包处理2 ---> 当前帧长度指定的完整数据大于当前byte[]除掉帧长度数据后剩余的字节数，发生拆包
             if(frameSumLength > currentBytes.length) {
                 // 拆包处理，当前currentBytes缺少数据，需要从第二个包进行读取
-                if(!((i + 1) >= originList.size())) {
-                    this.unpacking(originList.get(i + 1), originList.get(i), frameSumLength, eventModel);
+                if(!((i + 1) >= originListSize)) {
+                    EventModel.GroupData nextGroupData = originList.get(i + 1);
+                    this.unpacking(nextGroupData, currentGroupData, frameSumLength, eventModel);
                 }
             }
         }
@@ -318,7 +320,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             // 帧对以上两种情况，直接将当前帧剩余字节数复制到下一帧中，由下次循环进行处理
             byte[] appendFrameBytes = new byte[currentFrameRestByteLength + nextGroupData.getLength()];
             // 从当前帧拷贝剩余总字节数
-            System.arraycopy(currentGroupData.getBytes(), frameSumLength, appendFrameBytes, 0, currentFrameRestByteLength);
+            System.arraycopy(currentGroupData.getBytes(), 0, appendFrameBytes, 0, currentFrameRestByteLength);
             // 从下一个帧拷贝总字节数
             System.arraycopy(nextGroupData.getBytes(), 0, appendFrameBytes, currentFrameRestByteLength, nextGroupData.getLength());
             nextGroupData.setLength(appendFrameBytes.length);
@@ -383,7 +385,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             // 帧对以上两种情况，直接将当前帧剩余字节数复制到下一帧中，由下次循环进行处理
             byte[] appendFrameBytes = new byte[currentGroupData.getLength() + nextGroupData.getLength()];
             // 从当前帧拷贝剩余总字节数
-            System.arraycopy(currentGroupData.getBytes(), frameSumLength, appendFrameBytes, 0, currentGroupData.getLength());
+            System.arraycopy(currentGroupData.getBytes(), 0, appendFrameBytes, 0, currentGroupData.getLength());
             // 从下一个帧拷贝总字节数
             System.arraycopy(nextGroupData.getBytes(), 0, appendFrameBytes, currentGroupData.getLength(), nextGroupData.getLength());
             nextGroupData.setLength(appendFrameBytes.length);
