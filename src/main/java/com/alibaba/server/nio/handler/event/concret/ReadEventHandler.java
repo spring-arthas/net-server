@@ -199,8 +199,8 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private void verificateHandleCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, EventModel currentEventModel) {
         // 1、判断当前数据长度是否能够处理，即校验基本位字节段 int orginStreamDataIndex = 2 + 1 + 4 + 3 + sendDataLengthBytes.Length + sendDataBytes.Length;
-        List<EventModel.GroupData> cacheList = currentChannelCacheDataModel.getList();
-        if(!CollectionUtils.isEmpty(cacheList)) {
+        if(!CollectionUtils.isEmpty(currentChannelCacheDataModel.getList())) {
+            List<EventModel.GroupData> cacheList = currentChannelCacheDataModel.getList();
             // 先将新读入得数据追加至缓存至最后一个
             cacheList.add(currentGroupData);
             // 当前通道缓存数据不为空，需要先处理缓存数据，在处理当前缓存数据，处理缓存数据前先排序(升序排序)
@@ -208,8 +208,12 @@ public class ReadEventHandler extends AbstractEventHandler {
             // 1.1、处理缓存和当前帧数据
             int currentIndex = 0;
             while (currentIndex < cacheList.size()) {
-                currentGroupData = cacheList.get(currentIndex);
-                int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, currentIndex, currentEventModel);
+                int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, cacheList.get(currentIndex), currentIndex, currentEventModel);
+                if(nextIndex == -1) {
+                    cacheList.remove(currentIndex);
+                    return;
+                }
+
                 // 索引越界，则无法处理
                 if(nextIndex >= cacheList.size()) {
                     return;
@@ -239,8 +243,12 @@ public class ReadEventHandler extends AbstractEventHandler {
             }
 
             // 4、处理当前帧缓存数据
-            cacheList.add(currentGroupData);
-            this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
+            currentChannelCacheDataModel.getList().add(currentGroupData);
+            int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
+            if(nextIndex == -1) {
+                currentChannelCacheDataModel.getList().remove(0);
+                return;
+            }
         }
     }
 
@@ -256,6 +264,11 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 1、解析当前帧总长度
         int currentFrameSumLength = this.getFrameSumLengthBytes(currentGroupData.getBytes()[0], currentGroupData.getBytes()[1]);
+        if(currentFrameSumLength <= 0) {
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 处理通道 [{}] 当前帧的总长度数据解析错误, 帧序号 = [{}], 解析出来的帧总长度 = [{}]",
+                currentEventModel.getRemoteAddress(), currentGroupData.getIndex(), currentFrameSumLength);
+            return -1;
+        }
 
         // 2、如果当前帧指定的总长度(currentFrameSumLength) = 当前帧缓存数据长度  -->  刚好能够处理完整帧
         if(currentFrameSumLength == currentGroupDataLength) {
