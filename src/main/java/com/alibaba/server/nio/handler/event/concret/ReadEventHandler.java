@@ -240,7 +240,7 @@ public class ReadEventHandler extends AbstractEventHandler {
 
             // 4、处理当前帧缓存数据
             cacheList.add(currentGroupData);
-            this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, -1, currentEventModel);
+            this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
         }
     }
 
@@ -252,7 +252,6 @@ public class ReadEventHandler extends AbstractEventHandler {
      * @param currentEventModel 当前通道事件数据模型
      */
     private int executeParseCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, int currentIndex, EventModel currentEventModel) {
-        int nextWaitHandlerFrameIndex = 0;
         int currentGroupDataLength = currentGroupData.getLength();
 
         // 1、解析当前帧总长度
@@ -295,7 +294,7 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private int parseFrameSumLengthBiggerThanCurrentGroupDataLength(ChannelCacheDataModel currentChannelCacheDataModel,
          EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
-        // 先处理当前通道数据
+        // 先处理当前通道数据，构建新的
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
         byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
         System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, (currentGroupData.getLength() - 2));
@@ -310,19 +309,18 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 提前从当前通道缓存中根据当前索引获取下一份数据
         int nextIndex = currentIndex + 1;
-        EventModel.GroupData loopGroupData = null;
         while (true) {
             // 下一个帧缓存数据索引,并判断下一帧缓存数据是否存在，不存在则不处理
             if(nextIndex >= currentChannelCacheDataModel.getList().size()) {
                 // 如果获取的下一个缓存数据对应的索引越界，则将当前帧缓存数据添加至当前通道缓存对象
-                break;
+                return nextIndex;
             }
 
             EventModel.GroupData nextGroupData = currentChannelCacheDataModel.getList().get(nextIndex);
             int nextGroupDataLenth = nextGroupData.getLength();
-            if((nextGroupDataLenth + newCompleteGroupData.getLength()) == currentFrameSumLength) {
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) == (currentFrameSumLength - 2)) {
                 System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupDataLenth);
-                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupData.getLength());
+                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupDataLenth);
                 newCompleteGroupData.setBytes(newCompleteGroupBytes);
                 nextGroupData.setStatus("HANDLE_SUCCESS");
                 currentEventModel.getCompleteList().add(newCompleteGroupData);
@@ -330,29 +328,30 @@ public class ReadEventHandler extends AbstractEventHandler {
             }
 
             // 说明当前索引对应的帧数据存在跨越，即下一帧依旧未能获取到完整帧，需要再次循环
-            if((nextGroupDataLenth + newCompleteGroupData.getLength()) < currentFrameSumLength) {
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) < (currentFrameSumLength - 2)) {
                 System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupData.getLength());
-                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupData.getLength());
+                newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupDataLenth);
                 nextGroupData.setStatus("HANDLE_SUCCESS");
                 nextIndex = nextIndex + 1;
                 continue;
             }
 
             // 说明当前索引对应的帧数据存在跨越，一部分是上一帧，一部分是下一帧
-            if((nextGroupDataLenth + newCompleteGroupData.getLength()) > currentFrameSumLength) {
-                // 处理上一帧剩余数据，此处已经处理完
-                int restNeedReadBytesCount = currentFrameSumLength - newCompleteGroupData.getLength();
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) > (currentFrameSumLength - 2)) {
+                // 处理上一帧剩余数据，此处已经处理完,restNeedReadBytesCount的计算会导致数组越界异常，必须控制好，需要减去帧总长度两个字节
+                int restNeedReadBytesCount = (currentFrameSumLength - 2)  - newCompleteGroupData.getLength();
                 System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), restNeedReadBytesCount);
                 newCompleteGroupData.setLength(newCompleteGroupData.getLength() + restNeedReadBytesCount);
                 newCompleteGroupData.setBytes(newCompleteGroupBytes);
                 currentEventModel.getCompleteList().add(newCompleteGroupData);
 
                 // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组
-                byte[] restBytes = new byte[nextGroupData.getLength() - restNeedReadBytesCount];
-                System.arraycopy(restBytes, 0, nextGroupData.getBytes(), restNeedReadBytesCount, restBytes.length);
+                byte[] restBytes = new byte[nextGroupDataLenth - restNeedReadBytesCount];
+                //System.arraycopy(restBytes, 0, nextGroupData.getBytes(), restNeedReadBytesCount, restBytes.length);
                 System.arraycopy(nextGroupData.getBytes(), restNeedReadBytesCount, restBytes, 0, restBytes.length);
                 nextGroupData.setLength(restBytes.length);
                 nextGroupData.setBytes(restBytes);
+                nextGroupData.setStatus("UN_HANDLE");
                 break;
             }
         }
@@ -387,10 +386,11 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 处理下一帧数据
         // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组
-        byte[] restBytes = new byte[currentGroupData.getLength() - 2 - newCompleteGroupBytes.length];
+        byte[] restBytes = new byte[currentGroupData.getLength() - (2 + newCompleteGroupBytes.length)];
         System.arraycopy(currentGroupData.getBytes(), (2 + newCompleteGroupBytes.length), restBytes, 0, restBytes.length);
         currentGroupData.setLength(restBytes.length);
         currentGroupData.setBytes(restBytes);
+        currentGroupData.setStatus("UN_HANDLE");
         return currentIndex;
     }
 
