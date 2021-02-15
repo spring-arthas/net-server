@@ -201,7 +201,7 @@ public class ReadEventHandler extends AbstractEventHandler {
         // 1、判断当前数据长度是否能够处理，即校验基本位字节段 int orginStreamDataIndex = 2 + 1 + 4 + 3 + sendDataLengthBytes.Length + sendDataBytes.Length;
         List<EventModel.GroupData> cacheList = currentChannelCacheDataModel.getList();
         if(!CollectionUtils.isEmpty(cacheList)) {
-            // 先将新读入得数据追加至缓存
+            // 先将新读入得数据追加至缓存至最后一个
             cacheList.add(currentGroupData);
             // 当前通道缓存数据不为空，需要先处理缓存数据，在处理当前缓存数据，处理缓存数据前先排序(升序排序)
             cacheList.stream().sorted(Comparator.comparing(EventModel.GroupData::getIndex));
@@ -218,29 +218,30 @@ public class ReadEventHandler extends AbstractEventHandler {
                 // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
                 EventModel.GroupData nextIndexGroupData = cacheList.get(nextIndex);
                 if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
-                    // 设置i为当前返回索引，表明当前返回的索引指示的帧缓存数据一部分为上一帧，一部分为下一帧，所以此处需要再次处理
+                    // 设置当前索引为返回索引，表明当前返回的索引指示的帧缓存数据一部分为上一帧，一部分为下一帧，所以此处需要再次处理，那么下次循环会对当前索引
+                    // 表示的GroupData再次进行处理，此时处理的为后半部分为下一帧的数据
                     currentIndex = nextIndex;
                     continue;
                 }
 
                 currentIndex = nextIndex + 1;
             }
-        }
+        } else {
+            // 2、没有缓存数据，直接处理当前缓存数据
+            if(currentGroupData.getLength() == 0) {
+                return;
+            }
 
-        // 2、没有缓存数据，直接处理当前缓存数据
-        if(currentGroupData.getLength() == 0) {
-            return;
-        }
+            // 3、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
+            if(currentGroupData.getLength() < 14) {
+                currentChannelCacheDataModel.getList().add(currentGroupData);
+                return;
+            }
 
-        // 3、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
-        if(currentGroupData.getLength() < 14) {
-            currentChannelCacheDataModel.getList().add(currentGroupData);
-            return;
+            // 4、处理当前帧缓存数据
+            cacheList.add(currentGroupData);
+            this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, -1, currentEventModel);
         }
-
-        // 4、处理当前帧缓存数据
-        cacheList.add(currentGroupData);
-        this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, -1, currentEventModel);
     }
 
     /**
@@ -265,12 +266,20 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 3、如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧的数据需要跨越多个groupData
         if(currentFrameSumLength > currentGroupDataLength) {
-            return parseFrameSumLengthBiggerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
+            try {
+                return parseFrameSumLengthBiggerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
+            } catch (ArrayIndexOutOfBoundsException e) {
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 处理通道 [{}] 字节数据出现ArrayIndexOutOfBoundsException", currentEventModel.getRemoteAddress());
+            }
         }
 
         // 4、如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧在当前帧中处理完还存在剩余
         if(currentFrameSumLength < currentGroupDataLength) {
-            return parseFrameSumLengthSmallerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
+            try {
+                return parseFrameSumLengthSmallerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
+            } catch (ArrayIndexOutOfBoundsException e) {
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 处理通道 [{}] 字节数据出现ArrayIndexOutOfBoundsException", currentEventModel.getRemoteAddress());
+            }
         }
 
         return -1;
@@ -399,7 +408,7 @@ public class ReadEventHandler extends AbstractEventHandler {
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
         newCompleteGroupData.setBytes(newCompleteBytesData);
         newCompleteGroupData.setLength(newCompleteBytesData.length);
-        // 设置结束帧标记 0
+        // 设置结束帧标记
         newCompleteGroupData.setEndFrame(newCompleteBytesData[0]);
         // 序号采用客户端发送过来的帧数据进行设置 1~4
         byte[] indexBytes = new byte[4];
