@@ -226,7 +226,10 @@ public class ReadEventHandler extends AbstractEventHandler {
                 EventModel.GroupData nextIndexGroupData = cacheList.get(nextIndex);
                 if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
                     // 设置当前索引为返回索引，表明当前返回的索引指示的帧缓存数据一部分为上一帧，一部分为下一帧，所以此处需要再次处理，那么下次循环会对当前索引
-                    // 表示的GroupData再次进行处理，此时处理的为后半部分为下一帧的数据
+                    // 表示的GroupData再次进行处理，此时处理的为后半部分为下一帧的数据，但是需要判断当前帧数据长度是否足够14个，不够则需要将数据拷贝至下一个
+                    // 索引对应的groupData
+
+
                     currentIndex = nextIndex;
                     continue;
                 }
@@ -253,6 +256,10 @@ public class ReadEventHandler extends AbstractEventHandler {
                 return;
             }
         }
+    }
+
+    private void frameSumLengthSmallerThan14() {
+
     }
 
     /**
@@ -402,8 +409,19 @@ public class ReadEventHandler extends AbstractEventHandler {
         newCompleteGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
         currentEventModel.getCompleteList().add(newCompleteGroupData);
 
+        // 移除已经为HANDLE_SUCCESS状态的数据包
+        List<EventModel.GroupData> removeList = Lists.newArrayList();
+        for(int i = 0; (i < currentIndex && i < currentChannelCacheDataModel.getList().size()); i++) {
+            if(i <= currentIndex && "HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
+                removeList.add(currentChannelCacheDataModel.getList().get(i));
+            } else {
+                break;
+            }
+        }
+        currentChannelCacheDataModel.getList().removeAll(removeList);
+
         // 处理下一帧数据
-        // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组
+        // 处理当前帧缓存数据剩余字节,即变为新的缓存字节数组，但是剩余的字节数组可能不够14个，无法进行处理
         byte[] restBytes = new byte[currentGroupData.getLength() - (2 + newCompleteGroupBytes.length)];
         System.arraycopy(currentGroupData.getBytes(), (2 + newCompleteGroupBytes.length), restBytes, 0, restBytes.length);
         currentGroupData.setLength(restBytes.length);
@@ -435,6 +453,16 @@ public class ReadEventHandler extends AbstractEventHandler {
         newCompleteGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
         currentEventModel.getCompleteList().add(newCompleteGroupData);
         currentGroupData.setStatus("HANDLE_SUCCESS");
+
+        List<EventModel.GroupData> removeList = Lists.newArrayList();
+        for(int i = 0; (i <= currentIndex && i < currentChannelCacheDataModel.getList().size()); i++) {
+            if(i <= currentIndex && "HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
+                removeList.add(currentChannelCacheDataModel.getList().get(i));
+            } else {
+                break;
+            }
+        }
+        currentChannelCacheDataModel.getList().removeAll(removeList);
     }
 
     /**
