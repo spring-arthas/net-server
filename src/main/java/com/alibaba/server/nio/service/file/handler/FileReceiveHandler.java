@@ -27,7 +27,7 @@ public class FileReceiveHandler extends AbstractChannelHandler {
 
     @Override
     public void handler(Object o, ChannelContext channelContext) throws IOException {
-        SocketChannelContext socketChannelContext = (SocketChannelContext) o;
+        /*SocketChannelContext socketChannelContext = (SocketChannelContext) o;
         List<Object> realList = socketChannelContext.getTransportProtocol().getRealList();
 
         // 1、处理文件数据(realList 中可能包含多个待处理文件)
@@ -36,7 +36,7 @@ public class FileReceiveHandler extends AbstractChannelHandler {
 
             // 2、服务端开始接收客户端发送的文件数据，并执行存储
             this.receiveFileData(fileMessageFrame, socketChannelContext, channelContext);
-        }
+        }*/
     }
 
     /**

@@ -218,64 +218,41 @@ public class ReadEventHandler extends AbstractEventHandler {
             // 1.1、处理缓存和当前帧数据
             int currentIndex = 0;
             while (currentIndex < cacheList.size()) {
-                int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, cacheList.get(currentIndex), currentIndex, currentEventModel);
-                // 需要重新read
-                if(nextIndex == -1) {
-                    //cacheList.remove(currentIndex);
-                    return -1;
-                }
+                currentIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, cacheList.get(currentIndex), currentIndex, currentEventModel);
 
-                // 索引越界，则无法处理,需要重新read
-                if(nextIndex >= cacheList.size()) {
+                // 返回 -1 或 GroupData缓存越界，直接返回
+                if(currentIndex == -1 || (currentIndex >= cacheList.size())) {
                     return -1;
                 }
 
                 // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
-                EventModel.GroupData nextIndexGroupData = cacheList.get(nextIndex);
+                EventModel.GroupData nextIndexGroupData = cacheList.get(currentIndex);
                 if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
-
-                    // 设置当前索引为返回索引，表明当前返回的索引指示的帧缓存数据一部分为上一帧，一部分为下一帧，所以此处需要再次处理，那么下次循环会对当前索引
-                    // 表示的GroupData再次进行处理，此时处理的为后半部分为下一帧的数据，但是需要判断当前帧数据长度是否足够14个，不够则需要将数据拷贝至下一个
-                    // 索引对应的groupData
-                    if(nextIndexGroupData.getLength() < 14) {
-                        Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, nextIndexGroupData, nextIndex);
-                        if(!result) {
-                            // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
-                            return -1;
-                        }
-
-                        // 此处已经将小于14个字节的基础数据拷贝至下一个GroupData，此处索引直接加1,跳过被复制到下一个GroupData的帧，因为没必要在处理小于14个字节长度的帧
-                        currentIndex = nextIndex + 1;
-                    } else {
-                        currentIndex = nextIndex;
+                    Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, nextIndexGroupData, currentIndex);
+                    if(!result) {
+                        // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
+                        return -1;
                     }
+
+                    // 如果大于14个字节，直接在当前索引 [currentIndex] 直接进行下次循环处理
                     continue;
                 }
 
-                currentIndex = nextIndex + 1;
+                // 如果没有剩余，说明刚好加上 [currentIndex] 指定的GroupData所有数据刚好等于currentFrameSumLength，那么直接自增1，执行下一次处理
+                currentIndex++;
             }
 
             return -3;
         } else {
-            // 2、没有缓存数据，直接处理当前缓存数据
-            if(currentGroupData.getLength() == 0) {
-                return -1;
-            }
-
-            // 3、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
+            // 2、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
             if(currentGroupData.getLength() < 14) {
                 currentChannelCacheDataModel.getList().add(currentGroupData);
                 return -1;
             }
 
-            // 4、处理当前帧缓存数据
+            // 3、处理当前帧缓存数据
             currentChannelCacheDataModel.getList().add(currentGroupData);
-            int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
-            if(nextIndex == -1 || nextIndex == -2) {
-                //currentChannelCacheDataModel.getList().remove(0);
-                return nextIndex;
-            }
-            return nextIndex;
+            return this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
         }
     }
 

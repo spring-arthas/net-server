@@ -33,12 +33,12 @@ public class FileRemoteTransportHandler extends AbstractChannelHandler {
 
     @Override
     public void handler(Object o, ChannelContext channelContext) throws IOException {
-        SocketChannelContext socketChannelContext = (SocketChannelContext) o;
+        /*SocketChannelContext socketChannelContext = (SocketChannelContext) o;
         SimpleChannelContext simpleChannelContext = (SimpleChannelContext) channelContext;
         Map<String, Object> remoteMessageMap = (Map<String, Object>) simpleChannelContext.getObj();
 
         // 1、 文件传送任务存储DB
-        this.storeTaskToDB(remoteMessageMap);
+        this.storeTaskToDB(remoteMessageMap);*/
 
 
     }
