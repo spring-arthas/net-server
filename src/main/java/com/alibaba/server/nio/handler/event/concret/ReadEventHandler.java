@@ -135,7 +135,14 @@ public class ReadEventHandler extends AbstractEventHandler {
                     channelCacheDataModel.setIndex(groupData.getIndex() + 1);
 
                     // 验证及处理当前帧
-                    this.verificateHandleCurrentGroupData(channelCacheDataModel, groupData, eventModel);
+                    int result = this.verificateHandleCurrentGroupData(channelCacheDataModel, groupData, eventModel);
+                    if(result == -2) {
+                        throw new RuntimeException("通道 [" + socketChannelContext.getRemoteAddress() + "] 解析当前帧 [序号 = " + groupData.getIndex() + "] 的帧总长度数据错误");
+                    }
+
+                    if(result == -3) {
+                        throw new RuntimeException("通道 [" + socketChannelContext.getRemoteAddress() + "] 解析当前帧 [序号 = " + groupData.getIndex() + "] 发生未知错误");
+                    }
 
                     byteBuffer.clear();
                 }
@@ -148,7 +155,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 NioServerContext.closedAndRelease(socketChannel);
                 return Boolean.FALSE;
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             // 处理read产生的异常
             if(e instanceof SocketException) {
                 // Connection reset || Connection reset by peer:Socket write error || Broken pipe
@@ -162,6 +169,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 e.printStackTrace();
             }
 
+            eventModel.getSelectionKey().cancel();
             NioServerContext.closedAndRelease(socketChannel);
             return Boolean.FALSE;
         }
@@ -197,7 +205,7 @@ public class ReadEventHandler extends AbstractEventHandler {
      *                 3B : 帧基本数据 [1B : 帧类型, 1B : 文件类型, 1B : 文件操作类型]
      *            动态大小 : [4B + 不确定大小]，其中4B为动态数据长度大小(int 4字节)
      */
-    private void verificateHandleCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, EventModel currentEventModel) {
+    private int verificateHandleCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, EventModel currentEventModel) {
         // 1、判断当前数据长度是否能够处理，即校验基本位字节段 int orginStreamDataIndex = 2 + 1 + 4 + 3 + sendDataLengthBytes.Length + sendDataBytes.Length;
         if(!CollectionUtils.isEmpty(currentChannelCacheDataModel.getList())) {
             List<EventModel.GroupData> cacheList = currentChannelCacheDataModel.getList();
@@ -210,19 +218,21 @@ public class ReadEventHandler extends AbstractEventHandler {
             int currentIndex = 0;
             while (currentIndex < cacheList.size()) {
                 int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, cacheList.get(currentIndex), currentIndex, currentEventModel);
+                // 需要重新read
                 if(nextIndex == -1) {
                     //cacheList.remove(currentIndex);
-                    return;
+                    return -1;
                 }
 
-                // 索引越界，则无法处理
+                // 索引越界，则无法处理,需要重新read
                 if(nextIndex >= cacheList.size()) {
-                    return;
+                    return -2;
                 }
 
                 // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
                 EventModel.GroupData nextIndexGroupData = cacheList.get(nextIndex);
                 if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
+
                     // 设置当前索引为返回索引，表明当前返回的索引指示的帧缓存数据一部分为上一帧，一部分为下一帧，所以此处需要再次处理，那么下次循环会对当前索引
                     // 表示的GroupData再次进行处理，此时处理的为后半部分为下一帧的数据，但是需要判断当前帧数据长度是否足够14个，不够则需要将数据拷贝至下一个
                     // 索引对应的groupData
@@ -230,7 +240,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                         Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, nextIndexGroupData, nextIndex);
                         if(!result) {
                             // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
-                            return;
+                            return -1;
                         }
 
                         // 此处已经将小于14个字节的基础数据拷贝至下一个GroupData，此处索引直接加1,跳过被复制到下一个GroupData的帧，因为没必要在处理小于14个字节长度的帧
@@ -243,25 +253,28 @@ public class ReadEventHandler extends AbstractEventHandler {
 
                 currentIndex = nextIndex + 1;
             }
+
+            return -3;
         } else {
             // 2、没有缓存数据，直接处理当前缓存数据
             if(currentGroupData.getLength() == 0) {
-                return;
+                return -1;
             }
 
             // 3、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
             if(currentGroupData.getLength() < 14) {
                 currentChannelCacheDataModel.getList().add(currentGroupData);
-                return;
+                return -1;
             }
 
             // 4、处理当前帧缓存数据
             currentChannelCacheDataModel.getList().add(currentGroupData);
             int nextIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
-            if(nextIndex == -1) {
+            if(nextIndex == -1 || nextIndex == -2) {
                 //currentChannelCacheDataModel.getList().remove(0);
-                return;
+                return nextIndex;
             }
+            return nextIndex;
         }
     }
 
@@ -274,12 +287,11 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private Boolean frameSumLengthSmallerThan14(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData nextIndexGroupData, int currentIndex) {
         // 获取下一个GroupData
-        EventModel.GroupData nextIndex2GroupData = currentChannelCacheDataModel.getList().get(currentIndex + 1);
-        if(null == nextIndex2GroupData) {
-            // 没有下一个GroupData，直接返回
+        if((currentIndex + 1) >= currentChannelCacheDataModel.getList().size()) {
             return Boolean.FALSE;
         }
 
+        EventModel.GroupData nextIndex2GroupData = currentChannelCacheDataModel.getList().get(currentIndex + 1);
         byte[] newBytes = new byte[nextIndexGroupData.getLength() + nextIndex2GroupData.getLength()];
         System.arraycopy(nextIndexGroupData.getBytes(), 0, newBytes, 0, nextIndexGroupData.getLength());
         System.arraycopy(nextIndex2GroupData.getBytes(), 0, newBytes, nextIndexGroupData.getLength(), nextIndex2GroupData.getLength());
@@ -317,7 +329,7 @@ public class ReadEventHandler extends AbstractEventHandler {
         if(currentFrameSumLength <= 0) {
             log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 通道 [{}] 解析当前帧 [序号 = {}] 的帧总长度数据错误, 解析出来的帧总长度 = [{}]",
                 currentEventModel.getRemoteAddress(), currentGroupData.getIndex(), currentFrameSumLength);
-            return -1;
+            return -2;
         }
 
         // 3、如果当前帧指定的总长度(currentFrameSumLength) = 当前帧缓存数据长度  -->  刚好能够处理完整帧
@@ -394,10 +406,8 @@ public class ReadEventHandler extends AbstractEventHandler {
                 currentGroupData.setStatus("HANDLE_SUCCESS");
                 List<EventModel.GroupData> removeList = Lists.newArrayList();
                 for(int i = 0; (i <= nextIndex && i < currentChannelCacheDataModel.getList().size()); i++) {
-                    if(i <= currentIndex && "HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
+                    if("HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
                         removeList.add(currentChannelCacheDataModel.getList().get(i));
-                    } else {
-                        break;
                     }
                 }
                 currentChannelCacheDataModel.getList().removeAll(removeList);
@@ -433,10 +443,8 @@ public class ReadEventHandler extends AbstractEventHandler {
                 currentGroupData.setStatus("HANDLE_SUCCESS");
                 List<EventModel.GroupData> removeList = Lists.newArrayList();
                 for(int i = 0; (i < nextIndex && i < currentChannelCacheDataModel.getList().size()); i++) {
-                    if(i <= currentIndex && "HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
+                    if("HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
                         removeList.add(currentChannelCacheDataModel.getList().get(i));
-                    } else {
-                        break;
                     }
                 }
                 currentChannelCacheDataModel.getList().removeAll(removeList);
@@ -463,7 +471,7 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private int parseFrameSumLengthSmallerThanCurrentGroupDataLength(ChannelCacheDataModel currentChannelCacheDataModel,
         EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
-        // 1、先处理上一帧数据
+        // 1、处理当前GroupData属于上一帧的数据
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
         byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
         System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, newCompleteGroupBytes.length);
@@ -477,20 +485,18 @@ public class ReadEventHandler extends AbstractEventHandler {
         newCompleteGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
         currentEventModel.getCompleteList().add(newCompleteGroupData);
 
-        // 2、处理下一帧数据
+        // 2、处理当前GroupData属于下一帧的数据，即移除上一帧的字节数据，只保留属于下一帧的字节数据，同时当前GroupData依旧是未处理状态[UN_HANDLE]
         byte[] restBytes = new byte[currentGroupData.getLength() - (2 + newCompleteGroupBytes.length)];
         System.arraycopy(currentGroupData.getBytes(), (2 + newCompleteGroupBytes.length), restBytes, 0, restBytes.length);
         currentGroupData.setLength(restBytes.length);
         currentGroupData.setBytes(restBytes);
         currentGroupData.setStatus("UN_HANDLE");
 
-        // 3、处理完当前帧，移除已经为HANDLE_SUCCESS状态的数据包
+        // 3、处理完当前帧，移除索引小于 [currentIndex] 之前已经为HANDLE_SUCCESS状态的数据包
         List<EventModel.GroupData> removeList = Lists.newArrayList();
         for(int i = 0; (i < currentIndex && i < currentChannelCacheDataModel.getList().size()); i++) {
-            if(i <= currentIndex && "HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
+            if("HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
                 removeList.add(currentChannelCacheDataModel.getList().get(i));
-            } else {
-                break;
             }
         }
         currentChannelCacheDataModel.getList().removeAll(removeList);
