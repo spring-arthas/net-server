@@ -68,6 +68,7 @@ public abstract class AbstractEventHandler<T extends EventModel> implements Even
         String currentChannelAddress = currentChannelEventModel.getRemoteAddress();
         if(!channelDataMap.containsKey(currentChannelAddress)) {
             channelCacheDataModel = new ChannelCacheDataModel();
+            channelCacheDataModel.setChannelAddress(currentChannelAddress);
             channelDataMap.put(currentChannelAddress, channelCacheDataModel);
         } else {
             channelCacheDataModel = channelDataMap.get(currentChannelAddress);

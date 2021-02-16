@@ -90,8 +90,8 @@ public class FileUploadTransportStreamHandler extends AbstractChannelHandler {
 
         // 向文件通道写入数据
         this.writeFileSize += fileChannel.write(ByteBuffer.wrap(originFileStreamData, 0, originFileStreamData.length));
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileUploadTransportStreamHandler | --> 当前线程 [{}] 完成文件 [{} - {}] 个字节流上传",
-            Thread.currentThread().getName(), fileName, this.writeFileSize);
+        /*log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileUploadTransportStreamHandler | --> 当前线程 [{}] 完成文件 [{} - {}] 个字节流上传",
+            Thread.currentThread().getName(), fileName, this.writeFileSize);*/
     }
 
     /**

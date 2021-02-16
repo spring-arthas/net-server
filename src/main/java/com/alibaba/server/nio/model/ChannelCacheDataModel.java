@@ -21,6 +21,11 @@ public class ChannelCacheDataModel {
     private int index = 1;
 
     /**
+     * 当前通道名称
+     * */
+    private String channelAddress;
+
+    /**
      * 数据集合
      * */
     private List<EventModel.GroupData> list = Lists.newArrayList();

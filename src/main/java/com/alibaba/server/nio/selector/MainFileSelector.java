@@ -37,10 +37,11 @@ public class MainFileSelector extends AbstractSelector implements Runnable {
         while(true) {
             try {
                 if(selector.select(SELECTOR_POLL_TIMEOUT) == 0) {
-                    TimeUnit.MILLISECONDS.sleep(1);
+                    TimeUnit.MILLISECONDS.sleep(10);
                     continue;
                 }
 
+                // 包含多个已就绪的socketChannel通道描述符
                 Iterator iterator = selector.selectedKeys().iterator();
                 while (iterator.hasNext()) {
                     // 获取当前SelectionKey通道附件SocketChannelContext，一个通道不管触发订阅的任何事件，都共用该一个SocketChannelContext

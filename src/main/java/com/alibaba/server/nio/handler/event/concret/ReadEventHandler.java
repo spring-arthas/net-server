@@ -115,7 +115,6 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 1、读取数据
         ByteBuffer byteBuffer = socketChannelContext.getByteBuffer();
-        byteBuffer.clear();
         int readBytes = 0;
         try {
             while ((readBytes = socketChannel.read(byteBuffer)) > 0 ) {
@@ -165,13 +164,15 @@ public class ReadEventHandler extends AbstractEventHandler {
                 log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> can not read data at a closed socketChannel}");
             }
 
-            if(e instanceof IOException) {
+            if(e instanceof IOException || e instanceof RuntimeException) {
                 e.printStackTrace();
             }
 
             eventModel.getSelectionKey().cancel();
             NioServerContext.closedAndRelease(socketChannel);
             return Boolean.FALSE;
+        } finally {
+            byteBuffer.clear();
         }
 
         // 2、读取的缓存数据为空，则直接返回
@@ -226,7 +227,7 @@ public class ReadEventHandler extends AbstractEventHandler {
 
                 // 索引越界，则无法处理,需要重新read
                 if(nextIndex >= cacheList.size()) {
-                    return -2;
+                    return -1;
                 }
 
                 // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
