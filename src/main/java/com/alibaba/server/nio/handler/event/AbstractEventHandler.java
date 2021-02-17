@@ -3,6 +3,7 @@ package com.alibaba.server.nio.handler.event;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.model.ChannelCacheDataModel;
 import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.reactor.SubReactor;
 import com.alibaba.server.util.LocalTime;
@@ -83,15 +84,14 @@ public abstract class AbstractEventHandler<T extends EventModel> implements Even
      */
     public final void registerSubReactor(EventModel eventModel, String subReactor) {
         SubReactor reactor = GlobalMainReactor.registerStart(NioServerContext.getSelector(subReactor), ((SocketChannel) eventModel.getSelectionKey().channel()), subReactor);
-        // 可用空间
+        // 注册成功，直接将数据提交至SubReactor线程持有的数据处理队列
         if(reactor.getQueue().remainingCapacity() > 0) {
             Map<String, Object> queueMap = new HashMap<>();
             queueMap.put("SOCKET_CHANNEL_CONTEXT",eventModel.getSelectionKey().attachment());
             queueMap.put("COMPLETE_LIST", eventModel.getCompleteList());
             reactor.getQueue().offer(queueMap);
         } else {
-            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> chat socketChannel read cache queue is Full, avilableCount = {}, address = {}, thread = {}",
-                reactor.getQueue().remainingCapacity(), NioServerContext.getRemoteAddress((SocketChannel) eventModel.getSelectionKey().channel()), Thread.currentThread().getName());
+            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 聊天服务通道 [{}] 对应的SubReactor线程数据处理队列已满, 队列可用空间 = [{}], address = {}, thread = {}", ((SocketChannelContext) eventModel.getSelectionKey().attachment()).getRemoteAddress(), reactor.getQueue().remainingCapacity(), Thread.currentThread().getName());
         }
     }
 

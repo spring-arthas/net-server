@@ -78,11 +78,11 @@ public class SubReactor implements Runnable {
 
             // 3、通道注册添加附件
             NioServerContext.EventRegister(socketChannel, this.selector, eventOpt).attach(socketChannelContext);
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] SubReactor | --> " + "chat socketChannel register success, registerType = {}, remoteAddress = {}, registered = {}",
-                registerType, remoteAddress = socketChannelContext.getRemoteAddress(), socketChannel.isRegistered());
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] SubReactor | --> 聊天服务通道 [{}] 注册成功", socketChannelContext.getRemoteAddress());
         } catch (Exception e) {
-            log.error("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] SubReactor | --> chat socketChannel register selector failed，address = {}, error = {}",
-                NioServerContext.getRemoteAddress(socketChannel), e.getMessage());
+            log.error("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] SubReactor | --> 聊天服务通道 [{}] 注册失败, error = {}", socketChannelContext.getRemoteAddress(), e.getMessage());
+
+            // 4、注册失败直接关闭当前通道
             NioServerContext.closedAndRelease(socketChannel);
         }
     }

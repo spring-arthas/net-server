@@ -36,7 +36,7 @@ import java.util.*;
 @Slf4j
 @SuppressWarnings("all")
 public class ReadEventHandler extends AbstractEventHandler {
-    private static Integer chatIndex = 0, fileIndex = 0;
+    private static Integer chatIndex = 0;
 
     @Override
     public EventModel eventHandler(EventModel eventModel) {
@@ -70,15 +70,15 @@ public class ReadEventHandler extends AbstractEventHandler {
         if(eventModel.getEventModelEnum().equals(EventModelEnum.CHAT_TASK) && result) {
             eventModel.setIndex((chatIndex > Integer.MAX_VALUE) ? 0 : chatIndex++);
 
-            // 3、获取当前通道对应的subReactor线程
+            // 2.1、获取当前通道对应的subReactor线程
             SubReactor reactor = GlobalMainReactor.getSubReactorForSocketChannel((SocketChannel) eventModel.getSelectionKey().channel());
             if(!Optional.ofNullable(reactor).isPresent()) {
-                // 为空，表示没有找到对应通道的Subreacto线程，有可能为之前用户下线导致清除了用户对应的SubReactor线程，但是socketChannel并未断开，故此时重新建立新的Subreactor即可
+                // 为空，表示没有找到当前通道对应的Subreacto线程，有可能为之前用户下线导致清除了用户对应的SubReactor线程，但是socketChannel并未断开，故此时重新建立新的Subreactor即可
                 this.registerSubReactor(eventModel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR);
                 return eventModel;
             }
 
-            // 4、将当前通道触发的读事件数据 --> 加入当前SocketChannel连接对应的的Subreactor线程数据处理队列, 可用空间必须大于0
+            // 2.2、将当前通道触发的读事件数据 --> 加入当前SocketChannel连接对应的的Subreactor线程数据处理队列, 可用空间必须大于0
             if(reactor.getQueue().remainingCapacity() > 0) {
                 Map<String, Object> queueMap = new HashMap<>();
                 queueMap.put("SOCKET_CHANNEL_CONTEXT",eventModel.getSelectionKey().attachment());
@@ -87,14 +87,11 @@ public class ReadEventHandler extends AbstractEventHandler {
                 return eventModel;
             }
 
-            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> chat socketChannel read cache queue is Full, avilableCount = {}, address = {}, thread = {}",
-                reactor.getQueue().remainingCapacity(), eventModel.getRemoteAddress(), Thread.currentThread().getName());
-
+            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 聊天服务通道 [{}] 对应的SubReactor线程数据处理队列已满, 队列可用空间 = [{}], address = {}, thread = {}", ((SocketChannelContext) eventModel.getSelectionKey().attachment()).getRemoteAddress(), reactor.getQueue().remainingCapacity(), Thread.currentThread().getName());
             return eventModel;
         }
 
         // 3、文件业务
-        //eventModel.setIndex((fileIndex > Integer.MAX_VALUE) ? 0 : fileIndex++);
         Map<String, Object> queueMap = new HashMap<>();
         queueMap.put("SOCKET_CHANNEL_CONTEXT",eventModel.getSelectionKey().attachment());
         queueMap.put("COMPLETE_LIST", eventModel.getCompleteList());
@@ -125,7 +122,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                     // 按照发送的次序依次从byteBuffer读取进bytes数组
                     byteBuffer.get(bytes);
 
-                    // 将当前数据进行封装,没读取一次执行一次处理
+                    // 将当前数据进行封装,每读取一次执行一次处理
                     EventModel.GroupData groupData = eventModel.new GroupData();
                     groupData.setLength(bytes.length);
                     groupData.setIndex(channelCacheDataModel.getIndex());
@@ -164,10 +161,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> can not read data at a closed socketChannel}");
             }
 
-            if(e instanceof IOException || e instanceof RuntimeException) {
-                e.printStackTrace();
-            }
-
+            e.printStackTrace();
             eventModel.getSelectionKey().cancel();
             NioServerContext.closedAndRelease(socketChannel);
             return Boolean.FALSE;
@@ -175,19 +169,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             byteBuffer.clear();
         }
 
-        // 2、读取的缓存数据为空，则直接返回
-        /*if(CollectionUtils.isEmpty(channelCacheDataModel.getList())) {
-            return Boolean.FALSE;
-        }*/
-
-        /*log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 当前通道 [{}] 已读取数据字节数为 [{}], 开始进行粘包半包字节处理",
-            currendAddress, cacheDataModel.getList().stream().mapToInt(EventModel.GroupData::getLength).sum());*/
-
-        // 3、粘包半包处理  --> 处理前排序 --> 按照接收的先后顺序进行排序
-        //this.stickingAndAalfWrapping(channelCacheDataModel.getList(), Lists.newArrayList(), eventModel);
-        //log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 当前通道 [{}] 粘包半包处理完成, 开始执行字节数据解析处理判断", currendAddress);
-
-        // 4、判断当前数据能否处理多少，能达到多少处理标准就处理多少数据
+        // 2、判断当前数据能否处理多少，能达到多少处理标准就处理多少数据
         if(judgeIsCouldExecuteHandle(eventModel, channelCacheDataModel, currendAddress)) {
             return Boolean.TRUE;
         }
@@ -207,34 +189,36 @@ public class ReadEventHandler extends AbstractEventHandler {
      *            动态大小 : [4B + 不确定大小]，其中4B为动态数据长度大小(int 4字节)
      */
     private int verificateHandleCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, EventModel currentEventModel) {
-        // 1、判断当前数据长度是否能够处理，即校验基本位字节段 int orginStreamDataIndex = 2 + 1 + 4 + 3 + sendDataLengthBytes.Length + sendDataBytes.Length;
+        // 1、判断当前数据长度是否能够处理，即校验基本位字节段 int orginStreamDataIndex = 4 + 1 + 4 + 3 + sendDataLengthBytes.Length + sendDataBytes.Length;
         if(!CollectionUtils.isEmpty(currentChannelCacheDataModel.getList())) {
             List<EventModel.GroupData> cacheList = currentChannelCacheDataModel.getList();
-            // 先将新读入得数据追加至缓存至最后一个
+            // 先将新读入的数据追加至当前通道缓存对象数据集合末尾
             cacheList.add(currentGroupData);
-            // 当前通道缓存数据不为空，需要先处理缓存数据，在处理当前缓存数据，处理缓存数据前先排序(升序排序)
+            // 当前通道缓存数据排序(升序排序)，保证处理顺序的按照读入的顺序
             cacheList.stream().sorted(Comparator.comparing(EventModel.GroupData::getIndex));
 
-            // 1.1、处理缓存和当前帧数据
+            // 1.1、处理缓存集合中的数据
             int currentIndex = 0;
             while (currentIndex < cacheList.size()) {
                 currentIndex = this.executeParseCurrentGroupData(currentChannelCacheDataModel, cacheList.get(currentIndex), currentIndex, currentEventModel);
 
-                // 返回 -1 或 GroupData缓存越界，直接返回
+                // 返回 -1 或 cacheList缓存越界，直接返回，执行下一次socketChannel.read()读取
                 if(currentIndex == -1 || (currentIndex >= cacheList.size())) {
                     return -1;
                 }
 
-                // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
+                // 判断当前索引[currentIndex]指示的GroupData是否处于处理完成状态，如果是则索引自增1，开始处理下一份GourpData，如果不是则当前索引无需自增1，直接当前索引继续处理
+                // 备注：不是UN_HANDLE状态，表示当前索引对应的GroupData发生了粘包，一部分数据为上一帧的数据，一部分为下一帧的数据，所以需要继续处理
                 EventModel.GroupData nextIndexGroupData = cacheList.get(currentIndex);
                 if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
+                    // 处理前判断帧的长度是否小于16B，小于16表示帧的字节长度不够处理需要重新读取那么此时返回-1，如果大于16B则直接处理
                     Boolean result = this.frameSumLengthSmallerThan16(currentChannelCacheDataModel, nextIndexGroupData, currentIndex);
                     if(!result) {
-                        // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
+                        // 将小于16的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
                         return -1;
                     }
 
-                    // 如果大于14个字节，直接在当前索引 [currentIndex] 直接进行下次循环处理
+                    // 此处已经将小于16个字节的基础数据拷贝至下一个GroupData，并移除了小于16的帧对应GroupData, 那么索引无需变化，直接当前索引对应的GroupData进行处理
                     continue;
                 }
 
@@ -242,15 +226,16 @@ public class ReadEventHandler extends AbstractEventHandler {
                 currentIndex++;
             }
 
+            // 都不符合，则返回-3，位置错误，关闭当前SocketChannel，如果是文件服务，还需关闭文件对应的通道
             return -3;
         } else {
-            // 2、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
+            // 2、当前帧GroupData字节长度直接小于16，则追加进缓存队列，返回-1，执行下次socketChannel.read()读取完成后重新处理
             if(currentGroupData.getLength() < 16) {
                 currentChannelCacheDataModel.getList().add(currentGroupData);
                 return -1;
             }
 
-            // 3、处理当前帧缓存数据
+            // 3、大于16则直接处理
             currentChannelCacheDataModel.getList().add(currentGroupData);
             return this.executeParseCurrentGroupData(currentChannelCacheDataModel, currentGroupData, 0, currentEventModel);
         }
@@ -283,7 +268,7 @@ public class ReadEventHandler extends AbstractEventHandler {
     }
 
     /**
-     * 处理当前数据，此时当前帧数据必定大于14
+     * 处理当前数据，此时当前帧数据最应该大于16，但是存在首次socketChannel.read()读取直接就小于16，那么需要执行一次小于16的特殊处理
      * @param currentChannelCacheDataModel 当前通道缓存对象
      * @param currentGroupData 当前通道待处理缓存数据
      * @param currentIndex 当前groupData对应在通道缓存对象中的索引
@@ -291,22 +276,23 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private int executeParseCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, int currentIndex, EventModel currentEventModel) {
         int currentGroupDataLength = currentGroupData.getLength();
-        // 1、判断当前帧长度是否大于16，如果小于16需要将当前帧字节数据复制到下一个字节
+        // 1、判断当前帧长度是否小于16，如果小于16需要将当前帧字节数据复制到下一个字节
         if(currentGroupData.getLength() < 16) {
             Boolean result = this.frameSumLengthSmallerThan16(currentChannelCacheDataModel, currentGroupData, currentIndex);
             if(!result) {
                 // 将小于16的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
                 return -1;
             }
-            // 此处已经将小于16个字节的基础数据拷贝至下一个GroupData，此处索引直接加1,跳过被复制到下一个GroupData的帧，因为没必要在处理小于14个字节长度的帧
+            // 此处已经将小于16个字节的基础数据拷贝至下一个GroupData，并移除了小于16的帧对应GroupData, 那么索引无需变化，直接当前索引对应的GroupData进行处理
             return currentIndex;
         }
 
-        // 2、解析当前帧总长度
+        // 2、解析当前帧总长度4B
         int currentFrameSumLength = this.getFrameSumLengthBytes(currentGroupData);
         if(currentFrameSumLength <= 0) {
             log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 通道 [{}] 解析当前帧 [序号 = {}] 的帧总长度数据错误, 解析出来的帧总长度 = [{}]",
                 currentEventModel.getRemoteAddress(), currentGroupData.getIndex(), currentFrameSumLength);
+            // 帧总长度解析错误，返回-2，关闭当前SocketChannel通道，如果存在文件通道还需关闭文件通道
             return -2;
         }
 
@@ -318,23 +304,16 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 4、如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧的数据需要跨越多个groupData
         if(currentFrameSumLength > currentGroupDataLength) {
-            try {
-                return parseFrameSumLengthBiggerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
-            } catch (ArrayIndexOutOfBoundsException e) {
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 处理通道 [{}] 字节数据出现ArrayIndexOutOfBoundsException", currentEventModel.getRemoteAddress());
-            }
+            return parseFrameSumLengthBiggerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
         }
 
         // 5、如果当前帧指定的总长度(currentFrameSumLength) > 当前帧缓存数据长度  -->  完整帧在当前帧中处理完还存在剩余
         if(currentFrameSumLength < currentGroupDataLength) {
-            try {
-                return parseFrameSumLengthSmallerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
-            } catch (ArrayIndexOutOfBoundsException e) {
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 处理通道 [{}] 字节数据出现ArrayIndexOutOfBoundsException", currentEventModel.getRemoteAddress());
-            }
+            return parseFrameSumLengthSmallerThanCurrentGroupDataLength(currentChannelCacheDataModel, currentGroupData, currentIndex, currentFrameSumLength, currentEventModel);
         }
 
-        return -1;
+        // 都不符合，则返回-3，位置错误，关闭当前SocketChannel，如果是文件服务，还需关闭文件对应的通道
+        return -3;
     }
 
     /**
@@ -516,8 +495,6 @@ public class ReadEventHandler extends AbstractEventHandler {
         for(int i = 0; (i <= currentIndex && i < currentChannelCacheDataModel.getList().size()); i++) {
             if(i <= currentIndex && "HANDLE_SUCCESS".equals(currentChannelCacheDataModel.getList().get(i).getStatus())) {
                 removeList.add(currentChannelCacheDataModel.getList().get(i));
-            } else {
-                break;
             }
         }
         currentChannelCacheDataModel.getList().removeAll(removeList);
@@ -570,29 +547,5 @@ public class ReadEventHandler extends AbstractEventHandler {
         indexBytes[2] = currentGroupData.getBytes()[2];
         indexBytes[3] = currentGroupData.getBytes()[3];
         return BasicUtil.byteArrayToInt(indexBytes);
-    }
-
-    /**
-     * 读取指定长度数据
-     * @param currentGroupData 当前帧数据模型
-     * @param frameSumLength 当前帧长度
-     * @param eventModel 当前帧对应的事件模型对象
-     * @return
-     */
-    private EventModel.GroupData readAssignBytes(EventModel.GroupData currentGroupData, short frameSumLength, EventModel eventModel) {
-        EventModel.GroupData completeGroupData = eventModel.new GroupData();
-        completeGroupData.setLength(frameSumLength - 2);
-        byte[] currentFrameBytes = new byte[frameSumLength - 2];
-        System.arraycopy(currentGroupData.getBytes(), 2, currentFrameBytes, 0, (frameSumLength - 2));
-        completeGroupData.setBytes(currentFrameBytes);
-        // 设置结束帧标记 0
-        completeGroupData.setEndFrame(currentFrameBytes[0]);
-        // 序号采用客户端发送过来的帧数据进行设置 1~4
-        byte[] indexBytes = new byte[4];
-        indexBytes[0] = currentFrameBytes[1];indexBytes[1] = currentFrameBytes[2];indexBytes[2] = currentFrameBytes[3];indexBytes[3] = currentFrameBytes[4];
-        completeGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
-        eventModel.getCompleteList().add(completeGroupData);
-        currentGroupData.setStatus("HANDLE_SUCCESS");
-        return completeGroupData;
     }
 }

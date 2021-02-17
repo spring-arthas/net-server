@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 
 /**
  * 文件远程传送数据处理器 --> 负责离线或是在线通知远程客户端接收传送文件
- *
  * @author spring
  * */
 
@@ -39,7 +38,6 @@ public class FileRemoteTransportHandler extends AbstractChannelHandler {
 
         // 1、 文件传送任务存储DB
         this.storeTaskToDB(remoteMessageMap);*/
-
 
     }
 

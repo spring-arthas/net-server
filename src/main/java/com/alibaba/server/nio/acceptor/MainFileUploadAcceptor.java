@@ -23,6 +23,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.LockSupport;
 
 /**
+ * 文件上传服务端 [ServerSocketChannel] 绑定于10087
  * @author: YSFY
  * @Date: 2020-11-21 10:40
  * @Pacage_name: com.alibaba.server.nio.selector
@@ -56,6 +57,7 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
                     this.registerFileSocketChannel(socketChannel);
                 }
 
+                // 当接收到客户端连接并注册成功后，阻塞当前文件上传Acceptor线程，等待Selector线程执行到AcceptorEventHandler事件处理程序进行唤醒
                 LockSupport.park();
             }
         } catch (Exception e) {
@@ -71,7 +73,6 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
         // 1、设置通道链处理器 --> 文件消息解码器 --> 文件消息真实数据处理器
         SocketChannelContext socketChannelContext = this.createModel(socketChannel);
         NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE).attach(socketChannelContext);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] MainFileUploadAcceptor | --> " + "上传通道注册成功, registerType = {}, remoteAddress = {}, registered = {}",
-            BasicConstant.REGISTER_TYPE_FILE, socketChannelContext.getRemoteAddress(), socketChannel.isRegistered());
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] MainFileUploadAcceptor | --> 文件上传通道 [{}] 注册成功", socketChannelContext.getRemoteAddress());
     }
 }

@@ -64,9 +64,6 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
 
         // 解析数据
         for(EventModel.GroupData groupData : completeList) {
-            if(groupData.getBytes() == null) {
-                continue;
-            }
             this.parseBytes(groupData.getBytes(), socketChannelContext, channelContext);
         }
     }
