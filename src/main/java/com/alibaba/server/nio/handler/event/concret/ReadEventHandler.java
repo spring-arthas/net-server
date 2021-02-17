@@ -199,8 +199,8 @@ public class ReadEventHandler extends AbstractEventHandler {
      * @param currentChannelCacheDataModel 当前通道缓存对象
      * @param currentGroupData 当前通道待处理缓存数据
      * @param currentEventModel 当前通道事件数据模型
-     *      基本位数据: 2 + 1 + 4 + 3 + [动态大小] = 10 + [动态大小]
-     *          帧组成: 2B : 当前帧总长度
+     *      基本位数据: 4 + 1 + 4 + 3 + [动态大小] = 12 + [动态大小]
+     *          帧组成: 4B : 当前帧总长度
      *                 1B : 当前帧是否是结束帧
      *                 4B : 当前帧发送序号(由客户端确定)
      *                 3B : 帧基本数据 [1B : 帧类型, 1B : 文件类型, 1B : 文件操作类型]
@@ -228,7 +228,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 // 判断当前索引指示的GroupData是否处于处理完成状态，如果是则continue，如果不是则继续处理
                 EventModel.GroupData nextIndexGroupData = cacheList.get(currentIndex);
                 if(StringUtils.equals(nextIndexGroupData.getStatus(), "UN_HANDLE")) {
-                    Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, nextIndexGroupData, currentIndex);
+                    Boolean result = this.frameSumLengthSmallerThan16(currentChannelCacheDataModel, nextIndexGroupData, currentIndex);
                     if(!result) {
                         // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
                         return -1;
@@ -245,7 +245,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             return -3;
         } else {
             // 2、当前缓存数据以基本位数据长度为判断依据，如果小于基本位长度数据，直接进行缓存，不进行处理(即小于14个byte)
-            if(currentGroupData.getLength() < 14) {
+            if(currentGroupData.getLength() < 16) {
                 currentChannelCacheDataModel.getList().add(currentGroupData);
                 return -1;
             }
@@ -257,13 +257,13 @@ public class ReadEventHandler extends AbstractEventHandler {
     }
 
     /**
-     * 处理当前帧数据长度小于14
+     * 处理当前帧数据长度小于16
      * @param currentChannelCacheDataModel 当前通道缓存对象
      * @param currentGroupData 当前通道待处理缓存数据
      * @param currentIndex 当前groupData对应在通道缓存对象中的索引
      * @return
      */
-    private Boolean frameSumLengthSmallerThan14(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData nextIndexGroupData, int currentIndex) {
+    private Boolean frameSumLengthSmallerThan16(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData nextIndexGroupData, int currentIndex) {
         // 获取下一个GroupData
         if((currentIndex + 1) >= currentChannelCacheDataModel.getList().size()) {
             return Boolean.FALSE;
@@ -291,19 +291,19 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private int executeParseCurrentGroupData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, int currentIndex, EventModel currentEventModel) {
         int currentGroupDataLength = currentGroupData.getLength();
-        // 1、判断当前帧长度是否大于14，如果小于14需要将当前帧字节数据复制到下一个字节
-        if(currentGroupData.getLength() < 14) {
-            Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, currentGroupData, currentIndex);
+        // 1、判断当前帧长度是否大于16，如果小于16需要将当前帧字节数据复制到下一个字节
+        if(currentGroupData.getLength() < 16) {
+            Boolean result = this.frameSumLengthSmallerThan16(currentChannelCacheDataModel, currentGroupData, currentIndex);
             if(!result) {
-                // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
+                // 将小于16的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
                 return -1;
             }
-            // 此处已经将小于14个字节的基础数据拷贝至下一个GroupData，此处索引直接加1,跳过被复制到下一个GroupData的帧，因为没必要在处理小于14个字节长度的帧
+            // 此处已经将小于16个字节的基础数据拷贝至下一个GroupData，此处索引直接加1,跳过被复制到下一个GroupData的帧，因为没必要在处理小于14个字节长度的帧
             return currentIndex;
         }
 
         // 2、解析当前帧总长度
-        int currentFrameSumLength = this.getFrameSumLengthBytes(currentGroupData.getBytes()[0], currentGroupData.getBytes()[1]);
+        int currentFrameSumLength = this.getFrameSumLengthBytes(currentGroupData);
         if(currentFrameSumLength <= 0) {
             log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 通道 [{}] 解析当前帧 [序号 = {}] 的帧总长度数据错误, 解析出来的帧总长度 = [{}]",
                 currentEventModel.getRemoteAddress(), currentGroupData.getIndex(), currentFrameSumLength);
@@ -349,9 +349,9 @@ public class ReadEventHandler extends AbstractEventHandler {
          EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
         // 1、先处理当前通道数据，构建新的
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
-        byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
-        System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, (currentGroupData.getLength() - 2));
-        newCompleteGroupData.setLength(currentGroupData.getLength() - 2);
+        byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 4];
+        System.arraycopy(currentGroupData.getBytes(), 4, newCompleteGroupBytes, 0, (currentGroupData.getLength() - 4));
+        newCompleteGroupData.setLength(currentGroupData.getLength() - 4);
         newCompleteGroupData.setEndFrame(newCompleteGroupBytes[0]);
         byte[] indexBytes = new byte[4];
         indexBytes[0] = newCompleteGroupBytes[1];
@@ -373,7 +373,7 @@ public class ReadEventHandler extends AbstractEventHandler {
 
             nextGroupData = currentChannelCacheDataModel.getList().get(nextIndex);
             int nextGroupDataLenth = nextGroupData.getLength();
-            if((nextGroupDataLenth + newCompleteGroupData.getLength()) == (currentFrameSumLength - 2)) {
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) == (currentFrameSumLength - 4)) {
                 System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupDataLenth);
                 newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupDataLenth);
                 newCompleteGroupData.setBytes(newCompleteGroupBytes);
@@ -393,7 +393,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             }
 
             // 4、说明当前索引对应的帧数据存在跨越，即下一帧依旧未能获取到完整帧，需要再次循环
-            if((nextGroupDataLenth + newCompleteGroupData.getLength()) < (currentFrameSumLength - 2)) {
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) < (currentFrameSumLength - 4)) {
                 System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), nextGroupData.getLength());
                 newCompleteGroupData.setLength(newCompleteGroupData.getLength() + nextGroupDataLenth);
                 nextGroupData.setStatus("HANDLE_SUCCESS");
@@ -402,9 +402,9 @@ public class ReadEventHandler extends AbstractEventHandler {
             }
 
             // 5、说明当前索引对应的帧数据存在跨越，一部分是上一帧，一部分是下一帧
-            if((nextGroupDataLenth + newCompleteGroupData.getLength()) > (currentFrameSumLength - 2)) {
+            if((nextGroupDataLenth + newCompleteGroupData.getLength()) > (currentFrameSumLength - 4)) {
                 // 5.1、处理上一帧剩余数据，此处已经处理完,restNeedReadBytesCount的计算会导致数组越界异常，必须控制好，需要减去帧总长度两个字节
-                int restNeedReadBytesCount = (currentFrameSumLength - 2)  - newCompleteGroupData.getLength();
+                int restNeedReadBytesCount = (currentFrameSumLength - 4)  - newCompleteGroupData.getLength();
                 System.arraycopy(nextGroupData.getBytes(), 0, newCompleteGroupBytes, newCompleteGroupData.getLength(), restNeedReadBytesCount);
                 newCompleteGroupData.setLength(newCompleteGroupData.getLength() + restNeedReadBytesCount);
                 newCompleteGroupData.setBytes(newCompleteGroupBytes);
@@ -427,10 +427,10 @@ public class ReadEventHandler extends AbstractEventHandler {
                 }
                 currentChannelCacheDataModel.getList().removeAll(removeList);
 
-                // 5.4、下一帧处理完时，需要判断下一帧长度是否小于14，小于14需要继续复制到下一帧
-                Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, nextGroupData, nextIndex);
+                // 5.4、下一帧处理完时，需要判断下一帧长度是否小于16，小于16需要继续复制到下一帧
+                Boolean result = this.frameSumLengthSmallerThan16(currentChannelCacheDataModel, nextGroupData, nextIndex);
                 if(!result) {
-                    // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
+                    // 将小于16的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
                     return -1;
                 }
                 break;
@@ -451,8 +451,8 @@ public class ReadEventHandler extends AbstractEventHandler {
         EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
         // 1、处理当前GroupData属于上一帧的数据
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
-        byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 2];
-        System.arraycopy(currentGroupData.getBytes(), 2, newCompleteGroupBytes, 0, newCompleteGroupBytes.length);
+        byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 4];
+        System.arraycopy(currentGroupData.getBytes(), 4, newCompleteGroupBytes, 0, newCompleteGroupBytes.length);
         newCompleteGroupData.setLength(newCompleteGroupBytes.length);
         newCompleteGroupData.setEndFrame(newCompleteGroupBytes[0]);
         byte[] indexBytes = new byte[4];
@@ -464,8 +464,8 @@ public class ReadEventHandler extends AbstractEventHandler {
         currentEventModel.getCompleteList().add(newCompleteGroupData);
 
         // 2、处理当前GroupData属于下一帧的数据，即移除上一帧的字节数据，只保留属于下一帧的字节数据，同时当前GroupData依旧是未处理状态[UN_HANDLE]
-        byte[] restBytes = new byte[currentGroupData.getLength() - (2 + newCompleteGroupBytes.length)];
-        System.arraycopy(currentGroupData.getBytes(), (2 + newCompleteGroupBytes.length), restBytes, 0, restBytes.length);
+        byte[] restBytes = new byte[currentGroupData.getLength() - (4 + newCompleteGroupBytes.length)];
+        System.arraycopy(currentGroupData.getBytes(), (4 + newCompleteGroupBytes.length), restBytes, 0, restBytes.length);
         currentGroupData.setLength(restBytes.length);
         currentGroupData.setBytes(restBytes);
         currentGroupData.setStatus("UN_HANDLE");
@@ -479,10 +479,10 @@ public class ReadEventHandler extends AbstractEventHandler {
         }
         currentChannelCacheDataModel.getList().removeAll(removeList);
 
-        // 4、下一帧处理完时，需要判断下一帧长度是否小于14，小于14需要继续复制到下一帧
-        Boolean result = this.frameSumLengthSmallerThan14(currentChannelCacheDataModel, currentGroupData, currentIndex);
+        // 4、下一帧处理完时，需要判断下一帧长度是否小于16，小于16需要继续复制到下一帧
+        Boolean result = this.frameSumLengthSmallerThan16(currentChannelCacheDataModel, currentGroupData, currentIndex);
         if(!result) {
-            // 将小于14的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
+            // 将小于16的当前帧复制到下一帧失败，说明没有下一帧，需要重新开启socketChannel.read()读取，此时直接返回
             return -1;
         }
         return currentIndex;
@@ -498,8 +498,8 @@ public class ReadEventHandler extends AbstractEventHandler {
      */
     private void addCompleteFrameData(ChannelCacheDataModel currentChannelCacheDataModel, EventModel.GroupData currentGroupData, int currentIndex, int currentFrameSumLength, EventModel currentEventModel) {
         // 1、移除当前帧缓存数据中的帧总长度数据添加至新的byte数据
-        byte[] newCompleteBytesData = new byte[currentFrameSumLength - 2];
-        System.arraycopy(currentGroupData.getBytes(), 2, newCompleteBytesData, 0, (currentFrameSumLength - 2));
+        byte[] newCompleteBytesData = new byte[currentFrameSumLength - 4];
+        System.arraycopy(currentGroupData.getBytes(), 4, newCompleteBytesData, 0, (currentFrameSumLength - 4));
         EventModel.GroupData newCompleteGroupData = currentEventModel.new GroupData();
         newCompleteGroupData.setBytes(newCompleteBytesData);
         newCompleteGroupData.setLength(newCompleteBytesData.length);
@@ -555,241 +555,21 @@ public class ReadEventHandler extends AbstractEventHandler {
     }
 
     /**
-     * 粘包半包处理
-     * @param originList 当前通道缓存原始数据（即从socketChannel读取到还未处理的数据，该数据会按照实际每帧中规定的帧总长度分组放入completeList）
-     * @param completeList 解析校验后的需要保存的完整帧数据
-     * @param eventModel  当前事件数据模型对象
-     */
-    private void stickingAndAalfWrapping(List<EventModel.GroupData> originList, List<EventModel.GroupData> completeList, EventModel eventModel) {
-        //int sumLength = originList.stream().mapToInt(EventModel.GroupData::getLength).sum();
-        //list.stream().collect(Collectors.summingInt(x -> ((FileMessageFrame) x.get(BasicConstant.FILE_FRAME)).getFrameIndex()));
-        //byte[] bytes = new byte[sumLength];
-
-        // 1、合并数组
-        int completeFrameIndex = 0; // 当前完整帧序号
-        int copyIndex = 0;
-        int originListSize = originList.size();
-        for(int i = 0; i < originList.size(); i++) { // 4000 4000 4000 4000 356
-
-            /**
-             * 1.1、判断是否发生粘包或是半包，根据byte[]数组中头两个字节进行判断
-             *  1.1.1、无法解析帧长度数据: 即头两个字节解析出的当前帧总长度合法，且长度刚好等于byte[]数组长度
-             *  1.1.2、能够解析出帧长度数据: 分两种情况:
-             *      1.1.2.1、头两个字节无法解析出当前帧长度数据
-             *      1.1.2.2、头两个字节正常解析出当前帧长度数据
-             *          <>当前帧长度指定的数据长度 < 当前byte[]长度 ---> 发生粘包, 存在一部分数据是属于第二个byte[]</>
-             *          <>当前帧长度指定的数据长度 > 当前byte[]长度 ---> 发生拆包，部分数据在第二个byte[]</>
-             * */
-
-            // 1.1、读取前两个字节, 判断总长度与bytes的比对，判断是否发生半包或是粘包帧
-            EventModel.GroupData currentGroupData = originList.get(i);
-            if(currentGroupData.getStatus().equals("HANDLE_SUCCESS")) {
-                continue;
-            }
-
-            byte[] currentBytes = currentGroupData.getBytes();
-            if(currentBytes.length == 0) {
-                break;
-            }
-
-            // 1.2、得到当前帧总长度
-            short frameSumLength = this.getFrameSumLengthBytes(currentBytes[0], currentBytes[1]);
-            if(!(frameSumLength > 0)) { // 无法解析帧长度数据：头两个字节无法解析出当前帧长度数据，直接返回错误, 但是存在可能是其中的某个byte[]无法解析，但都返回错误,不触发后续的网络IO
-                return;
-            }
-
-            // 1.3、未发生粘包半包处理 ---> 能够解析出帧长度数据,判断是否发生粘包或半包
-            if(frameSumLength == currentBytes.length) { // 当前帧长度指定的完整数据刚好等于当前byte[]除掉帧长度数据后剩余的字节数，即最理想情况
-                EventModel.GroupData groupData = this.readAssignBytes(currentGroupData, frameSumLength, eventModel);
-                // 判断是否包含有结束帧
-                if(groupData.getEndFrame() == (byte) 1) {
-                    return;
-                }
-            }
-
-            // 1.4、半包处理1 ---> 当前帧长度指定的完整数据小于当前byte[]除掉帧长度数据后剩余的字节数，发生粘包
-            if(frameSumLength < currentBytes.length) {
-                // 粘包处理第一步: 先正常处理当前帧中一组数据
-                EventModel.GroupData groupData = this.readAssignBytes(currentGroupData, frameSumLength, eventModel);
-
-                // 粘包处理第二步：再处理当前帧中粘连部分数据,判断粘连部分能否进行处理，临界情况为刚好粘连了第二个帧的第一个字节数据，其他数据都在第二个帧
-                if(!((i + 1) >= originListSize)) {
-                    EventModel.GroupData nextGroupData = originList.get(i + 1);
-                    this.stickyPackage(nextGroupData, currentGroupData, frameSumLength, eventModel);
-                }
-            }
-
-            // 1.5、半包处理2 ---> 当前帧长度指定的完整数据大于当前byte[]除掉帧长度数据后剩余的字节数，发生拆包
-            if(frameSumLength > currentBytes.length) {
-                // 拆包处理，当前currentBytes缺少数据，需要从第二个包进行读取
-                if(!((i + 1) >= originListSize)) {
-                    EventModel.GroupData nextGroupData = originList.get(i + 1);
-                    this.unpacking(nextGroupData, currentGroupData, frameSumLength, eventModel);
-                }
-            }
-        }
-    }
-
-    /**
-     * 执行粘包处理  --> 处理逻辑：执行当前帧剩余字节处理，当前帧剩余的字节数至少要能获取到能够完整读取出第二个完整帧的长度数据，重新构建下一个数据包模型
-     * @param nextGroupData 下一帧数据模型
-     * @param currentGroupData 当前帧数据模型
-     * @param frameSumLength  当前帧数据长度
-     * @param eventModel  当前帧对应的事件模型对象
-     */
-    private void stickyPackage(EventModel.GroupData nextGroupData, EventModel.GroupData currentGroupData, int frameSumLength, EventModel eventModel) {
-        // 1、获取当前包剩余字节个数，粘包时: frameSumLength 必定小于 currentBytes长度 --> 获取当前包剩余字节个数
-        int currentFrameRestByteLength = currentGroupData.getBytes().length - frameSumLength;
-        if(currentFrameRestByteLength == 1) {
-            // 说明当前帧粘连的数据不够2个字节，即第二个完整帧数据的总长度对应的字节数据，有一个字节在第一个bytes中，有一个字节在第二个bytes中，需要下次循环才能处理，此时需要将多出的字节追加进第二个字节数组中
-            byte[] bytes = nextGroupData.getBytes();
-            // 复制当前帧剩余一个字节的数据
-            byte[] newCopyBytes = new byte[bytes.length + 1];
-            newCopyBytes[0] = currentGroupData.getBytes()[frameSumLength + 1];
-            System.arraycopy(bytes, 0, newCopyBytes, 1, bytes.length);
-            nextGroupData.setLength(newCopyBytes.length);
-            nextGroupData.setBytes(newCopyBytes);
-            return;
-        }
-
-        // 1.1、对当前包剩余的字节数组进行再次处理
-        short nextFrameSumLength = this.getFrameSumLengthBytes(currentGroupData.getBytes()[frameSumLength], currentGroupData.getBytes()[frameSumLength + 1]); //3081
-
-        // 1.2、获取需要从下一个包读取的真实字节数个数 --> 下一个待处理包总字节数 - 帧总长度字节数 - 当前包剩余字节数 - 剩余字节数中包含的当前帧总大小字节数
-        int needReadByteLengthFromNextFrame = (nextFrameSumLength - 2) - (currentFrameRestByteLength - 2);
-
-        // 2、此处追加判断，根据已经计算出需要从下一帧读取的字节数(needReadByteLengthFromNextFrame)来判断能否从下一帧读取完全，不够则无法处理，需要缓存无法处理的帧数据
-        if(needReadByteLengthFromNextFrame > nextGroupData.getLength()) { // 无法读取，字节数不够
-            // 需要跨帧多次读取或无法处理(即读取下一完整帧字节数依旧不够，还要再读取下一帧，由于下一帧还未出于应用缓存空间，则禁止处理)
-            // 帧对以上两种情况，直接将当前帧剩余字节数复制到下一帧中，由下次循环进行处理
-            byte[] appendFrameBytes = new byte[currentFrameRestByteLength + nextGroupData.getLength()];
-            // 从当前帧拷贝剩余总字节数
-            System.arraycopy(currentGroupData.getBytes(), 0, appendFrameBytes, 0, currentFrameRestByteLength);
-            // 从下一个帧拷贝总字节数
-            System.arraycopy(nextGroupData.getBytes(), 0, appendFrameBytes, currentFrameRestByteLength, nextGroupData.getLength());
-            nextGroupData.setLength(appendFrameBytes.length);
-            nextGroupData.setBytes(null); // help GC
-            nextGroupData.setBytes(appendFrameBytes);
-
-            currentGroupData.setStatus("HANDLE_SUCCESS");
-        } else { // 足够则正常读取
-            // 追加由于粘包造成的当前帧数据的再次处理  当前帧剩余字节数 + 需要从下一个帧读取的字节个数 - 剩余字节数中包含的当前帧总大小字节数 = 真实待处理帧数据
-            byte[] appendFrameBytes = new byte[nextFrameSumLength - 2];
-            // 从当前帧拷贝剩余真实字节数
-            System.arraycopy(currentGroupData.getBytes(), (frameSumLength + 2), appendFrameBytes, 0, (currentFrameRestByteLength - 2));
-            // 从下一个帧拷贝剩余真实字节数
-            System.arraycopy(nextGroupData.getBytes(), 0, appendFrameBytes, (currentFrameRestByteLength - 2), needReadByteLengthFromNextFrame);
-
-            // 设置可以进行处理的完整帧()
-            EventModel.GroupData completeGroupData = eventModel.new GroupData();
-            completeGroupData.setStatus("FAIL");
-            completeGroupData.setLength(appendFrameBytes.length);
-            completeGroupData.setBytes(appendFrameBytes);
-            // 设置结束帧标记
-            completeGroupData.setEndFrame(appendFrameBytes[0]);
-            // 序号采用客户端发送过来的帧数据进行设置 1~4
-            byte[] indexBytes = new byte[4];
-            indexBytes[0] = appendFrameBytes[1];indexBytes[1] = appendFrameBytes[2];indexBytes[2] = appendFrameBytes[3];indexBytes[3] = appendFrameBytes[4];
-            completeGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
-            eventModel.getCompleteList().add(completeGroupData);
-
-            // 当前帧处理完后判断，在当前帧处理过程中如果从下一帧拷贝过来的数据刚好等于下一个帧数据，说明最后一帧就是当前数据流的末尾，直接将下一帧设置为读取完成,如果不是，那说明依旧发生了半包，缓存等待下次处理
-            if(needReadByteLengthFromNextFrame == nextGroupData.getLength()) {
-                nextGroupData.setStatus("HANDLE_SUCCESS");
-            } else {
-                // 重新定义下一个帧数据: 本身的数据长度 + 追加的长度, 那么下次循环的时候实际处理的字节数为下一帧原本字节数减去已经复制到上一帧中剩余的字节数
-                int nextFrameNewSumLength = nextGroupData.getLength() - needReadByteLengthFromNextFrame;
-                // 开辟新的数组，复制粘包数据
-                byte[] newFrameBytes = new byte[nextFrameNewSumLength];
-                // 拷贝下一个帧剩余字节数据
-                System.arraycopy(nextGroupData.getBytes(), needReadByteLengthFromNextFrame, newFrameBytes, 0, nextFrameNewSumLength);
-                nextGroupData.setLength(nextFrameNewSumLength);
-                nextGroupData.setBytes(newFrameBytes);
-            }
-
-            // 当前帧设置已处理完成
-            currentGroupData.setStatus("HANDLE_SUCCESS");
-        }
-    }
-
-    /**
-     * 执行拆包处理
-     * @param nextGroupData 下一帧数据模型
-     * @param currentGroupData 当前帧数据模型
-     * @param frameSumLength  当前帧数据长度
-     * @param eventModel  当前帧对应的事件模型对象
-     */
-    private void unpacking(EventModel.GroupData nextGroupData, EventModel.GroupData currentGroupData, int frameSumLength, EventModel eventModel) {
-        // 1、拆包时，frameSumLength 必定大于 currentBytes长度，需要从下一个包拆出指定个数数据 --> 获取需要从下一个包拆出的真实字节个数
-        int needReadByteLengthFromNextFrame = (frameSumLength - 2) - (currentGroupData.getLength() - 2);
-
-        // 2、此处追加判断，根据已经计算出需要从下一帧读取的字节数(needReadByteLengthFromNextFrame)来判断能否从下一帧读取完全，不够则无法处理，需要缓存无法处理的帧数据
-        if(needReadByteLengthFromNextFrame > nextGroupData.getLength()) { // 无法读取，字节数不够, 直接将当前帧完全复制进下一帧,当前帧设置为已处理完
-            // 需要跨帧多次读取或无法处理(即读取下一完整帧字节数依旧不够，还要再读取下一帧，由于下一帧还未出于应用缓存空间，则禁止处理)
-            // 帧对以上两种情况，直接将当前帧剩余字节数复制到下一帧中，由下次循环进行处理
-            byte[] appendFrameBytes = new byte[currentGroupData.getLength() + nextGroupData.getLength()];
-            // 从当前帧拷贝剩余总字节数
-            System.arraycopy(currentGroupData.getBytes(), 0, appendFrameBytes, 0, currentGroupData.getLength());
-            // 从下一个帧拷贝总字节数
-            System.arraycopy(nextGroupData.getBytes(), 0, appendFrameBytes, currentGroupData.getLength(), nextGroupData.getLength());
-            nextGroupData.setLength(appendFrameBytes.length);
-            nextGroupData.setBytes(null); // help GC
-            nextGroupData.setBytes(appendFrameBytes);
-            currentGroupData.setStatus("HANDLE_SUCCESS");
-        } else { // 足够则正常读取
-            // 1.1、先处理当前包数据
-            byte[] appendFrameBytes = new byte[frameSumLength - 2];
-            // 从当前帧拷贝剩余字节数
-            System.arraycopy(currentGroupData.getBytes(), 2, appendFrameBytes, 0, (currentGroupData.getLength() - 2));
-            // 从下一个帧拷贝剩余字节数
-            System.arraycopy(nextGroupData.getBytes(), 0, appendFrameBytes, (currentGroupData.getLength() - 2), needReadByteLengthFromNextFrame);
-
-            EventModel.GroupData completeGroupData = eventModel.new GroupData();
-            completeGroupData.setStatus("FAIL");
-            completeGroupData.setLength(appendFrameBytes.length);
-            completeGroupData.setBytes(appendFrameBytes);
-            // 设置结束帧标记
-            completeGroupData.setEndFrame(appendFrameBytes[0]);
-            // 序号采用客户端发送过来的帧数据进行设置 1~4
-            byte[] indexBytes = new byte[4];
-            indexBytes[0] = appendFrameBytes[1];indexBytes[1] = appendFrameBytes[2];indexBytes[2] = appendFrameBytes[3];indexBytes[3] = appendFrameBytes[4];
-            completeGroupData.setIndex(BasicUtil.byteArrayToInt(indexBytes));
-            eventModel.getCompleteList().add(completeGroupData);
-
-            // 当前帧处理完后判断，在当前帧处理过程中如果从下一帧拷贝过来的数据刚好等于下一个帧数据，说明最后一帧就是当前数据流的末尾，直接将下一帧设置为读取完成,如果不是，那说明依旧发生了半包，缓存等待下次处理
-            if(needReadByteLengthFromNextFrame == nextGroupData.getLength()) {
-                nextGroupData.setStatus("HANDLE_SUCCESS");
-            } else {
-                // 重新定义下一个帧数据: 本身的数据长度 + 追加的长度
-                int nextFrameNewSumLength = nextGroupData.getLength() - needReadByteLengthFromNextFrame;
-                // 开辟新的数组，复制粘包数据
-                byte[] newFrameBytes = new byte[nextFrameNewSumLength];
-                // 拷贝下一个帧剩余字节数据
-                System.arraycopy(nextGroupData.getBytes(), needReadByteLengthFromNextFrame, newFrameBytes, 0, nextFrameNewSumLength);
-                nextGroupData.setLength(nextFrameNewSumLength);
-                nextGroupData.setBytes(null); // help GC
-                nextGroupData.setBytes(newFrameBytes);
-            }
-
-            // 当前帧设置已处理完成
-            currentGroupData.setStatus("HANDLE_SUCCESS");
-        }
-    }
-
-    /**
      * 读取当前帧总长度
      * @param b1
      * @param b2
      * @return 返回当前帧总长度
      */
-    private short getFrameSumLengthBytes(byte b1, byte b2) {
+    private int getFrameSumLengthBytes(EventModel.GroupData currentGroupData) {
         StringBuilder stringBuilder = new StringBuilder("");
 
-        // 1、解析帧类型
-        byte[] shortBytes = new byte[2];
-        shortBytes[0] = b1;
-        shortBytes[1] = b2;
-        return ByteOrderConvert.bytesToShort(shortBytes);
+        // 1、解析帧总长度
+        byte[] indexBytes = new byte[4];
+        indexBytes[0] = currentGroupData.getBytes()[0];
+        indexBytes[1] = currentGroupData.getBytes()[1];
+        indexBytes[2] = currentGroupData.getBytes()[2];
+        indexBytes[3] = currentGroupData.getBytes()[3];
+        return BasicUtil.byteArrayToInt(indexBytes);
     }
 
     /**

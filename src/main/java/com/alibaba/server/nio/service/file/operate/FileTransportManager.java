@@ -137,7 +137,7 @@ public class FileTransportManager {
             map.put("status", "1");
             map.put("time", Timestamp.valueOf(LocalDateTime.now()));
 
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> 接收用户 = [{}] 接收到一条来自用户 = [{}] 发送的在线文件实时传输, 需要接收端用户确认是否接收, thread = {}",
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 接收用户 = [{}] 接收到一条来自用户 = [{}] 发送的在线文件实时传输, 需要接收端用户确认是否接收, thread = {}",
                 receiveUserDto.getUserName(), launchUserDto.getUserName(), Thread.currentThread().getName());
             WriteEventHandler.addSendData(map, GlobalMainReactor.getSubReactorForSocketChannel(receiveUserDto.getChatSocketChannel()).getSocketChannelContext());
         }
@@ -166,7 +166,7 @@ public class FileTransportManager {
         // 2、判断当前待上传路径下是否存在相同的文件
         File executeFile = new File(basePath + fileTransport.getGroup() + fileTransport.getFileName());
         if(executeFile.exists()){
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> 待上传文件 = [{}] 校验完成，当前目录下 = [{}] 已存在, 请修改文件名称后上传, thread = {}",
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待上传文件 = [{}] 校验完成，当前目录下 = [{}] 已存在, 请修改文件名称后上传, thread = {}",
                 fileTransport.getFileName(), fileTransport.getGroup(), Thread.currentThread().getName());
 
             // 文件存在，终止上传
@@ -204,7 +204,7 @@ public class FileTransportManager {
                 map.put("FILE_CHANNEL", FileChannel.open(executeFile.toPath(), StandardOpenOption.CREATE , StandardOpenOption.WRITE));
                 fileMap.put(fileTransport.getTag(), map);
 
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> create file upload channel success, path = {}, thread = {}", executeFile.toPath().toAbsolutePath(), Thread.currentThread().getName());
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 文件 [{}] 上传通道创建成功, 上传路径 = [{}], thread = {}", fileTransport.getFileName(), executeFile.toPath().toAbsolutePath(), Thread.currentThread().getName());
             }
 
             // 发送文件开始上传通知
@@ -217,11 +217,11 @@ public class FileTransportManager {
             map.put("status", "1");
             map.put("time", Timestamp.valueOf(LocalDateTime.now()));
 
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> 待上传文件 = [{}] 校验完成，允许客户端 = [{}] 发送文件数据, thread = {}",
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待上传文件 = [{}] 校验完成，允许客户端 = [{}] 发送文件数据, thread = {}",
                 fileTransport.getFileName(), fileTransport.getLaunchUserName(), Thread.currentThread().getName());
             WriteEventHandler.addSendData(map, socketChannelContext);
         } catch (IOException e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] FileOnlineTransportManager | --> 文件上传帧处理 error, path = {}, error = {}", executeFile.toPath().toAbsolutePath(), e.getMessage());
+            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] FileTransportManager | --> 文件 [{}] 上传帧处理 error, path = {}, error = {}", fileTransport.getFileName(), executeFile.toPath().toAbsolutePath(), e.getMessage());
             e.printStackTrace();
         }
     }
@@ -251,7 +251,7 @@ public class FileTransportManager {
         FileDto fileDto = fileService.getFileById(fileQueryParam);
         if(fileDto == null) {
             // DB中为查询出文件信息，发送文件不存在消息
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> 待下载文件 = [{}] 校验完成，DB不存在文件记录, thread = {}",
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待下载文件 = [{}] 校验完成，DB不存在文件记录, thread = {}",
                 fileTransport.getFileName(), Thread.currentThread().getName());
             String message = "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] DB不存在该文件记录, 下载失败";
             WriteEventHandler.addSendData(createDownloadFileErrorMap(message, FileOperateEnum.DOWNLOAD_TRANSPORT_CONFIRM_NOT_EXIST.getOperate()), socketChannelContext);
@@ -262,7 +262,7 @@ public class FileTransportManager {
         File executeFile = new File(basePath + fileDto.getFilePath());
         if(!executeFile.exists()){
             // 数据库存在文件记录但是盘符不存在
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> 待上传文件 = [{}] 校验完成，文件系统中不存在, thread = {}",
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待上传文件 = [{}] 校验完成，文件系统中不存在, thread = {}",
                 fileTransport.getFileName(), Thread.currentThread().getName());
 
             String message = "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 服务器文件系统中不存在, 下载失败";
@@ -313,10 +313,10 @@ public class FileTransportManager {
             String message = "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 校验完成, 开始进行文件传输";
             Map<String, Object> sendMap = createDownloadFileSuccessMap(message, loopCount, fileSize);
             FileWriteEventParseUtil.parseMessageAndSend(socketChannelContext.getTransportProtocol().getSocketChannel(), sendMap, socketChannelContext);
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileOnlineTransportManager | --> 待下载文件 = [{}] 校验完成，允许客户端 = [{}] 发送文件数据, thread = {}",
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待下载文件 = [{}] 校验完成，允许客户端 = [{}] 发送文件数据, thread = {}",
                 fileTransport.getFileName(), fileTransport.getLaunchUserName(), Thread.currentThread().getName());
         } catch (IOException e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] FileOnlineTransportManager | --> 文件下载帧处理 error, path = {}, error = {}", executeFile.toPath().toAbsolutePath(), e.getMessage());
+            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] FileTransportManager | --> 文件下载帧处理 error, path = {}, error = {}", executeFile.toPath().toAbsolutePath(), e.getMessage());
             e.printStackTrace();
             return Boolean.FALSE;
         }
