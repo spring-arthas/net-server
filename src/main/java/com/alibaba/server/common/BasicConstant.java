@@ -110,6 +110,7 @@ public class BasicConstant {
     public static final String CANCEL_ONLINE_TRANSPORT = "CANCEL.ONLINE.TRANSPORT"; // 取消在线文件传呼
     public static final String ONLINE_TRANSPORT_NEED_CONFIRM = "ONLINE.TRANSPORT.NEED.CONFIRM"; // 在线传输接收端用户确认
     public static final String UPLOAD_TRANSPORT_CONFIRM = "UPLOAD.TRANSPORT.CONFIRM"; // 上传传输确认
+    public static final String UPLOAD_TRANSPORT_CONTINUE = "UPLOAD.TRANSPORT.CONTINUE"; // 上传传输续传
     public static final String UPLOAD_TRANSPORT_CONFIRM_REPEAT = "UPLOAD.TRANSPORT.CONFIRM.REPEAT"; // 重复上传确认帧
     public static final String DOWNLOAD_TRANSPORT_CONFIRM = "DOWNLOAD.TRANSPORT.CONFIRM"; // 下载确认帧
     public static final String DOWNLOAD_TRANSPORT_CONFIRM_NOT_EXIST = "DOWNLOAD.TRANSPORT.CONFIRM.NOT.EXIST"; // 下载不存在确认帧

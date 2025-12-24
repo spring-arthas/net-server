@@ -22,6 +22,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.LockSupport;
 
+import org.apache.commons.lang.exception.ExceptionUtils;
+
 /**
  * 文件上传服务端 [ServerSocketChannel] 绑定于10087
  * @author: YSFY
@@ -61,7 +63,7 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
                 LockSupport.park();
             }
         } catch (Exception e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] MainFileUploadAcceptor | --> 文件上传服务端监听处理异常, error = {}", e.getMessage());
+            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] MainFileUploadAcceptor | --> 文件上传服务端监听处理异常, error = {}", ExceptionUtils.getStackTrace(e));
         }
     }
 

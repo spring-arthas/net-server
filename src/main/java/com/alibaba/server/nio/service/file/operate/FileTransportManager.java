@@ -165,21 +165,32 @@ public class FileTransportManager {
 
         // 2、判断当前待上传路径下是否存在相同的文件
         File executeFile = new File(basePath + fileTransport.getGroup() + fileTransport.getFileName());
-        if(executeFile.exists()){
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待上传文件 = [{}] 校验完成，当前目录下 = [{}] 已存在, 请修改文件名称后上传, thread = {}",
-                fileTransport.getFileName(), fileTransport.getGroup(), Thread.currentThread().getName());
+        long currentFileSize = 0;
+        boolean isContinue = false;
 
-            // 文件存在，终止上传
-            Map<String, Object> map = new HashMap<>(8);
-            map.put("code", 200);
-            map.put("FILE_FRAME", BasicConstant.FILE_FRAME);
-            map.put("frameType", FileMessageFrame.FrameType.UPLOAD_TRANSPORT_CONFIRM.getBit());
-            map.put("message", "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 校验完成, 当前目录下 [" + fileTransport.getGroup() + "] 已存在, 请修改文件名称后上传");
-            map.put("operate", FileOperateEnum.UPLOAD_TRANSPORT_CONFIRM_REPEAT.getOperate());
-            map.put("status", "1");
-            map.put("time", Timestamp.valueOf(LocalDateTime.now()));
-            WriteEventHandler.addSendData(map, socketChannelContext);
-            return;
+        if(executeFile.exists()){
+            currentFileSize = executeFile.length();
+            // 如果当前文件大小小于目标大小，则认为是断点续传
+            if (currentFileSize < fileTransport.getFileSize()) {
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待上传文件 = [{}] 校验完成，当前目录下 = [{}] 已存在部分文件 (size: {}), 准备断点续传, thread = {}",
+                    fileTransport.getFileName(), fileTransport.getGroup(), currentFileSize, Thread.currentThread().getName());
+                isContinue = true;
+            } else {
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 待上传文件 = [{}] 校验完成，当前目录下 = [{}] 已存在, 请修改文件名称后上传, thread = {}",
+                    fileTransport.getFileName(), fileTransport.getGroup(), Thread.currentThread().getName());
+
+                // 文件存在，终止上传
+                Map<String, Object> map = new HashMap<>(8);
+                map.put("code", 200);
+                map.put("FILE_FRAME", BasicConstant.FILE_FRAME);
+                map.put("frameType", FileMessageFrame.FrameType.UPLOAD_TRANSPORT_CONFIRM.getBit());
+                map.put("message", "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 校验完成, 当前目录下 [" + fileTransport.getGroup() + "] 已存在, 请修改文件名称后上传");
+                map.put("operate", FileOperateEnum.UPLOAD_TRANSPORT_CONFIRM_REPEAT.getOperate());
+                map.put("status", "1");
+                map.put("time", Timestamp.valueOf(LocalDateTime.now()));
+                WriteEventHandler.addSendData(map, socketChannelContext);
+                return;
+            }
         }
 
         // 3、获取当前执行上传的
@@ -192,8 +203,10 @@ public class FileTransportManager {
 
         // 4、构建文件及通道以及向客户端发送开始上传文件的通知
         try {
-            // 创建临时文件
-            executeFile.createNewFile();
+            if (!executeFile.exists()) {
+                // 创建临时文件
+                executeFile.createNewFile();
+            }
 
             // 配置当前上传文件信息
             Map<String, Map<String, Object>> fileMap = userDto.getUploadFileMap();
@@ -201,7 +214,11 @@ public class FileTransportManager {
                 Map<String, Object> map = new HashMap<String, Object>();
                 map.put("FILE", executeFile);
                 map.put("FILE_LENGTH", fileTransport.getFileSize());
-                map.put("FILE_CHANNEL", FileChannel.open(executeFile.toPath(), StandardOpenOption.CREATE , StandardOpenOption.WRITE));
+                if (isContinue) {
+                    map.put("FILE_CHANNEL", FileChannel.open(executeFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND));
+                } else {
+                    map.put("FILE_CHANNEL", FileChannel.open(executeFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE));
+                }
                 fileMap.put(fileTransport.getTag(), map);
 
                 log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileTransportManager | --> 文件 [{}] 上传通道创建成功, 上传路径 = [{}], thread = {}", fileTransport.getFileName(), executeFile.toPath().toAbsolutePath(), Thread.currentThread().getName());
@@ -212,8 +229,14 @@ public class FileTransportManager {
             map.put("code", 200);
             map.put("FILE_FRAME", BasicConstant.FILE_FRAME);
             map.put("frameType", FileMessageFrame.FrameType.UPLOAD_TRANSPORT_CONFIRM.getBit());
-            map.put("message", "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 校验完成, 开始进行文件传输");
-            map.put("operate", FileOperateEnum.UPLOAD_TRANSPORT_CONFIRM.getOperate());
+            if (isContinue) {
+                map.put("message", "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 校验完成, 开始进行断点续传");
+                map.put("operate", FileOperateEnum.UPLOAD_TRANSPORT_CONTINUE.getOperate());
+                map.put("uploadedSize", currentFileSize);
+            } else {
+                map.put("message", "[ " + fileMessageFrame.getFileTransport().getFileName() + " ] 校验完成, 开始进行文件传输");
+                map.put("operate", FileOperateEnum.UPLOAD_TRANSPORT_CONFIRM.getOperate());
+            }
             map.put("status", "1");
             map.put("time", Timestamp.valueOf(LocalDateTime.now()));
 

@@ -395,6 +395,9 @@ public class ReadEventHandler extends AbstractEventHandler {
                 nextGroupData.setLength(restBytes.length);
                 nextGroupData.setBytes(restBytes);
                 nextGroupData.setStatus("UN_HANDLE");
+                
+                // Set bytes for newCompleteGroupData just in case, though it is set above
+                newCompleteGroupData.setBytes(newCompleteGroupBytes);
 
                 // 5.3、处理完当前帧，移除已经为HANDLE_SUCCESS状态的数据包
                 currentGroupData.setStatus("HANDLE_SUCCESS");
@@ -433,6 +436,7 @@ public class ReadEventHandler extends AbstractEventHandler {
         byte[] newCompleteGroupBytes = new byte[currentFrameSumLength - 4];
         System.arraycopy(currentGroupData.getBytes(), 4, newCompleteGroupBytes, 0, newCompleteGroupBytes.length);
         newCompleteGroupData.setLength(newCompleteGroupBytes.length);
+        newCompleteGroupData.setBytes(newCompleteGroupBytes); // Ensure bytes are set
         newCompleteGroupData.setEndFrame(newCompleteGroupBytes[0]);
         byte[] indexBytes = new byte[4];
         indexBytes[0] = newCompleteGroupBytes[1];
