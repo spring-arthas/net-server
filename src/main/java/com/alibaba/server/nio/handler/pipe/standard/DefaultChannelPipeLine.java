@@ -38,7 +38,6 @@ public class DefaultChannelPipeLine implements ChannelPipeLine {
         this.headContext.setNext(null);
     }
 
-
     /**
      * 向链表ChannelContext追加新节点
      *
@@ -80,23 +79,26 @@ public class DefaultChannelPipeLine implements ChannelPipeLine {
      *
      * @param socketChannelContext 当前通道绑定的应用上下文
      * @throws IOException
-     * */
-    public void executeHandler(Object obj) throws IOException {
+     */
+    public void executeHandler(SocketChannelContext socketChannelContext) throws IOException {
+        Object obj = socketChannelContext.getTransportDataModel();
         ChannelContext channelContext = this.headContext.next();
         while (null != channelContext) {
             AbstractChannelContext dc = (AbstractChannelContext) channelContext;
+            // 设置 SocketChannelContext 引用
+            dc.setSocketChannelContext(socketChannelContext);
             dc.getChannelHandler().handler(obj, dc);
 
             // 1、判断当前ChannelContext是否为终止ChannelContext, 是则跳出
-            if(dc.getNeedStop()) {
+            if (dc.getNeedStop()) {
                 break;
             }
 
             // 2、判断当前ChannelContext是否需要跳过, 不需要则获取当前channelContext的下一个
-            if(!dc.getNeedSkip()) {
+            if (!dc.getNeedSkip()) {
                 channelContext = dc.next();
                 // 2.1、如果当前ChannelContext存在需要传递的handler数据，则将数据向下传递
-                if(null != channelContext && null != dc.getObj()) {
+                if (null != channelContext && null != dc.getObj()) {
                     // 由当前处理完成的Handler产生数据传递到下一个channelHandler
                     ((AbstractChannelContext) channelContext).setObj(dc.getObj());
                 }
@@ -106,7 +108,7 @@ public class DefaultChannelPipeLine implements ChannelPipeLine {
             // 需要跳过,则获取指定跳过数量后所指定的ChannelContext
             channelContext = ((SimpleChannelContext) channelContext).skip(dc.getNeedSkip(), dc, dc.getSkip());
         }
-        
+
         // 一旦跳出while任务处理，重置各个任务handler状态，用于当前通道下次处理时已初始化的状态进行
         this.resetHandlerStatus();
     }
@@ -126,7 +128,7 @@ public class DefaultChannelPipeLine implements ChannelPipeLine {
 
     /**
      * 通道链头上下文
-     * */
+     */
     private class HeadContext extends AbstractChannelContext {
         @Override
         public ChannelContext skip(Boolean isSkip, ChannelContext startChannelContext, int skip) {

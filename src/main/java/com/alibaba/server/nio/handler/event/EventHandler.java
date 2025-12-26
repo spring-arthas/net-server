@@ -1,6 +1,6 @@
 package com.alibaba.server.nio.handler.event;
 
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 
 /**
  * @Auther: YSFY
@@ -10,7 +10,7 @@ import com.alibaba.server.nio.model.EventModel;
  * @Description: 事件处理模型
  */
 
-public interface EventHandler<T extends EventModel> {
+public interface EventHandler<T extends ChannelEventModel> {
 
     /**
      * 事件处理

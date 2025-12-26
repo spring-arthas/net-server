@@ -24,16 +24,22 @@ public class TransportProtocol {
 
     /**
      * 原始数据
-     * */
+     */
     private List<Map<String, Object>> originList;
 
     /**
      * 当前事件已缓存的原始数据字节数组总长度
-     * */
+     */
     private Integer length;
 
     /**
      * 真实数据
-     * */
+     */
     private List<Object> realList;
+
+    /**
+     * 文件帧解析器：用于处理TCP粘包/半包问题
+     * 内部管理解析状态和半包缓存，支持渐进式协议解析
+     */
+    private com.alibaba.server.nio.service.file.parser.FileFrameParser fileFrameParser;
 }

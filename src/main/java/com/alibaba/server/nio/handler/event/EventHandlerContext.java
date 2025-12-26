@@ -1,6 +1,6 @@
 package com.alibaba.server.nio.handler.event;
 
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -15,7 +15,7 @@ import java.util.Optional;
 
 @Slf4j
 @SuppressWarnings("all")
-public final class EventHandlerContext<T extends EventModel> {
+public final class EventHandlerContext<T extends ChannelEventModel> {
     private static EventHandlerContext eventHandlerContext = new EventHandlerContext();
     private AbstractEventHandler currentEventHandler = null;
     private AbstractEventHandler rootEventHandler = new RootEventHandler();
@@ -55,7 +55,7 @@ public final class EventHandlerContext<T extends EventModel> {
     private class RootEventHandler extends AbstractEventHandler {
 
         @Override
-        public EventModel eventHandler(EventModel eventModel) {
+        public ChannelEventModel eventHandler(ChannelEventModel eventModel) {
             return super.getNextEventHandler().eventHandler(eventModel);
         }
     }

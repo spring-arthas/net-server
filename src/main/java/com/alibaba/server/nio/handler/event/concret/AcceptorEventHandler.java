@@ -3,11 +3,10 @@ package com.alibaba.server.nio.handler.event.concret;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
-import com.alibaba.server.nio.model.EventModel;
-import com.alibaba.server.nio.model.constant.EventModelEnum;
+import com.alibaba.server.nio.model.ChannelEventModel;
+import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
 import org.springframework.util.CollectionUtils;
 
 import java.util.Map;
@@ -33,7 +32,7 @@ public class AcceptorEventHandler extends AbstractEventHandler {
     }
 
     @Override
-    public EventModel eventHandler(EventModel eventModel) {
+    public ChannelEventModel eventHandler(ChannelEventModel eventModel) {
         if(!super.checkEvent(eventModel)) {
             return eventModel;
         }
@@ -54,13 +53,13 @@ public class AcceptorEventHandler extends AbstractEventHandler {
      * @param eventModel
      * @return eventModel
      * */
-    private EventModel handler(EventModel eventModel) {
+    private ChannelEventModel handler(ChannelEventModel eventModel) {
         Thread thread = null;
 
         if(!CollectionUtils.isEmpty(map)) {
 
             // 获取当前事件模型类型
-            EventModelEnum eventModelEnum = ((Map<String, EventModelEnum>) BasicServer.getMap().get(BasicConstant.EVENT_TYPE)).get(eventModel.getEventModelEnum().getName());
+            ChannelEventModelEnum eventModelEnum = ((Map<String, ChannelEventModelEnum>) BasicServer.getMap().get(BasicConstant.EVENT_TYPE)).get(eventModel.getEventModelEnum().getName());
 
             // 根据事件模型类型获取对应的Acceptor线程
             thread = (Thread) ((Map<String, Object>) map.get(eventModelEnum.getName())).get(BasicConstant.ACCEPTOR_THREAD);

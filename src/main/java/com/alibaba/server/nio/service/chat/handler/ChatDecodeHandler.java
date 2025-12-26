@@ -3,10 +3,9 @@ package com.alibaba.server.nio.service.chat.handler;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.model.chat.ChatMessageFrame;
-import com.alibaba.server.nio.model.chat.ChatMessageFrame.FrameType;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.util.BasicUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +28,13 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
     public void handler(Object o, ChannelContext channelContext) throws IOException {
         Map<String, Object> map = (Map<String, Object>) o;
         SocketChannelContext socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
-        List<EventModel.GroupData> completeList = (List<EventModel.GroupData>) map.get("COMPLETE_LIST");
+        List<ChannelEventModel.GroupData> completeList = (List<ChannelEventModel.GroupData>) map.get("COMPLETE_LIST");
         if(CollectionUtils.isEmpty(completeList)) {
             return;
         }
 
         // 解析数据
-        for(EventModel.GroupData groupData : completeList) {
+        for(ChannelEventModel.GroupData groupData : completeList) {
             this.parseBytes(groupData, socketChannelContext, channelContext);
         }
     }
@@ -46,7 +45,7 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
      * @param socketChannelContext
      * @param channelContext
      * */
-    private void parseBytes(EventModel.GroupData groupData, SocketChannelContext socketChannelContext, ChannelContext channelContext) {
+    private void parseBytes(ChannelEventModel.GroupData groupData, SocketChannelContext socketChannelContext, ChannelContext channelContext) {
         // 是否开始读取具体数据
         boolean isBeginReadData = true, isRetainLastPacket = false;
         int i = 0;
@@ -101,7 +100,7 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
      * @param chatMessageFrame 当前帧数据
      * @return
      */
-    private Integer parseFrameBasicInfo(Integer k, EventModel.GroupData groupData, ChatMessageFrame chatMessageFrame) {
+    private Integer parseFrameBasicInfo(Integer k, ChannelEventModel.GroupData groupData, ChatMessageFrame chatMessageFrame) {
         // 是否是结束帧
         chatMessageFrame.setEndFrame(groupData.getBytes()[k]);
         // 解析帧类型

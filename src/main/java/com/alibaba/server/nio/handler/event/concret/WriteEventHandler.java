@@ -1,33 +1,16 @@
 package com.alibaba.server.nio.handler.event.concret;
 
-import com.alibaba.fastjson.JSON;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.BasicServer;
-import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
-import com.alibaba.server.nio.handler.worker.WorkerThreadPool;
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.nio.model.SocketChannelContext;
-import com.alibaba.server.nio.model.chat.ChatMessageFrame;
-import com.alibaba.server.nio.model.constant.EventModelEnum;
-import com.alibaba.server.nio.repository.file.service.dto.FileDto;
-import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
-import com.alibaba.server.nio.service.chat.model.ChatMessageLogout;
 import com.alibaba.server.nio.service.file.util.FileWriteEventParseUtil;
-import com.alibaba.server.util.BasicUtil;
-import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
 import org.springframework.util.CollectionUtils;
 
-import java.awt.datatransfer.SystemFlavorMap;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
-import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -54,7 +37,7 @@ public class WriteEventHandler extends AbstractEventHandler {
     }
 
     @Override
-    public EventModel eventHandler(EventModel eventModel) {
+    public ChannelEventModel eventHandler(ChannelEventModel eventModel) {
         if(!super.checkEvent(eventModel)) {
             return eventModel;
         }
@@ -74,7 +57,7 @@ public class WriteEventHandler extends AbstractEventHandler {
      * @param eventModel
      * @return eventModel
      * */
-    private EventModel handler(EventModel eventModel) {
+    private ChannelEventModel handler(ChannelEventModel eventModel) {
         SelectionKey selectionKey = eventModel.getSelectionKey();
         SocketChannelContext socketChannelContext = (SocketChannelContext) eventModel.getSelectionKey().attachment();
         LinkedBlockingQueue<Object> linkedBlockingQueue = ((LinkedBlockingQueue) socketChannelContext.getBlockingQueue());

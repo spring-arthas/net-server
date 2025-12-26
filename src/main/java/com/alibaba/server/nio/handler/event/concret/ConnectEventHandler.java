@@ -1,7 +1,7 @@
 package com.alibaba.server.nio.handler.event.concret;
 
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -19,7 +19,7 @@ import java.util.Optional;
 public class ConnectEventHandler extends AbstractEventHandler {
 
     @Override
-    public EventModel eventHandler(EventModel eventModel) {
+    public ChannelEventModel eventHandler(ChannelEventModel eventModel) {
         if(!super.checkEvent(eventModel)) {
             return eventModel;
         }
@@ -41,7 +41,7 @@ public class ConnectEventHandler extends AbstractEventHandler {
      *
      * @return eventModel
      * */
-    private EventModel handler(EventModel eventModel) {
+    private ChannelEventModel handler(ChannelEventModel eventModel) {
 
         return eventModel;
     }

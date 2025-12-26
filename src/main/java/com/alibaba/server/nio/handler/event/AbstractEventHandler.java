@@ -1,8 +1,8 @@
 package com.alibaba.server.nio.handler.event;
 
 import com.alibaba.server.nio.core.server.NioServerContext;
-import com.alibaba.server.nio.model.ChannelCacheDataModel;
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventDataCacheModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.reactor.SubReactor;
@@ -27,31 +27,34 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @SuppressWarnings("all")
-public abstract class AbstractEventHandler<T extends EventModel> implements EventHandler {
+public abstract class AbstractEventHandler<T extends ChannelEventModel> implements EventHandler {
     /**
      * 通道缓存数据 key： 通道地址 value: 当前通道对应的缓存数据
-     * */
-    public static final Map<String, ChannelCacheDataModel> channelDataMap = new ConcurrentHashMap<>();
+     */
+    public static final Map<String, ChannelEventDataCacheModel> channelDataMap = new ConcurrentHashMap<>();
 
     /**
      * 指向下一个handler指针
-     * */
+     */
     private AbstractEventHandler nextEventHandler;
 
     /**
      * 校验SelectionKey的合法性
+     * 
      * @Param t
      * @return boolean
-     * */
+     */
     public Boolean checkEvent(T t) {
         SelectionKey selectionKey = t.getSelectionKey();
-        if(!Optional.ofNullable(selectionKey).isPresent()) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] AbstractEventHandler | --> selectionKey is null");
+        if (!Optional.ofNullable(selectionKey).isPresent()) {
+            log.error("[" + LocalTime.formatDate(LocalDateTime.now())
+                    + "] AbstractEventHandler | --> selectionKey is null");
             return Boolean.FALSE;
         }
 
-        if(!selectionKey.isValid()) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] AbstractEventHandler | --> selectionKey is Invalid");
+        if (!selectionKey.isValid()) {
+            log.error("[" + LocalTime.formatDate(LocalDateTime.now())
+                    + "] AbstractEventHandler | --> selectionKey is Invalid");
             return Boolean.FALSE;
         }
 
@@ -61,37 +64,43 @@ public abstract class AbstractEventHandler<T extends EventModel> implements Even
     /**
      * 处理当前通道缓存数据，新加入通道则创建当前通道对应的缓存数据类ChannelCacheDataModel,如果存在
      * 则直接从缓存中获取
+     * 
      * @param currentChannelEventModel
      * @return ChannelCacheDataModel
      */
-    public final ChannelCacheDataModel cacheDataHandler(EventModel currentChannelEventModel) {
-        ChannelCacheDataModel channelCacheDataModel = null;
-        String currentChannelAddress = currentChannelEventModel.getRemoteAddress();
-        if(!channelDataMap.containsKey(currentChannelAddress)) {
-            channelCacheDataModel = new ChannelCacheDataModel();
-            channelCacheDataModel.setChannelAddress(currentChannelAddress);
-            channelDataMap.put(currentChannelAddress, channelCacheDataModel);
+    public final ChannelEventDataCacheModel createChannelEventModelCache(ChannelEventModel currentChannelEventModel) {
+        ChannelEventDataCacheModel channelEventDataCacheModel = null;
+        String remoteChannelAddress = currentChannelEventModel.getRemoteAddress();
+        if (!channelDataMap.containsKey(remoteChannelAddress)) {
+            channelEventDataCacheModel = new ChannelEventDataCacheModel();
+            channelEventDataCacheModel.setChannelAddress(remoteChannelAddress);
+            channelDataMap.put(remoteChannelAddress, channelEventDataCacheModel);
         } else {
-            channelCacheDataModel = channelDataMap.get(currentChannelAddress);
+            channelEventDataCacheModel = channelDataMap.get(remoteChannelAddress);
         }
 
-        return channelCacheDataModel;
+        return channelEventDataCacheModel;
     }
 
     /**
      * 注册SubReactor
+     * 
      * @param eventModel
      */
-    public final void registerSubReactor(EventModel eventModel, String subReactor) {
-        SubReactor reactor = GlobalMainReactor.registerStart(NioServerContext.getSelector(subReactor), ((SocketChannel) eventModel.getSelectionKey().channel()), subReactor);
+    public final void registerSubReactor(ChannelEventModel eventModel, String subReactor) {
+        SubReactor reactor = GlobalMainReactor.registerStart(NioServerContext.getSelector(subReactor),
+                ((SocketChannel) eventModel.getSelectionKey().channel()), subReactor);
         // 注册成功，直接将数据提交至SubReactor线程持有的数据处理队列
-        if(reactor.getQueue().remainingCapacity() > 0) {
+        if (reactor.getQueue().remainingCapacity() > 0) {
             Map<String, Object> queueMap = new HashMap<>();
-            queueMap.put("SOCKET_CHANNEL_CONTEXT",eventModel.getSelectionKey().attachment());
-            queueMap.put("COMPLETE_LIST", eventModel.getCompleteList());
+//            queueMap.put("SOCKET_CHANNEL_CONTEXT", eventModel.getSelectionKey().attachment());
+//            queueMap.put("COMPLETE_LIST", eventModel.get());
             reactor.getQueue().offer(queueMap);
         } else {
-            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ReadEventHandler | --> 聊天服务通道 [{}] 对应的SubReactor线程数据处理队列已满, 队列可用空间 = [{}], address = {}, thread = {}", ((SocketChannelContext) eventModel.getSelectionKey().attachment()).getRemoteAddress(), reactor.getQueue().remainingCapacity(), Thread.currentThread().getName());
+            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
+                    + " ] ReadEventHandler | --> 聊天服务通道 [{}] 对应的SubReactor线程数据处理队列已满, 队列可用空间 = [{}], address = {}, thread = {}",
+                    ((SocketChannelContext) eventModel.getSelectionKey().attachment()).getRemoteAddress(),
+                    reactor.getQueue().remainingCapacity(), Thread.currentThread().getName());
         }
     }
 

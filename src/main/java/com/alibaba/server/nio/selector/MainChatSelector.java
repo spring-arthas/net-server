@@ -3,14 +3,13 @@ package com.alibaba.server.nio.selector;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.handler.event.EventHandlerContext;
 import com.alibaba.server.nio.core.server.NioServerContext;
-import com.alibaba.server.nio.model.EventModel;
-import com.alibaba.server.nio.model.constant.EventModelEnum;
+import com.alibaba.server.nio.model.ChannelEventModel;
+import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Iterator;
@@ -44,13 +43,13 @@ public class MainChatSelector extends AbstractSelector implements Runnable {
 
                 Iterator iterator = selector.selectedKeys().iterator();
                 while (iterator.hasNext()) {
-                    EventModel eventModel = new EventModel();
+                    ChannelEventModel eventModel = new ChannelEventModel();
                     SelectionKey selectionKey = (SelectionKey) iterator.next();
                     eventModel.setSelectionKey(selectionKey);
                     if(selectionKey.channel() instanceof SocketChannel) {
                         eventModel.setRemoteAddress(NioServerContext.getRemoteAddress(((SocketChannel) selectionKey.channel())));
                     }
-                    eventModel.setEventModelEnum(EventModelEnum.CHAT_TASK);
+                    //eventModel.setEventModelEnum(ChannelEventModelEnum.CHAT_TASK);
                     iterator.remove();
 
                     // 执行处理

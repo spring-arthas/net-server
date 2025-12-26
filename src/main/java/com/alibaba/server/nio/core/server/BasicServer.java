@@ -2,18 +2,16 @@ package com.alibaba.server.nio.core.server;
 
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.model.chat.ChatMessageFrame;
-import com.alibaba.server.nio.model.constant.EventModelEnum;
+import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.nio.model.file.FileMessageFrame;
 import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
-import com.alibaba.server.util.LocalTime;
 import com.alibaba.server.util.PropertiesUtil;
 import com.google.common.collect.Maps;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
@@ -68,9 +66,9 @@ public class BasicServer {
                 map.put(param, PropertiesUtil.getValue(param));
             }
         }
-        log.info("[" + LocalTime.formatDate(LocalDateTime.now()) + "] BasicServer | loadConfigProperties --> 读取配置文件[config.properties], result = success, Server print Config");
+        log.info("BasicServer：读取配置文件[server.properties], result = success, Server print Config");
 
-        System.out.println("/+------------------------------------------ Server Properties Begin ------------------------------------------+/");
+        System.out.println("/+------------------------------------------ 开始读取配置 ------------------------------------------+/");
         System.out.println();
         Map.Entry<String, Object> entry = null;
         if(!map.isEmpty()) {
@@ -79,8 +77,9 @@ public class BasicServer {
                 System.out.println("/+------------------------------------------ " + (entry = (Map.Entry<String, Object>) iterator.next()).getKey() + " = " + entry.getValue() + " ------------------------------------------+/");
             }
         }
-        System.out.println("/+------------------------------------------ Server Properties End ------------------------------------------+/");
         System.out.println();
+        System.out.println("/+------------------------------------------ 配置读取完成 ------------------------------------------+/");
+        log.info("BasicServer：读取配置文件[server.properties], result = success, Server print Config");
     }
 
     /**
@@ -104,9 +103,9 @@ public class BasicServer {
         map.put(BasicConstant.FILE_MESSAGE_FRAME_TYPE, fileFrameTypeMap);
 
         // 设置Nio事件枚举
-        EventModelEnum[] eventModelEnums = EventModelEnum.values();
-        Map<String, EventModelEnum> eventModelEnumMap = Maps.newHashMap();
-        for(EventModelEnum eventModelEnum : eventModelEnums) {
+        ChannelEventModelEnum[] eventModelEnums = ChannelEventModelEnum.values();
+        Map<String, ChannelEventModelEnum> eventModelEnumMap = Maps.newHashMap();
+        for(ChannelEventModelEnum eventModelEnum : eventModelEnums) {
             eventModelEnumMap.put(eventModelEnum.getName(), eventModelEnum);
         }
         map.put(BasicConstant.EVENT_TYPE, eventModelEnumMap);

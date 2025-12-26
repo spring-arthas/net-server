@@ -3,9 +3,11 @@ package com.alibaba.server.nio.selector;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.EventHandlerContext;
-import com.alibaba.server.nio.model.EventModel;
+import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
+
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.time.LocalDateTime;
@@ -29,10 +31,7 @@ public class MainFileSelector extends AbstractSelector implements Runnable {
 
     @Override
     public void run() {
-        // 1、获取Selector
         Selector selector = super.getCheck(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR);
-
-        // 2、启动Selector轮询
         Integer SELECTOR_POLL_TIMEOUT = Integer.parseInt(NioServerContext.getValue(BasicConstant.SELECTOR_POLL_TIMEOUT));
         while(true) {
             try {
@@ -40,21 +39,17 @@ public class MainFileSelector extends AbstractSelector implements Runnable {
                     TimeUnit.MILLISECONDS.sleep(10);
                     continue;
                 }
-
-                // 包含多个已就绪的socketChannel通道描述符
+                // 遍历可选事件
                 Iterator iterator = selector.selectedKeys().iterator();
                 while (iterator.hasNext()) {
-                    // 获取当前SelectionKey通道附件SocketChannelContext，一个通道不管触发订阅的任何事件，都共用该一个SocketChannelContext
-                    EventModel eventModel = new EventModel();
-                    super.setEventModel(eventModel, (SelectionKey) iterator.next());
+                    ChannelEventModel channelEventModel = new ChannelEventModel();
+                    this.setEventModel(channelEventModel, (SelectionKey) iterator.next());
                     iterator.remove();
-                    EventHandlerContext.getEventHandlerContext().execute(eventModel);
+                    // 执行数据处理
+                    EventHandlerContext.getEventHandlerContext().execute(channelEventModel);
                 }
             } catch (Exception e) {
-                log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] MainFileSelector | --> selector handle selectionKey error, error = {}", e.getMessage());
-                e.printStackTrace();
-            } finally {
-
+                log.error("MainFileSelector事件处理：多路复用处理错误, error = {}", ExceptionUtils.getStackTrace(e));
             }
         }
     }

@@ -55,7 +55,7 @@ public final class FileDownloadTask implements Runnable {
     }
 
     private void handler() throws IOException {
-        ((DefaultChannelPipeLine) this.socketChannelContext.getChannelPipeLine()).executeHandler(this.map);
+        //((DefaultChannelPipeLine) this.socketChannelContext.getChannelPipeLine()).executeHandler(this.map);
     }
 
 }

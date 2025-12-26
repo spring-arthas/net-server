@@ -30,12 +30,12 @@ public abstract class AbstractChannelContext implements ChannelContext {
 
     /**
      * 下一个ChannelContext
-     * */
+     */
     private AbstractChannelContext next;
 
     /**
      * 当前ChannelContext处于Pipeline中的索引位置
-     * */
+     */
     private Integer index;
 
     /**
@@ -59,9 +59,15 @@ public abstract class AbstractChannelContext implements ChannelContext {
     private Object obj;
 
     /**
+     * 当前通道对应的 SocketChannelContext
+     */
+    private com.alibaba.server.nio.model.SocketChannelContext socketChannelContext;
+
+    /**
      * 跳过指定个数的ChannelHandler数量
+     * 
      * @param isSkip 是否需要跳过ChannelContext
-     * @param skip 跳过skip指定数量的channelContext
+     * @param skip   跳过skip指定数量的channelContext
      * @return channelContext 返回跳跃过后的ChannelContext
      * @return channelContext 返回跳跃过后的ChannelContext
      */
@@ -139,6 +145,16 @@ public abstract class AbstractChannelContext implements ChannelContext {
 
     public AbstractChannelContext setObj(Object obj) {
         this.obj = obj;
+        return this;
+    }
+
+    public com.alibaba.server.nio.model.SocketChannelContext getSocketChannelContext() {
+        return socketChannelContext;
+    }
+
+    public AbstractChannelContext setSocketChannelContext(
+            com.alibaba.server.nio.model.SocketChannelContext socketChannelContext) {
+        this.socketChannelContext = socketChannelContext;
         return this;
     }
 }

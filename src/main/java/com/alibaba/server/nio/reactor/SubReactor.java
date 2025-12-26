@@ -6,11 +6,11 @@ import com.alibaba.server.nio.handler.pipe.standard.DefaultChannelPipeLine;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.handler.worker.WorkerThreadPool;
 import com.alibaba.server.nio.model.SocketChannelContext;
+import com.alibaba.server.nio.model.TransportDataModel;
 import com.alibaba.server.nio.model.TransportProtocol;
-import com.alibaba.server.nio.model.constant.EventModelEnum;
+import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.nio.service.chat.handler.ChatDecodeHandler;
 import com.alibaba.server.nio.service.chat.handler.ChatRealDataHandler;
-import com.alibaba.server.nio.service.file.handler.*;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -58,7 +58,7 @@ public class SubReactor implements Runnable {
             String registerType = "";
 
             // 1、基于聊天的subReactor线程
-            if(StringUtils.equals(EventModelEnum.CHAT_TASK.getName(), subReactor)) {
+            if(StringUtils.equals(ChannelEventModelEnum.TEXT_TRANSMISSION.getName(), subReactor)) {
                 // 1.1、事件订阅索引
                 eventOpt = SelectionKey.OP_READ | SelectionKey.OP_WRITE;
 
@@ -155,7 +155,7 @@ public class SubReactor implements Runnable {
      * @param obj (处理数据)
      * */
     private void execute(Object obj) {
-        WorkerThreadPool.submit(obj, subReactor);
+        //WorkerThreadPool.submit((TransportDataModel) obj);
     }
 
     /**

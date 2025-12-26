@@ -13,20 +13,17 @@ import java.util.List;
  * @Description: 通道读取事件缓存模型
  */
 @Data
-public class ChannelCacheDataModel {
-
+public class ChannelEventDataCacheModel {
     /**
-     * 当前通道缓存数据-最新数据序号
+     * 当前通道最新的GroupData序号, 默认为1
      */
-    private int index = 1;
-
+    private int newLatestIndex = 1;
     /**
      * 当前通道名称
-     * */
+     */
     private String channelAddress;
-
     /**
      * 数据集合
-     * */
-    private List<EventModel.GroupData> list = Lists.newArrayList();
+     */
+    private List<ChannelEventModel.GroupData> waitHandleDataList = Lists.newArrayList();
 }

@@ -56,6 +56,6 @@ public final class ChatReadEventTask implements Runnable {
         SocketChannelContext socketChannelContext = (SocketChannelContext) this.map.get("SOCKET_CHANNEL_CONTEXT");
 
         // 2、执行管道处理
-        ((DefaultChannelPipeLine) socketChannelContext.getChannelPipeLine()).executeHandler(this.map);
+        //((DefaultChannelPipeLine) socketChannelContext.getChannelPipeLine()).executeHandler(this.map);
     }
 }

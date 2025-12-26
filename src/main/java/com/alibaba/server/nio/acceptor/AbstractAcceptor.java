@@ -6,8 +6,6 @@ import com.alibaba.server.nio.handler.pipe.standard.DefaultChannelPipeLine;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.model.TransportProtocol;
-import com.alibaba.server.nio.model.constant.EventModelEnum;
-import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.service.file.handler.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -66,7 +64,8 @@ public class AbstractAcceptor {
         selector.wakeup();
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-        log.info("[" + Thread.currentThread().getName() + " ] AbstractAcceptor | --> [ " + assign + " ] ServerSocketChannel init success, waiting for client conntect..., listener address = {}, thread = {}", (inetSocketAddress.toString()), Thread.currentThread().getName());
+        log.info("[" + Thread.currentThread().getName() + " ] AbstractAcceptor | --> [ " + assign + " ] 服务端通道构建成功, 正在等待客户端连接, 监听地址为 = {}, 本监听器对应线程名称 = {}", 
+            inetSocketAddress.toString(), Thread.currentThread().getName());
         return serverSocketChannel;
     }
 
@@ -83,15 +82,15 @@ public class AbstractAcceptor {
         }
 
         String port = "";
-        if(StringUtils.equals(EventModelEnum.CHAT_TASK.getName(), assign)) {
+        if(StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR, assign)) {
             port = NioServerContext.getValue(BasicConstant.NIO_MESSAGE_PORT);
         }
 
-        if(StringUtils.equals(EventModelEnum.FILE_UPLOAD_TASK.getName(), assign)) {
+        if(StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR, assign)) {
             port = NioServerContext.getValue(BasicConstant.NIO_FILE_UPLOAD_PORT);
         }
 
-        if(StringUtils.equals(EventModelEnum.FILE_DOWNLOAD_TASK.getName(), assign)) {
+        if(StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR, assign)) {
             port = NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT);
         }
 

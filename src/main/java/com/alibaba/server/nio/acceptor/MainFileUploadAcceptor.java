@@ -47,7 +47,6 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
     public void run() {
         try {
             ServerSocketChannel serverSocketChannel = super.initServerSocketChannel(selector, this.ACCEPTOR);
-
             if(!serverSocketChannel.isOpen() || ! serverSocketChannel.isRegistered()) {
                 throw new RuntimeException("ServerSocketChannel is not open or registered");
             }
@@ -55,10 +54,9 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
             while (true) {
                 SocketChannel socketChannel = serverSocketChannel.accept();
                 if(Optional.ofNullable(socketChannel).isPresent()) {
-                    // 处理文件SocketChannel连接
+                    // 处理文件上传客户端新的SocketChannel连接注册至文件上传selector中
                     this.registerFileSocketChannel(socketChannel);
                 }
-
                 // 当接收到客户端连接并注册成功后，阻塞当前文件上传Acceptor线程，等待Selector线程执行到AcceptorEventHandler事件处理程序进行唤醒
                 LockSupport.park();
             }
@@ -75,6 +73,6 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
         // 1、设置通道链处理器 --> 文件消息解码器 --> 文件消息真实数据处理器
         SocketChannelContext socketChannelContext = this.createModel(socketChannel);
         NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE).attach(socketChannelContext);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] MainFileUploadAcceptor | --> 文件上传通道 [{}] 注册成功", socketChannelContext.getRemoteAddress());
+        log.info("文件上传客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功", socketChannelContext.getRemoteAddress());
     }
 }
