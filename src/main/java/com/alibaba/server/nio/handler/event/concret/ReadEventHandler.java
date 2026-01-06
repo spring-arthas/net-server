@@ -44,6 +44,7 @@ public class ReadEventHandler extends AbstractEventHandler {
 
     @Override
     public ChannelEventModel eventHandler(ChannelEventModel channelEventModel) {
+        // 非读事件则继续下一个事件处理器
         if (!super.checkEvent(channelEventModel)) {
             return channelEventModel;
         }
@@ -66,18 +67,22 @@ public class ReadEventHandler extends AbstractEventHandler {
      * @return eventModel
      */
     private void readHandler(ChannelEventModel channelEventModel) {
-        // 1. 读取数据，能处理则处理，不能处理进入缓存
+        // 1. 优先在服务端为本次读事件对应的通道构建数据缓存模型，后续只要是是这个socketChannel读事件需要处理
+        // 优先使用该数据缓存对象
         ChannelEventDataCacheModel channelEventDataCacheModel = this.createChannelEventModelCache(channelEventModel);
+        // 2. 读取当前通道读事件内所有待处理字节数据，即本次读事件唤醒能从socket中读取到多少数据通过该readData一次
+        // 性读取完毕，并返回读取结果
         FrameReadResultEnum frameReadResultEnum = this.readData(channelEventModel, channelEventDataCacheModel);
         if (Objects.equals(FrameReadResultEnum.END, frameReadResultEnum)) { // 通道关闭直接返回，内部已经完成了资源的释放
             return;
         }
-        // 2、处理文字传输数据
+        // 3. 按需处理已经完成读取的字节数据
+        // 3.1 如果当前读事件对应的通道为文本处理通道，则按照文本方式处理
         if (Objects.equals(ChannelEventModelEnum.TEXT_TRANSMISSION, channelEventModel.getEventModelEnum())) {
             this.doTextDataHandle(channelEventModel);
             return;
         }
-        // 3、处理文件上传和下载数据
+        // 3.2、如果当前读事件对应的通道为文件处理通道，则按照文件方式处理
         if (Objects.equals(ChannelEventModelEnum.FILE_UPLOAD, channelEventModel.getEventModelEnum())
                 || Objects.equals(ChannelEventModelEnum.FILE_DOWNLOAD, channelEventModel.getEventModelEnum())) {
             // 将本次待处理的数据缓存至socketChannelContext中
@@ -91,7 +96,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             WorkerThreadPool.submit(socketChannelContext);
         }
 
-        // 【修复】：清空 completeList，防止数据重复处理
+        // 4. 释放缓存数据:【修复】：清空 completeList，防止数据重复处理
         channelEventDataCacheModel.getWaitHandleDataList().clear();
 
     }
@@ -234,14 +239,15 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // 2.2、将当前通道触发的读事件数据 --> 加入当前SocketChannel连接对应的的Subreactor线程数据处理队列, 可用空间必须大于0
         if (reactor.getQueue().remainingCapacity() > 0) {
-//            Map<String, Object> queueMap = new HashMap<>();
-//            queueMap.put("SOCKET_CHANNEL_CONTEXT", channelEventModel.getSelectionKey().attachment());
-//            queueMap.put("COMPLETE_LIST", channelEventModel.getWaitHandleDataList());
-//            reactor.getQueue().offer(queueMap);
-//
-//            // 【修复】：清空 completeList，防止数据重复处理
-//            // completeList 已经传递给下游，必须清空，否则下次读事件会携带旧数据
-//            channelEventModel.getWaitHandleDataList().clear();
+            // Map<String, Object> queueMap = new HashMap<>();
+            // queueMap.put("SOCKET_CHANNEL_CONTEXT",
+            // channelEventModel.getSelectionKey().attachment());
+            // queueMap.put("COMPLETE_LIST", channelEventModel.getWaitHandleDataList());
+            // reactor.getQueue().offer(queueMap);
+            //
+            // // 【修复】：清空 completeList，防止数据重复处理
+            // // completeList 已经传递给下游，必须清空，否则下次读事件会携带旧数据
+            // channelEventModel.getWaitHandleDataList().clear();
             return;
         }
 

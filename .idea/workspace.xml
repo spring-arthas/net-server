@@ -5,48 +5,23 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1617b815-b451-4fb9-a7bb-1acb12c00284" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/uiDesigner.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/common/FrameReadResultEnum.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/TransportDataModel.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/compiler.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/compiler.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/MainFileUploadAcceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/MainFileUploadAcceptor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/BasicServer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/BasicServer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/CoreServer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/CoreServer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/AbstractEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/AbstractEventHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/EventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/EventHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/EventHandlerContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/EventHandlerContext.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/AcceptorEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/AcceptorEventHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/ConnectEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/ConnectEventHandler.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/ReadEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/ReadEventHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/WriteEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/WriteEventHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/pipe/standard/AbstractChannelContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/pipe/standard/AbstractChannelContext.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/pipe/standard/DefaultChannelPipeLine.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/pipe/standard/DefaultChannelPipeLine.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/worker/WorkerThreadPool.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/worker/WorkerThreadPool.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/ChannelCacheDataModel.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/ChannelEventDataCacheModel.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/EventModel.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/ChannelEventModel.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/SocketChannelContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/SocketChannelContext.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/TransportProtocol.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/TransportProtocol.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/constant/EventModelEnum.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/constant/ChannelEventModelEnum.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/reactor/SubReactor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/reactor/SubReactor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/impl/FileServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/impl/FileServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/AbstractSelector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/AbstractSelector.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/MainChatSelector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/MainChatSelector.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/TransportDataModel.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/TransportDataModel.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/MainFileSelector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/MainFileSelector.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/chat/handler/ChatDecodeHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/chat/handler/ChatDecodeHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/chat/task/ChatReadEventTask.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/chat/task/ChatReadEventTask.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileHeadDecodeHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileHeadDecodeHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileRealDataHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileRealDataHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/model/FileOperateEnum.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/model/FileOperateEnum.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/operate/FileTransportManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/operate/FileTransportManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/task/FileDownloadTask.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/task/FileDownloadTask.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/task/FileUploadTask.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/task/FileUploadTask.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CompilerWorkspaceConfiguration">
+    <option name="PARALLEL_COMPILATION" value="false" />
   </component>
   <component name="ComposerSettings">
     <execution />
@@ -59,18 +34,17 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="master" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
   <component name="MavenImportPreferences">
-    <option name="generalSettings">
-      <MavenGeneralSettings>
-        <option name="mavenHome" value="$USER_HOME$/Documents/dev/maven/apache-maven-3.5.2" />
-        <option name="userSettingsFile" value="$USER_HOME$/Documents/dev/maven/apache-maven-3.5.2/conf/hailiang/settings.xml" />
-      </MavenGeneralSettings>
-    </option>
     <option name="importingSettings">
       <MavenImportingSettings>
         <option name="jdkForImporter" value="zulu-8jdk" />
@@ -100,15 +74,16 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "WebServerToolWindowFactoryState": "false",
-    "git-widget-placeholder": "master",
+    "git-widget-placeholder": "feature-v1.0",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
     "project.structure.last.edited": "Modules",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.0",
-    "settings.editor.selected.configurable": "reference.settings.project.maven.archetype.catalogs",
+    "project.structure.proportion": "0.20996094",
+    "project.structure.side.proportion": "0.21550742",
+    "settings.editor.selected.configurable": "Groovy compiler",
     "spring.configuration.checksum": "c788a76d42e424a63397dac35f4724fe",
     "vue.rearranger.settings.migration": "true"
   }
@@ -134,6 +109,8 @@
       </method>
     </configuration>
     <configuration name="NetServer" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="ALTERNATIVE_JRE_PATH" value="zulu-8jdk" />
+      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
       <option name="MAIN_CLASS_NAME" value="com.alibaba.server.NetServer" />
       <module name="net-server" />
       <extension name="coverage">
@@ -157,6 +134,10 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
+    <list>
+      <item itemvalue="Application.FileUploadClient" />
+      <item itemvalue="Application.NetServer" />
+    </list>
     <recent_temporary>
       <list>
         <item itemvalue="Application.FileUploadClient" />
@@ -178,7 +159,9 @@
       <updated>1742280643034</updated>
       <workItem from="1742280644436" duration="256000" />
       <workItem from="1750753805864" duration="1510000" />
-      <workItem from="1766544498351" duration="13769000" />
+      <workItem from="1766544498351" duration="14728000" />
+      <workItem from="1766742915669" duration="2489000" />
+      <workItem from="1767689241920" duration="3717000" />
     </task>
     <task id="LOCAL-00001" summary="提交代码">
       <option name="closed" value="true" />
@@ -188,13 +171,30 @@
       <option name="project" value="LOCAL" />
       <updated>1766544831160</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="提交代码">
+      <option name="closed" value="true" />
+      <created>1766741905559</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1766741905559</updated>
+    </task>
+    <task id="LOCAL-00003" summary="提交代码">
+      <option name="closed" value="true" />
+      <created>1766741959036</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1766741959036</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
+    <MESSAGE value="问" />
     <MESSAGE value="提交代码" />
     <option name="LAST_COMMIT_MESSAGE" value="提交代码" />
   </component>
@@ -204,9 +204,13 @@
         <line-breakpoint enabled="true" type="java-line">
           <url>file://$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/client/FileUploadClient.java</url>
           <line>69</line>
-          <option name="timeStamp" value="5" />
+          <option name="timeStamp" value="1" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>

@@ -14,10 +14,10 @@ import java.util.List;
 public class TransportDataModel {
 	/**
 	 * 数据类型 @see com.alibaba.server.nio.model.ChannelEventModelEnum
-	 * */
+	 */
 	private String dataType;
 	/**
-	 * 待处理的字节数据(未进行粘包半包处理)
-	 * */
+	 * 待处理的字节数据(未进行粘包半包处理, 只是从socket中完成了读取工作)
+	 */
 	private List<ChannelEventModel.GroupData> waitHandleDataList = Lists.newArrayList();
 }
