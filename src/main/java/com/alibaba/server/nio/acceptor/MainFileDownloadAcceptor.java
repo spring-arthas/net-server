@@ -9,6 +9,7 @@ import com.alibaba.server.nio.model.TransportProtocol;
 import com.alibaba.server.nio.service.file.handler.*;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -57,11 +58,13 @@ public class MainFileDownloadAcceptor extends AbstractAcceptor implements Runnab
                     this.registerFileSocketChannel(socketChannel);
                 }
 
-                // 当接收到客户端连接并注册成功后，阻塞当前文件上传Acceptor线程，等待Selector线程执行到AcceptorEventHandler事件处理程序进行唤醒
+                // 当接收到客户端连接并注册成功后，阻塞当前文件下载Acceptor线程，等待Selector线程执行到AcceptorEventHandler事件处理程序进行唤醒
                 LockSupport.park();
             }
         } catch (Exception e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] MainFileDownloadAcceptor | --> 文件下载服务端监听处理异常, error = {}", e.getMessage());
+            log.error(
+                    "MainFileDownloadAcceptor：文件下载服务端监听处理异常, error = {}",
+                    ExceptionUtils.getStackTrace(e));
         }
     }
 
@@ -73,6 +76,6 @@ public class MainFileDownloadAcceptor extends AbstractAcceptor implements Runnab
         // 1、设置通道链处理器 --> 文件消息解码器 --> 文件消息真实数据处理器
         SocketChannelContext socketChannelContext = this.createModel(socketChannel);
         NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ).attach(socketChannelContext);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] MainFileDownloadAcceptor | --> 文件下载通道 [{}] 注册成功", socketChannelContext.getRemoteAddress());
+        log.info("文件下载客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功, 远程客户端地址 = {}", socketChannelContext.getRemoteAddress());
     }
 }

@@ -337,7 +337,7 @@ public class NioServerContext {
      * */
     public static void startupIocContainer() throws IOException {
         BasicServer.classPathXmlApplicationContext = new ClassPathXmlApplicationContext("spring/applicationContext.xml");
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> net server IOC container init sucess, threadName = {}", Thread.currentThread().getName());
+        log.info("net server IOC container初始化成功, threadName = {}", Thread.currentThread().getName());
     }
 
     /**

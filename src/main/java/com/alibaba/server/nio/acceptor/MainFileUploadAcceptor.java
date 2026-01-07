@@ -26,6 +26,7 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 
 /**
  * 文件上传服务端 [ServerSocketChannel] 绑定于10087
+ * 
  * @author: YSFY
  * @Date: 2020-11-21 10:40
  * @Pacage_name: com.alibaba.server.nio.selector
@@ -47,32 +48,44 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
     public void run() {
         try {
             ServerSocketChannel serverSocketChannel = super.initServerSocketChannel(selector, this.ACCEPTOR);
-            if(!serverSocketChannel.isOpen() || ! serverSocketChannel.isRegistered()) {
+            if (!serverSocketChannel.isOpen() || !serverSocketChannel.isRegistered()) {
                 throw new RuntimeException("ServerSocketChannel is not open or registered");
             }
 
             while (true) {
-                SocketChannel socketChannel = serverSocketChannel.accept();
-                if(Optional.ofNullable(socketChannel).isPresent()) {
-                    // 处理文件上传客户端新的SocketChannel连接注册至文件上传selector中
+                // 循环处理所有待处理的连接，避免多客户端同时连接时丢失
+                SocketChannel socketChannel;
+                int acceptedCount = 0;
+                while ((socketChannel = serverSocketChannel.accept()) != null) {
                     this.registerFileSocketChannel(socketChannel);
+                    acceptedCount++;
                 }
-                // 当接收到客户端连接并注册成功后，阻塞当前文件上传Acceptor线程，等待Selector线程执行到AcceptorEventHandler事件处理程序进行唤醒
+
+                if (acceptedCount > 0) {
+                    log.debug("本次唤醒共接受 {} 个客户端连接", acceptedCount);
+                }
+
+                // 所有连接都处理完毕后再 park，等待 Selector 唤醒
                 LockSupport.park();
             }
         } catch (Exception e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] MainFileUploadAcceptor | --> 文件上传服务端监听处理异常, error = {}", ExceptionUtils.getStackTrace(e));
+            log.error(
+                    "MainFileUploadAcceptor：文件上传服务端监听处理异常, error = {}",
+                    ExceptionUtils.getStackTrace(e));
         }
     }
 
     /**
      * 处理文件SocketChannel连接
+     * 
      * @param socketChannel
      */
     private void registerFileSocketChannel(SocketChannel socketChannel) throws IOException {
         // 1、设置通道链处理器 --> 文件消息解码器 --> 文件消息真实数据处理器
         SocketChannelContext socketChannelContext = this.createModel(socketChannel);
-        NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE).attach(socketChannelContext);
-        log.info("文件上传客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功, 远程客户端地址 = {}", socketChannelContext.getRemoteAddress());
+        NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE)
+                .attach(socketChannelContext);
+        log.info("文件上传客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功, 远程客户端地址 = {}",
+                socketChannelContext.getRemoteAddress());
     }
 }
