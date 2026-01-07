@@ -251,13 +251,14 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
             // 1. 关闭文件通道
             uploadContext.markCompleted();
 
-            // 2. 更新数据库状态
-            try {
+            // 2. 更新数据库状态, 先不更新文件数据库状态
+            /*try {
                 FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
-                // fileService.updateFileStatus(uploadContext.getTaskId(), "COMPLETED"); // 可选
+                fileService.update(uploadContext.getTaskId(), "COMPLETED"); // 可选
             } catch (Exception e) {
                 log.warn("更新数据库状态失败（非致命）: {}", e.getMessage());
-            }
+                throw e;
+            }*/
 
             // 3. 发送完成 ACK
             sendAckFrame(socketChannelContext, uploadContext.getTaskId(), "success", null);
