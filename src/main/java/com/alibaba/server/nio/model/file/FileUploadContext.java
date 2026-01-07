@@ -192,8 +192,6 @@ public class FileUploadContext {
                     fileChannel.force(true); // 强制刷新到磁盘
                     fileChannel.close();
                 }
-                log.info("关闭文件通道: taskId={}, bytesWritten={}/{}",
-                        taskId, bytesWritten, fileSize);
             } catch (IOException e) {
                 log.error("关闭文件通道失败: taskId={}", taskId, e);
             }
@@ -205,8 +203,8 @@ public class FileUploadContext {
      */
     public void markCompleted() {
         this.status = UploadStatus.COMPLETED;
-        log.info("文件上传完成: taskId={}, fileName={}, size={}", taskId, fileName, fileSize);
         closeFileChannel();
+        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", taskId, fileName, fileSize, bytesWritten, fileSize);
     }
 
     /**
