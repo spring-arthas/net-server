@@ -34,6 +34,7 @@ public class MainFileSelector extends AbstractSelector implements Runnable {
         Selector selector = super.getCheck(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR);
         Integer SELECTOR_POLL_TIMEOUT = Integer
                 .parseInt(NioServerContext.getValue(BasicConstant.SELECTOR_POLL_TIMEOUT));
+        log.info("文件上传Selector线程启动成功，开始监听文件上传相关事件");
         while (true) {
             try {
                 if (selector.select(SELECTOR_POLL_TIMEOUT) == 0) {
