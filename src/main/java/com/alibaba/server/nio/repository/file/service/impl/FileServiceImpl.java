@@ -24,8 +24,9 @@ import java.util.*;
 
 /**
  * 文件服务
+ * 
  * @author spring
- * */
+ */
 
 @Slf4j
 @Service
@@ -35,7 +36,7 @@ public class FileServiceImpl implements FileService {
     private FileRepository fileRepository;
 
     /**
-     * @param fileQueryParam   文件查询param 
+     * @param fileQueryParam   文件查询param
      * @param completeFilePath 文件绝对路径
      * @param relativeFilePath 文件相对路径
      * @return
@@ -43,14 +44,15 @@ public class FileServiceImpl implements FileService {
     @Override
     public FileDto getFolderFileTree(FileQueryParam fileQueryParam, String completeFilePath, String relativeFilePath) {
         List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
-        if(!CollectionUtils.isEmpty(fileDos)) {
+        if (!CollectionUtils.isEmpty(fileDos)) {
             // 当前文件夹不为空，此时只查询子文件夹，不查询文件
             FileDto rootFileDto = this.doToDto(fileDos.get(0));
 
             // 当前文件夹节点是否含有子节点，不含有子文件夹，则查询是否含有文件信息
-            if(!rootFileDto.getHasChild().equals(YesOrNoEnum.Y.name())) {
-                PageResult<FileDo> fileDoPageResult = this.queryFilesBelongCurrentFolder(rootFileDto.getId(), fileQueryParam.getCurrentPage(), fileQueryParam.getPageSize());
-                if(!CollectionUtils.isEmpty(fileDoPageResult.getModelList())) {
+            if (!rootFileDto.getHasChild().equals(YesOrNoEnum.Y.name())) {
+                PageResult<FileDo> fileDoPageResult = this.queryFilesBelongCurrentFolder(rootFileDto.getId(),
+                        fileQueryParam.getCurrentPage(), fileQueryParam.getPageSize());
+                if (!CollectionUtils.isEmpty(fileDoPageResult.getModelList())) {
                     rootFileDto.setFileCount(fileDoPageResult.getTotalCount());
                     final List<FileDto> fileDtoList = Lists.newArrayList();
                     fileDoPageResult.getModelList().stream().forEach(fileDo -> {
@@ -65,10 +67,10 @@ public class FileServiceImpl implements FileService {
             FileQueryParam childFileQueryParam = new FileQueryParam();
             childFileQueryParam.setPId(rootFileDto.getId());
             List<FileDo> childFileDos = this.getAssignFiles(childFileQueryParam);
-            if(!CollectionUtils.isEmpty(childFileDos)) {
+            if (!CollectionUtils.isEmpty(childFileDos)) {
                 List<FileDto> childFileList = Lists.newArrayList();
 
-                for(FileDo childFileDo : childFileDos) {
+                for (FileDo childFileDo : childFileDos) {
                     childFileList.add(this.doToDto(childFileDo));
                 }
 
@@ -79,7 +81,7 @@ public class FileServiceImpl implements FileService {
         } else {
             // 为空，文件系统创建当前文件夹
             File file = new File(completeFilePath);
-            if(!file.exists() && !file.isDirectory()) {
+            if (!file.exists() && !file.isDirectory()) {
                 // 创建多级文件夹
                 file.mkdirs();
             }
@@ -103,9 +105,10 @@ public class FileServiceImpl implements FileService {
 
     /**
      * 查询当前文件夹下的文件
-     * @param id  当前文件夹Id
+     * 
+     * @param id          当前文件夹Id
      * @param currentPage 当前页
-     * @param pageSize 数量
+     * @param pageSize    数量
      * @return
      */
     private PageResult<FileDo> queryFilesBelongCurrentFolder(Long id, Integer currentPage, Integer pageSize) {
@@ -124,7 +127,7 @@ public class FileServiceImpl implements FileService {
     public FileDto create(FileQueryParam fileQueryParam, String completeFilePath) {
         // 1、判断当前新创建的文件夹路径是否存在记录，存在则无需创建，直接返回当前存在的文件
         List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
-        if(!CollectionUtils.isEmpty(fileDos)) {
+        if (!CollectionUtils.isEmpty(fileDos)) {
             FileDto fileDto = this.doToDto(fileDos.get(0));
             fileDto.setRepeatCreate(YesOrNoEnum.Y.name());
             return fileDto;
@@ -139,7 +142,7 @@ public class FileServiceImpl implements FileService {
         newFileQueryParam.setCurrentPage(1);
         newFileQueryParam.setPageSize(2);
         PageResult<FileDo> pageResult = this.fileRepository.queryPage(this.createDalParam(newFileQueryParam));
-        if(null != pageResult && pageResult.getTotalCount() > 0) {
+        if (null != pageResult && pageResult.getTotalCount() > 0) {
             FileDto fileDto = new FileDto();
             fileDto.setId(fileQueryParam.getPId());
             fileDto.setFileName(fileQueryParam.getFilePath());
@@ -149,7 +152,7 @@ public class FileServiceImpl implements FileService {
 
         // 3、为空，文件系统创建当前文件夹
         File file = new File(completeFilePath);
-        if(!file.exists() && !file.isDirectory()) {
+        if (!file.exists() && !file.isDirectory()) {
             // 创建多级文件夹
             file.mkdirs();
         }
@@ -181,7 +184,7 @@ public class FileServiceImpl implements FileService {
     @Override
     public FileDto update(FileUpdateParam fileUpdateParam, String originFilePath, String completeFilePath) {
         File file = new File(originFilePath);
-        if(file.exists() && file.isDirectory()) {
+        if (file.exists() && file.isDirectory()) {
             // 创建多级文件夹
             file.renameTo(new File(completeFilePath));
         }
@@ -192,9 +195,10 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public FileDto createFile(FileQueryParam fileQueryParam) {
         List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
-        if(CollectionUtils.isEmpty(fileDos)) {
+        if (CollectionUtils.isEmpty(fileDos)) {
             FileCreateParam fileCreateParam = new FileCreateParam();
             fileCreateParam.setPId(fileQueryParam.getPId());
             fileCreateParam.setUserName(fileQueryParam.getUserName());
@@ -207,8 +211,10 @@ public class FileServiceImpl implements FileService {
             fileCreateParam.setHasChild(YesOrNoEnum.N.name());
             FileDo fileDo = this.createParamToDo(fileCreateParam);
             this.fileRepository.insert(fileDo);
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileServiceImpl | --> 当前用户 [{}] 成功持久化上传文件 [{}], 文件存储路径 [{}], thread = {}",
-                fileDo.getUserName(), fileDo.getFileName(), fileDo.getFilePath(), Thread.currentThread().getName());
+            log.info(
+                    "[ " + LocalTime.formatDate(LocalDateTime.now())
+                            + " ] FileServiceImpl | --> 当前用户 [{}] 成功持久化上传文件 [{}], 文件存储路径 [{}], thread = {}",
+                    fileDo.getUserName(), fileDo.getFileName(), fileDo.getFilePath(), Thread.currentThread().getName());
             return this.doToDto(fileDo);
         }
 
@@ -217,7 +223,7 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public Boolean deleteFile(FileQueryParam fileQueryParam, List<Long> fileIdList) {
-        if(CollectionUtils.isEmpty(fileIdList)) {
+        if (CollectionUtils.isEmpty(fileIdList)) {
             return Boolean.FALSE;
         }
 
@@ -230,11 +236,11 @@ public class FileServiceImpl implements FileService {
             fileUpdateParam.setDel(YesOrNoEnum.Y.name());
             fileUpdateParam.setDelTime(date);
 
-            //fileDoList.add(this.updateParamToDo(fileUpdateParam));
+            // fileDoList.add(this.updateParamToDo(fileUpdateParam));
             this.fileRepository.updateSelective(this.updateParamToDo(fileUpdateParam));
         });
 
-        //this.fileRepository.batchUpdateSelective(fileDoList);
+        // this.fileRepository.batchUpdateSelective(fileDoList);
         return Boolean.TRUE;
     }
 
@@ -245,6 +251,7 @@ public class FileServiceImpl implements FileService {
 
     /**
      * 根据fileQueryParam指定的查询条件查询文件信息
+     * 
      * @param fileQueryParam
      * @return
      */
