@@ -266,7 +266,7 @@ public class FileServiceImpl implements FileService {
         fileDo.setHasChild(param.getHasChild());
         fileDo.setDel(YesOrNoEnum.N.name());
         Date date = new Date();
-        fileDo.setGmtCreate(date);
+        fileDo.setGmtCreated(date);
         fileDo.setGmtModified(date);
         fileDo.setDelTime(null);
         return fileDo;
@@ -322,7 +322,7 @@ public class FileServiceImpl implements FileService {
         fileDto.setHasChild(fileDo.getHasChild());
         fileDto.setDel(fileDo.getDel());
         fileDto.setDelTime(fileDo.getDelTime());
-        fileDto.setGmtCreate(fileDo.getGmtCreate());
+        fileDto.setGmtCreated(fileDo.getGmtCreated());
         fileDto.setGmtModified(fileDo.getGmtModified());
         return fileDto;
     }

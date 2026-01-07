@@ -81,7 +81,7 @@ public class UserServiceImpl implements UserService {
         userDo.setRegisterDate(param.getRegisterDate());
         userDo.setRegister(param.getRegister());
         userDo.setStatus(param.getStatus());
-        userDo.setGmtCreate(param.getRegisterDate());
+        userDo.setGmtCreated(param.getRegisterDate());
         userDo.setGmtModified(param.getRegisterDate());
         userDo.setDelTime(param.getRegisterDate());
         return userDo;

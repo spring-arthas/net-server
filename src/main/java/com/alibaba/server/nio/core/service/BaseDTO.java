@@ -30,7 +30,7 @@ public class BaseDTO implements Identity, CloneableSupport {
     /**
      * 创建时间
      */
-    private Date gmtCreate;
+    private Date gmtCreated;
 
     /**
      * 修改时间
