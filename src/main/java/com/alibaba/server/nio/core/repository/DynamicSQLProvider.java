@@ -53,7 +53,7 @@ public class DynamicSQLProvider {
         if (baseDO.getId() != null && baseDO.getId() > 0) {
             sql.append("id,");
         }
-        sql.append("gmt_create,gmt_modified,del_time,");
+        sql.append("gmt_created,gmt_modified,del_time,");
         sql.append(StringUtils.join(dbColumns, ","));
         sql.append(") values(");
         if (baseDO.getId() != null && baseDO.getId() > 0) {
