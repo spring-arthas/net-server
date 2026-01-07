@@ -1,32 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xmlns:aop="http://www.springframework.org/schema/aop"
-       xmlns:tx="http://www.springframework.org/schema/tx"
-       xmlns:jdbc="http://www.springframework.org/schema/jdbc"
-       xsi:schemaLocation="
-    http://www.springframework.org/schema/beans
-    http://www.springframework.org/schema/beans/spring-beans.xsd
-    http://www.springframework.org/schema/tx
-    http://www.springframework.org/schema/tx/spring-tx.xsd
-    http://www.springframework.org/schema/jdbc
-    http://www.springframework.org/schema/jdbc/spring-jdbc-3.1.xsd
-    http://www.springframework.org/schema/aop
-    http://www.springframework.org/schema/aop/spring-aop.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:aop="http://www.springframework.org/schema/aop"
+    xmlns:tx="http://www.springframework.org/schema/tx"
+    xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                        http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+                        http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc-3.1.xsd
+                        http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd">
 
     <!-- 配置使Spring采用CGLIB代理 -->
-    <!--<aop:aspectj-autoproxy proxy-target
+    <!--<aop:aspectj-autoproxy
+    proxy-target
 
 
     -class="true" />-->
 
     <!-- 启用对事务注解的支持 -->
-    <!--<tx:annotation-driven transaction-manager="transactionManager" />-->
+    <tx:annotation-driven transaction-manager="transactionManager" />
 
     <!--创建jdbc数据源 -->
-    <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
+    <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init"
+        destroy-method="close">
         <property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
-        <property name="url" value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
+        <property name="url"
+            value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
         <property name="username" value="jxgy" />
         <property name="password" value="Fbhu0359" />
         <!-- 配置初始化大小、最小、最大 -->
@@ -56,45 +54,67 @@
     <!-- 配置Session工厂 -->
     <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
         <!-- 注入DataSource -->
-        <property name="dataSource" ref="dataSource"/>
+        <property name="dataSource" ref="dataSource" />
         <!-- 需要加载的mapper.xml，该bean被
         创建后，会自动加载这些文件。 -->
         <property name="mapperLocations" value="classpath*:mappers/*.xml"></property>
-        <!--<property name="configLocation" value="classpath:mybatis/mybatis-config.xml"/>-->
+        <!--<property
+        name="configLocation" value="classpath:mybatis/mybatis-config.xml"/>-->
         <property name="configuration" ref="mapConfiguration" />
 
         <property name="plugins">
             <list>
-                <bean id="pageInterceptor" class="com.alibaba.server.nio.core.repository.PageInterceptor"></bean>
+                <bean id="pageInterceptor"
+                    class="com.alibaba.server.nio.core.repository.PageInterceptor"></bean>
             </list>
         </property>
     </bean>
 
-    <bean id="mapConfiguration" class = "com.alibaba.server.nio.core.repository.MapConfiguration">
-        <property name="mapUnderscoreToCamelCase" value="true"/>
-        <property name="objectFactory" ref="paginatedListObjFactory"/>
-        <property name="objectWrapperFactory" ref="paginatedListWrapperFactory"/>
-        <!--<property name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl"/>-->
+    <bean id="mapConfiguration" class="com.alibaba.server.nio.core.repository.MapConfiguration">
+        <property name="mapUnderscoreToCamelCase" value="true" />
+        <property name="objectFactory" ref="paginatedListObjFactory" />
+        <property name="objectWrapperFactory" ref="paginatedListWrapperFactory" />
+        <!--<property
+        name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl"/>-->
     </bean>
-    <bean id="paginatedListObjFactory" class="com.alibaba.server.nio.core.page.PaginatedListObjFactory"/>
-    <bean id="paginatedListWrapperFactory" class="com.alibaba.server.nio.core.page.PaginatedListWrapperFactory"/>
-    <!--<bean id="pageInterceptor" class="com.alibaba.server.nio.core.repository.PageInterceptor"/>-->
+    <bean id="paginatedListObjFactory"
+        class="com.alibaba.server.nio.core.page.PaginatedListObjFactory" />
+    <bean id="paginatedListWrapperFactory"
+        class="com.alibaba.server.nio.core.page.PaginatedListWrapperFactory" />
+    <!--<bean
+    id="pageInterceptor" class="com.alibaba.server.nio.core.repository.PageInterceptor"/>-->
 
     <!-- 配置MapperScannerConfigurer -->
     <bean id="mapperScannerConfigurer" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
         <!-- 注入需要扫描的包，它会自动扫描
         这个包下的接口，然后实现这些接口，
         并且会实例化这些接口的实现类。 -->
-        <property name="basePackage" value="com.alibaba.server"/>
-        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"/>
-        <property name="annotationClass" value="org.apache.ibatis.annotations.Mapper"/>
+        <property name="basePackage" value="com.alibaba.server" />
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory" />
+        <property name="annotationClass" value="org.apache.ibatis.annotations.Mapper" />
     </bean>
 
-    <!--<bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager" p:dataSource-ref="dataSource" />-->
+    <!-- 事务管理器 -->
+    <bean id="transactionManager"
+        class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource" />
+    </bean>
 
-    <bean id="userService" class="com.alibaba.server.nio.repository.user.service.impl.UserServiceImpl" scope="singleton"/>
+    <!-- 编程式事务模板，用于非 Spring 管理的线程 -->
+    <bean id="transactionTemplate"
+        class="org.springframework.transaction.support.TransactionTemplate">
+        <property name="transactionManager" ref="transactionManager" />
+    </bean>
 
-    <bean id="taskService" class="com.alibaba.server.nio.repository.task.service.impl.TaskServiceImpl" scope="singleton"/>
+    <bean id="userService"
+        class="com.alibaba.server.nio.repository.user.service.impl.UserServiceImpl"
+        scope="singleton" />
 
-    <bean id="fileService" class="com.alibaba.server.nio.repository.file.service.impl.FileServiceImpl" scope="singleton"/>
+    <bean id="taskService"
+        class="com.alibaba.server.nio.repository.task.service.impl.TaskServiceImpl"
+        scope="singleton" />
+
+    <bean id="fileService"
+        class="com.alibaba.server.nio.repository.file.service.impl.FileServiceImpl"
+        scope="singleton" />
 </beans>
