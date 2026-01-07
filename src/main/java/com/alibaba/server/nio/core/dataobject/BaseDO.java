@@ -41,7 +41,7 @@ public abstract class BaseDO extends DO implements Identity, CloneableSupport {
      * UPDATE：无需手动维护，框架自动维护
      * 表结构约定：无需设置默认值
      */
-    private Date gmtCreate;
+    private Date gmtCreated;
 
     /**
      * 修改时间
