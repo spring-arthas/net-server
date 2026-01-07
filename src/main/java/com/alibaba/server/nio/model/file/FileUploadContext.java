@@ -63,6 +63,11 @@ public class FileUploadContext {
     private String filePath;
 
     /**
+     * 客户端远程地址（用于关联上传上下文与客户端连接）
+     */
+    private String remoteAddress;
+
+    /**
      * 上传开始时间
      */
     private LocalDateTime startTime;
@@ -143,6 +148,7 @@ public class FileUploadContext {
 
     /**
      * 写入数据
+     * 注意：FileChannel.write() 可能不会一次写入所有数据，需要循环确保完整写入
      */
     public int writeData(byte[] data) throws IOException {
         if (fileChannel == null || !fileChannel.isOpen()) {
@@ -150,13 +156,30 @@ public class FileUploadContext {
         }
 
         java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(data);
-        int written = fileChannel.write(buffer);
-        bytesWritten += written;
+        int totalWritten = 0;
+
+        // 循环写入，确保所有数据都被写入文件
+        // FileChannel.write() 可能不会一次写入所有数据，特别是在高负载或大数据块时
+        while (buffer.hasRemaining()) {
+            int written = fileChannel.write(buffer);
+            if (written == 0) {
+                // 如果写入了0字节，短暂休眠后重试，避免忙等待
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("写入被中断");
+                }
+            }
+            totalWritten += written;
+        }
+
+        bytesWritten += totalWritten;
 
         log.debug("写入数据: taskId={}, written={}, total={}/{}",
-                taskId, written, bytesWritten, fileSize);
+                taskId, totalWritten, bytesWritten, fileSize);
 
-        return written;
+        return totalWritten;
     }
 
     /**
@@ -182,8 +205,8 @@ public class FileUploadContext {
      */
     public void markCompleted() {
         this.status = UploadStatus.COMPLETED;
-        closeFileChannel();
         log.info("文件上传完成: taskId={}, fileName={}, size={}", taskId, fileName, fileSize);
+        closeFileChannel();
     }
 
     /**

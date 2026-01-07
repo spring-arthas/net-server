@@ -154,6 +154,8 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
             uploadContext.setFileName(fileName);
             uploadContext.setFileSize(fileSize);
             uploadContext.setFileType(fileType);
+            // 关联远程客户端连接，用于后续精确匹配
+            uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
 
             // 3. 创建数据库记录（状态：上传中）
             try {
@@ -162,8 +164,9 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
                 fileQueryParam.setFileName(fileName);
                 fileQueryParam.setFileSize(fileSize);
                 fileQueryParam.setFileType(fileType);
+                fileQueryParam.setUserName("毒药");
                 fileQueryParam.setFilePath(uploadContext.buildFilePath());
-                // fileService.createFile(fileQueryParam); // 可选：根据实际情况启用
+                fileService.createFile(fileQueryParam); // 可选：根据实际情况启用
             } catch (Exception e) {
                 log.warn("创建数据库记录失败（非致命）: {}", e.getMessage());
             }
@@ -287,10 +290,12 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
      */
     private FileUploadContext getActiveUploadContext(SocketChannelContext socketChannelContext) {
         String remoteAddress = socketChannelContext.getRemoteAddress();
-        // 遍历查找属于该连接的上下文（简化处理：假设每个连接只有一个上传任务）
+        // 根据远程地址精确匹配上传上下文，确保数据写入正确的文件
         for (FileUploadContext ctx : uploadContextMap.values()) {
-            // 可以通过额外字段关联，这里简化返回第一个未完成的
-            if (ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING) {
+            // 同时检查状态和远程地址，避免多客户端并发上传时数据写入错误文件
+            if (ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING
+                    && remoteAddress != null
+                    && remoteAddress.equals(ctx.getRemoteAddress())) {
                 return ctx;
             }
         }

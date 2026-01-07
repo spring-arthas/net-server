@@ -277,10 +277,10 @@ public class WorkerThreadPool {
                 BasicServer.fileLock.unlock();
 
                 // 清理已处理的数据
-                if (this.socketChannelContext.getTransportProtocol() != null
+               /* if (this.socketChannelContext.getTransportProtocol() != null
                         && this.socketChannelContext.getTransportProtocol().getRealList() != null) {
                     this.socketChannelContext.getTransportProtocol().getRealList().clear();
-                }
+                }*/
             }
 
         }

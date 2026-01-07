@@ -150,13 +150,13 @@ public class AbstractAcceptor {
         // 文件头数据解析处理器Handler
         socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileHeadDecodeHandler());
         // 文件头实际数据处理器Handler
-        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRealDataHandler());
-        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileReceiveHandler());
-        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRemoteTransportHandler());
+        //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRealDataHandler());
+        //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileReceiveHandler());
+        //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRemoteTransportHandler());
         // 文件上传或在线传输实时流处理
-        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadTransportStreamHandler());
+        //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadTransportStreamHandler());
         // 文件下载实时流处理
-        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadTransportStreamHandler());
+        //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadTransportStreamHandler());
         return socketChannelContext;
     }
 }
