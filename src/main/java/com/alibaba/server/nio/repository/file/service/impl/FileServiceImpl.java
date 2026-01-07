@@ -206,7 +206,7 @@ public class FileServiceImpl implements FileService {
             fileCreateParam.setIsExist(YesOrNoEnum.Y.name());
             fileCreateParam.setHasChild(YesOrNoEnum.N.name());
             FileDo fileDo = this.createParamToDo(fileCreateParam);
-            this.fileRepository.insertSelective(fileDo);
+            this.fileRepository.insert(fileDo);
             log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileServiceImpl | --> 当前用户 [{}] 成功持久化上传文件 [{}], 文件存储路径 [{}], thread = {}",
                 fileDo.getUserName(), fileDo.getFileName(), fileDo.getFilePath(), Thread.currentThread().getName());
             return this.doToDto(fileDo);
