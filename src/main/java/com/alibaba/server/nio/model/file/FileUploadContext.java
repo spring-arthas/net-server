@@ -176,8 +176,10 @@ public class FileUploadContext {
 
         bytesWritten += totalWritten;
 
-        log.debug("写入数据: taskId={}, written={}, total={}/{}",
-                taskId, totalWritten, bytesWritten, fileSize);
+        /*log.debug("写入数据: taskId={}, written={}, total={}/{}",
+                taskId, totalWritten, bytesWritten, fileSize);*/
+        double progress = (bytesWritten * 100.0) / fileSize;
+        System.out.printf("    进度: %.2f%% (%d/%d 字节,)\r", progress, bytesWritten, fileSize);
 
         return totalWritten;
     }
