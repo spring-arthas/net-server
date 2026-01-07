@@ -12,6 +12,7 @@ import com.alibaba.server.nio.handler.event.concret.AcceptorEventHandler;
 import com.alibaba.server.nio.handler.event.concret.ConnectEventHandler;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteEventHandler;
+import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.nio.selector.MainChatSelector;
 import com.alibaba.server.nio.selector.MainFileSelector;
 import lombok.extern.slf4j.Slf4j;
@@ -89,13 +90,13 @@ public class CoreServer {
      * @throws IOException
      */
     private static void startupMainAcceptor() throws IOException {
-        create(BasicConstant.ACCEPTOR,
+        create(ChannelEventModelEnum.TEXT_TRANSMISSION.getName(),
                 BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR,
                 new MainChatAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR), Boolean.FALSE);
-        create(BasicConstant.ACCEPTOR,
+        create(ChannelEventModelEnum.FILE_UPLOAD.getName(),
                 BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR,
                 new MainFileUploadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR), Boolean.FALSE);
-        create(BasicConstant.ACCEPTOR,
+        create(ChannelEventModelEnum.FILE_DOWNLOAD.getName(),
                 BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR,
                 new MainFileDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR), Boolean.FALSE);
         // create(BasicConstant.ACCEPTOR,

@@ -73,6 +73,6 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
         // 1、设置通道链处理器 --> 文件消息解码器 --> 文件消息真实数据处理器
         SocketChannelContext socketChannelContext = this.createModel(socketChannel);
         NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE).attach(socketChannelContext);
-        log.info("文件上传客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功", socketChannelContext.getRemoteAddress());
+        log.info("文件上传客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功, 远程客户端地址 = {}", socketChannelContext.getRemoteAddress());
     }
 }
