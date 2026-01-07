@@ -169,6 +169,7 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
                 fileService.createFile(fileQueryParam); // 可选：根据实际情况启用
             } catch (Exception e) {
                 log.warn("创建数据库记录失败（非致命）: {}", e.getMessage());
+                throw e;
             }
 
             // 4. 打开文件通道

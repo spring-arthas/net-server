@@ -1,5 +1,6 @@
 package com.alibaba.server.common;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 
 import java.lang.management.ManagementFactory;
@@ -12,6 +13,7 @@ import java.util.Objects;
  * @date 2026/1/7
  * @description 雪花算法Id
  */
+@Slf4j
 public class SnowflakeIdWorkerUtil {
 
 
