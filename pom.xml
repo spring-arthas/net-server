@@ -155,6 +155,12 @@
       <version>5.3.1</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-tx</artifactId>
+      <version>5.3.1</version>
+    </dependency>
+
     <!-- util -->
     <dependency>
       <groupId>com.google.guava</groupId>
