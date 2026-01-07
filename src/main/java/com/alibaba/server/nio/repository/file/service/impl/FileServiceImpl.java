@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.repository.file.service.impl;
 
 import com.alibaba.server.common.BasicConstant;
+import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.YesOrNoEnum;
 import com.alibaba.server.nio.core.result.PageResult;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
@@ -262,6 +263,7 @@ public class FileServiceImpl implements FileService {
 
     private FileDo createParamToDo(FileCreateParam param) {
         FileDo fileDo = new FileDo();
+        fileDo.setId(SnowflakeIdWorkerUtil.generateId());
         fileDo.setPId(param.getPId());
         fileDo.setUserName(param.getUserName());
         fileDo.setFileName(param.getFileName());
