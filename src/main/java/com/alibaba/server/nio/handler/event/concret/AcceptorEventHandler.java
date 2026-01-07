@@ -45,6 +45,7 @@ public class AcceptorEventHandler extends AbstractEventHandler {
             return super.getNextEventHandler().eventHandler(eventModel);
         }
 
+        map = (Map<String, Object>) BasicServer.getMap().get(BasicConstant.ACCEPTOR);
         return this.handler(eventModel);
     }
 

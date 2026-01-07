@@ -25,7 +25,7 @@ public class FileUploadContext {
     /**
      * 文件存储根目录
      */
-    private static final String FILE_STORAGE_ROOT = "/data/file-storage/";
+    private static final String FILE_STORAGE_ROOT = "/Users/hljy/Downloads/西班牙的荷包蛋/";
 
     /**
      * 任务ID（唯一标识一次上传）

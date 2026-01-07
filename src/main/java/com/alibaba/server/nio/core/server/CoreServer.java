@@ -90,15 +90,18 @@ public class CoreServer {
      * @throws IOException
      */
     private static void startupMainAcceptor() throws IOException {
-        create(ChannelEventModelEnum.TEXT_TRANSMISSION.getName(),
-                BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR,
-                new MainChatAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR), Boolean.FALSE);
-        create(ChannelEventModelEnum.FILE_UPLOAD.getName(),
-                BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR,
-                new MainFileUploadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR), Boolean.FALSE);
-        create(ChannelEventModelEnum.FILE_DOWNLOAD.getName(),
-                BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR,
-                new MainFileDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR), Boolean.FALSE);
+        create(BasicConstant.ACCEPTOR,
+                ChannelEventModelEnum.TEXT_TRANSMISSION.getName(),
+                new MainChatAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR),
+                Boolean.FALSE);
+        create(BasicConstant.ACCEPTOR,
+                ChannelEventModelEnum.FILE_UPLOAD.getName(),
+                new MainFileUploadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR),
+                Boolean.FALSE);
+        create(BasicConstant.ACCEPTOR,
+                ChannelEventModelEnum.FILE_DOWNLOAD.getName(),
+                new MainFileDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR),
+                Boolean.FALSE);
         // create(BasicConstant.ACCEPTOR,
         // BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR, new
         // MainWebSocketAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR),
