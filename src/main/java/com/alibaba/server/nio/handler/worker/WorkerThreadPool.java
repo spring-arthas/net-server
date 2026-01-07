@@ -263,6 +263,13 @@ public class WorkerThreadPool {
                 }
             }
 
+            // 初始化事务同步机制（让 @Transactional 在非 Spring 线程中生效）
+            boolean synchronizationActive = org.springframework.transaction.support.TransactionSynchronizationManager
+                    .isSynchronizationActive();
+            if (!synchronizationActive) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+            }
+
             try {
                 // 更新 socketChannelContext 中的待处理数据
                 this.socketChannelContext.getTransportDataModel()
@@ -276,11 +283,19 @@ public class WorkerThreadPool {
                 // 释放锁
                 BasicServer.fileLock.unlock();
 
+                // 清理事务同步状态（如果是我们初始化的）
+                if (!synchronizationActive && org.springframework.transaction.support.TransactionSynchronizationManager
+                        .isSynchronizationActive()) {
+                    org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+                }
+
                 // 清理已处理的数据
-               /* if (this.socketChannelContext.getTransportProtocol() != null
-                        && this.socketChannelContext.getTransportProtocol().getRealList() != null) {
-                    this.socketChannelContext.getTransportProtocol().getRealList().clear();
-                }*/
+                /*
+                 * if (this.socketChannelContext.getTransportProtocol() != null
+                 * && this.socketChannelContext.getTransportProtocol().getRealList() != null) {
+                 * this.socketChannelContext.getTransportProtocol().getRealList().clear();
+                 * }
+                 */
             }
 
         }

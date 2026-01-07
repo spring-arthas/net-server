@@ -358,7 +358,7 @@ public class DynamicSQLProvider {
         try {
             EXCLUDE_UPDATE_METHOD = Arrays.asList(
                 BaseDO.class.getMethod("getId"),
-                BaseDO.class.getMethod("getGmtCreate"),
+                BaseDO.class.getMethod("getGmtCreated"),
                 BaseDO.class.getMethod("getGmtModified")
                 // TODO @ShardingKey
                 //TenantBaseDO.class.getMethod("getTenantId")
@@ -394,7 +394,7 @@ public class DynamicSQLProvider {
         try {
             EXCLUDE_INSERT_METHOD = Arrays.asList(
                 BaseDO.class.getMethod("getId"),
-                BaseDO.class.getMethod("getGmtCreate"),
+                BaseDO.class.getMethod("getGmtCreated"),
                 BaseDO.class.getMethod("getGmtModified"),
                 BaseDO.class.getMethod("getDelTime")
             );

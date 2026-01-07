@@ -6,8 +6,9 @@ import java.util.Date;
 
 /**
  * 更新文件
+ * 
  * @author spring
- * */
+ */
 
 @Data
 public class FileUpdateParam {
@@ -19,7 +20,7 @@ public class FileUpdateParam {
 
     /**
      * 父id
-     * */
+     */
     private Long pId;
 
     /**
@@ -49,7 +50,7 @@ public class FileUpdateParam {
 
     /**
      * 是否存在
-     * */
+     */
     private String isExist;
 
     /**
@@ -59,7 +60,7 @@ public class FileUpdateParam {
 
     /**
      * 所属用户
-     * */
+     */
     private String userName;
 
     private String del;

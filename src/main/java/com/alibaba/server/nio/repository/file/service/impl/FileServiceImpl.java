@@ -35,9 +35,6 @@ public class FileServiceImpl implements FileService {
     @Autowired
     private FileRepository fileRepository;
 
-    @Autowired
-    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
-
     /**
      * @param fileQueryParam   文件查询param
      * @param completeFilePath 文件绝对路径
@@ -198,38 +195,30 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public FileDto createFile(FileQueryParam fileQueryParam) {
-        // 使用编程式事务，确保在非 Spring 管理的线程中也能正确开启事务
-        return transactionTemplate.execute(status -> {
-            try {
-                List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
-                if (CollectionUtils.isEmpty(fileDos)) {
-                    FileCreateParam fileCreateParam = new FileCreateParam();
-                    fileCreateParam.setPId(fileQueryParam.getPId());
-                    fileCreateParam.setUserName(fileQueryParam.getUserName());
-                    fileCreateParam.setFileName(fileQueryParam.getFileName());
-                    fileCreateParam.setFileSize(fileQueryParam.getFileSize());
-                    fileCreateParam.setFilePath(fileQueryParam.getFilePath());
-                    fileCreateParam.setFileType(fileQueryParam.getFileType());
-                    fileCreateParam.setIsFile(YesOrNoEnum.Y.name());
-                    fileCreateParam.setIsExist(YesOrNoEnum.Y.name());
-                    fileCreateParam.setHasChild(YesOrNoEnum.N.name());
-                    FileDo fileDo = this.createParamToDo(fileCreateParam);
-                    this.fileRepository.insert(fileDo);
-                    log.info(
-                            "[ " + LocalTime.formatDate(LocalDateTime.now())
-                                    + " ] FileServiceImpl | --> 当前用户 [{}] 成功持久化上传文件 [{}], 文件存储路径 [{}], thread = {}",
-                            fileDo.getUserName(), fileDo.getFileName(), fileDo.getFilePath(),
-                            Thread.currentThread().getName());
-                    return this.doToDto(fileDo);
-                }
-                return new FileDto();
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                log.error("创建文件记录失败", e);
-                return new FileDto();
-            }
-        });
+        List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
+        if (CollectionUtils.isEmpty(fileDos)) {
+            FileCreateParam fileCreateParam = new FileCreateParam();
+            fileCreateParam.setPId(fileQueryParam.getPId());
+            fileCreateParam.setUserName(fileQueryParam.getUserName());
+            fileCreateParam.setFileName(fileQueryParam.getFileName());
+            fileCreateParam.setFileSize(fileQueryParam.getFileSize());
+            fileCreateParam.setFilePath(fileQueryParam.getFilePath());
+            fileCreateParam.setFileType(fileQueryParam.getFileType());
+            fileCreateParam.setIsFile(YesOrNoEnum.Y.name());
+            fileCreateParam.setIsExist(YesOrNoEnum.Y.name());
+            fileCreateParam.setHasChild(YesOrNoEnum.N.name());
+            FileDo fileDo = this.createParamToDo(fileCreateParam);
+            this.fileRepository.insert(fileDo);
+            log.info(
+                    "[ " + LocalTime.formatDate(LocalDateTime.now())
+                            + " ] FileServiceImpl | --> 当前用户 [{}] 成功持久化上传文件 [{}], 文件存储路径 [{}], thread = {}",
+                    fileDo.getUserName(), fileDo.getFileName(), fileDo.getFilePath(),
+                    Thread.currentThread().getName());
+            return this.doToDto(fileDo);
+        }
+        return new FileDto();
     }
 
     @Override
