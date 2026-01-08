@@ -39,6 +39,17 @@ public class SocketChannelContext {
     private String channelFlag;
 
     /**
+     * Handler 类型标识（用于区分上传/下载）
+     * 值为 "UPLOAD" 或 "DOWNLOAD"
+     */
+    private String handlerType;
+
+    /**
+     * 通道协议
+     */
+    private TransportProtocol transportProtocol;
+
+    /**
      * 待写入的缓冲区（仅在一次 write 无法完成时使用）
      * 采用「先尝试直接写，写不完才保存」的策略，减少内存占用
      */

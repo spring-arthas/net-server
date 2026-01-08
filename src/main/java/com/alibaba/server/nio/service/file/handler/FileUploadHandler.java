@@ -65,6 +65,13 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return;
         }
 
+        // 检查 handlerType，非 UPLOAD 则跳过本 Handler
+        if (!"UPLOAD".equals(socketChannelContext.getHandlerType())) {
+            simpleChannelContext.setNeedSkip(true);
+            simpleChannelContext.setSkip(1);
+            return;
+        }
+
         List<ChannelEventModel.GroupData> waitHandleDataList = transportDataModel.getWaitHandleDataList();
         if (CollectionUtils.isEmpty(waitHandleDataList)) {
             return;
