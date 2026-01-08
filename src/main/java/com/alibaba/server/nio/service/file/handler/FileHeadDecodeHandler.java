@@ -166,7 +166,12 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
                 fileQueryParam.setFileType(fileType);
                 fileQueryParam.setUserName("毒药");
                 fileQueryParam.setFilePath(uploadContext.buildFilePath());
-                fileService.createFile(fileQueryParam); // 可选：根据实际情况启用
+                com.alibaba.server.nio.repository.file.service.dto.FileDto fileDto = fileService
+                        .createFile(fileQueryParam);
+                // 保存数据库记录 ID，用于断连时删除
+                if (fileDto != null && fileDto.getId() != null) {
+                    uploadContext.setFileId(fileDto.getId());
+                }
             } catch (Exception e) {
                 log.warn("创建数据库记录失败（非致命）: {}", e.getMessage());
                 throw e;
@@ -252,13 +257,16 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
             uploadContext.markCompleted();
 
             // 2. 更新数据库状态, 先不更新文件数据库状态
-            /*try {
-                FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
-                fileService.update(uploadContext.getTaskId(), "COMPLETED"); // 可选
-            } catch (Exception e) {
-                log.warn("更新数据库状态失败（非致命）: {}", e.getMessage());
-                throw e;
-            }*/
+            /*
+             * try {
+             * FileService fileService =
+             * BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
+             * fileService.update(uploadContext.getTaskId(), "COMPLETED"); // 可选
+             * } catch (Exception e) {
+             * log.warn("更新数据库状态失败（非致命）: {}", e.getMessage());
+             * throw e;
+             * }
+             */
 
             // 3. 发送完成 ACK
             sendAckFrame(socketChannelContext, uploadContext.getTaskId(), "success", null);
@@ -345,16 +353,40 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
     }
 
     /**
-     * 清理指定连接的资源
+     * 清理指定连接的资源（断连时调用）
+     * 删除未完成上传的临时文件和数据库记录
+     * 
+     * @param remoteAddress 客户端远程地址
      */
     public static void cleanupConnection(String remoteAddress) {
+        // 清理解析器
         parserMap.remove(remoteAddress);
+
         // 清理该连接相关的上传上下文
         uploadContextMap.entrySet().removeIf(entry -> {
             FileUploadContext ctx = entry.getValue();
-            if (ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
-                ctx.markFailed("连接关闭");
-                return true;
+            // 只清理属于该客户端且未完成的上传
+            if (remoteAddress.equals(ctx.getRemoteAddress())
+                    && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
+
+                log.warn("清理未完成的文件上传: taskId={}, fileName={}, remoteAddress={}, bytesWritten={}/{}",
+                        ctx.getTaskId(), ctx.getFileName(), remoteAddress, ctx.getBytesWritten(), ctx.getFileSize());
+
+                // 1. 标记失败（会删除临时文件）
+                ctx.markFailed("客户端断开连接");
+
+                // 2. 删除数据库记录
+                if (ctx.getFileId() != null) {
+                    try {
+                        FileService fileService = NioServerContext.getFileService();
+                        if (fileService != null) {
+                            fileService.deleteFileById(ctx.getFileId());
+                        }
+                    } catch (Exception e) {
+                        log.error("删除数据库记录失败: fileId={}", ctx.getFileId(), e);
+                    }
+                }
+                return true; // 从 Map 中移除
             }
             return false;
         });

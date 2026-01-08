@@ -40,8 +40,9 @@ public class NioServerContext {
 
     /**
      * 启动基础服务以及核心服务
+     * 
      * @return
-     * */
+     */
     public static void startupServerContext() {
         try {
             BasicServer.startupBasicServer();
@@ -49,31 +50,34 @@ public class NioServerContext {
             CoreServer.startupCoreServer();
 
             // 3、追加额外处理
-            //CoreServer.appendHandler();
+            // CoreServer.appendHandler();
         } catch (Exception e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] NioServerContext | --> 服务启动失败, error = {}", e.getLocalizedMessage());
+            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] NioServerContext | --> 服务启动失败, error = {}",
+                    e.getLocalizedMessage());
             e.printStackTrace();
         }
     }
 
     /**
      * 创建Selector
+     * 
      * @return selector
-     * */
+     */
     public static Selector openSelector() throws IOException {
         return Selector.open();
     }
 
     /**
      * 根据不同服务名称获取其对应的Selector
+     * 
      * @param selectorName
      * @return selector
-     * */
+     */
     public static Selector getSelector(String selectorName) {
         Map<String, Object> cacheMap = BasicServer.getMap();
-        if(!cacheMap.isEmpty() && cacheMap.containsKey(BasicConstant.SELECTOR)) {
+        if (!cacheMap.isEmpty() && cacheMap.containsKey(BasicConstant.SELECTOR)) {
             Map<String, Object> assignMap = (Map) cacheMap.get(BasicConstant.SELECTOR);
-            if(!assignMap.isEmpty() && assignMap.containsKey(selectorName)) {
+            if (!assignMap.isEmpty() && assignMap.containsKey(selectorName)) {
                 return (Selector) ((Map) assignMap.get(selectorName)).get(selectorName);
             }
         }
@@ -83,12 +87,13 @@ public class NioServerContext {
 
     /**
      * 根据key获取配置文件数据
+     * 
      * @param param
      * @return object
-     * */
+     */
     public static String getValue(String param) {
         Map<String, Object> cacheMap = BasicServer.getMap();
-        if(!cacheMap.isEmpty() && cacheMap.containsKey(param)) {
+        if (!cacheMap.isEmpty() && cacheMap.containsKey(param)) {
             return cacheMap.get(param).toString();
         }
 
@@ -103,14 +108,16 @@ public class NioServerContext {
      * @throws IOException
      */
     public static String getPort(SelectionKey selectionKey) throws IOException {
-        return String.valueOf(((InetSocketAddress) ((ServerSocketChannel) selectionKey.channel()).getLocalAddress()).getPort());
+        return String.valueOf(
+                ((InetSocketAddress) ((ServerSocketChannel) selectionKey.channel()).getLocalAddress()).getPort());
     }
 
     /**
      * 根据SocketChannel获取远程连接信息(ip:port)
+     * 
      * @param socketChannel
      * @return
-     * */
+     */
     public static String getRemoteAddress(SocketChannel socketChannel) {
         String ip = "";
         Integer port = 0;
@@ -127,9 +134,10 @@ public class NioServerContext {
 
     /**
      * 根据SocketChannel获取本地连接信息(ip:port)
+     * 
      * @param socketChannel
      * @return
-     * */
+     */
     public static String getLocalAddress(SocketChannel socketChannel) {
         String ip = "";
         Integer port = 0;
@@ -144,6 +152,7 @@ public class NioServerContext {
 
     /**
      * 获取服务端本地地址
+     * 
      * @param socketChannel
      * @return
      */
@@ -161,15 +170,20 @@ public class NioServerContext {
 
     /**
      * Selector 可选事件注册
+     * 
      * @param socketChannel
      * @param selector
      * @param opt
      * @return
      * @throws IOException
-     * */
-    public static SelectionKey EventRegister(SocketChannel socketChannel, Selector selector, final int opt) throws IOException {
-        if(!selector.isOpen()) {
-            log.error("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> Selector is not open yet, threadName = {}", Thread.currentThread().getName());
+     */
+    public static SelectionKey EventRegister(SocketChannel socketChannel, Selector selector, final int opt)
+            throws IOException {
+        if (!selector.isOpen()) {
+            log.error(
+                    "[ " + LocalTime.formatDate(LocalDateTime.now())
+                            + " ] NioServerContext | --> Selector is not open yet, threadName = {}",
+                    Thread.currentThread().getName());
             return null;
         }
 
@@ -180,36 +194,47 @@ public class NioServerContext {
 
     /**
      * 关闭socketChannel
+     * 
      * @param socketChannel
      * @param subReactor
      * @return Boolean 关闭结果
-     * */
+     */
     public static Boolean closedAndRelease(SocketChannel socketChannel) {
         String remoteAddress = "";
         try {
-            if(Optional.ofNullable(socketChannel).isPresent()) {
+            if (Optional.ofNullable(socketChannel).isPresent()) {
                 remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
                 String localAddress = NioServerContext.getLocalAddress(socketChannel);
 
+                // 0、清理该客户端未完成的文件上传
+                try {
+                    com.alibaba.server.nio.service.file.handler.FileHeadDecodeHandler.cleanupConnection(remoteAddress);
+                } catch (Exception e) {
+                    log.error("清理未完成上传失败: remoteAddress={}", remoteAddress, e);
+                }
+
                 // 1、关闭socketChannel，将会发送流截至符 -1到客户端
                 Socket socket = socketChannel.socket();
-                if(!socket.isClosed()) {
+                if (!socket.isClosed()) {
                     socketChannel.shutdownInput();
                     socketChannel.shutdownOutput();
                     socketChannel.close();
                 }
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> socketChannel closed local connected success, remoteAddress = {}, localAddress = {}, thread = {}",
-                    remoteAddress, localAddress, Thread.currentThread().getName());
+                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] NioServerContext | --> socketChannel closed local connected success, remoteAddress = {}, localAddress = {}, thread = {}",
+                        remoteAddress, localAddress, Thread.currentThread().getName());
             }
         } catch (Exception e) {
-            if(e instanceof ClosedChannelException) {
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> socketChannel shutdown input or output warning, channel is closed, address = {}, message = {}",
-                    NioServerContext.getLocalAddress(socketChannel), e.getMessage());
+            if (e instanceof ClosedChannelException) {
+                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] NioServerContext | --> socketChannel shutdown input or output warning, channel is closed, address = {}, message = {}",
+                        NioServerContext.getLocalAddress(socketChannel), e.getMessage());
             }
 
-            if(e instanceof NotYetConnectedException) {
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> socketChannel is not connect yet, address = {}, message = {}",
-                    NioServerContext.getLocalAddress(socketChannel), e.getMessage());
+            if (e instanceof NotYetConnectedException) {
+                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] NioServerContext | --> socketChannel is not connect yet, address = {}, message = {}",
+                        NioServerContext.getLocalAddress(socketChannel), e.getMessage());
             }
 
             e.printStackTrace();
@@ -220,6 +245,7 @@ public class NioServerContext {
 
     /**
      * 下线操作
+     * 
      * @param remoteAddress
      * @param isCloseSubReactor 是否关闭subReactor线程
      * @return
@@ -229,32 +255,35 @@ public class NioServerContext {
         ReadEventHandler.channelDataMap.remove(remoteAddress);
 
         // 2、内存移除用户,获取到用户id；
-        UserDTO userDto = (UserDTO)((Map) BasicServer.getMap().get(BasicConstant.USER)).remove(remoteAddress);
+        UserDTO userDto = (UserDTO) ((Map) BasicServer.getMap().get(BasicConstant.USER)).remove(remoteAddress);
 
         // 3、更新数据库用户状态为登出
-        if(Optional.ofNullable(userDto).isPresent()) {
+        if (Optional.ofNullable(userDto).isPresent()) {
             UserUpdateParam userUpdateParam = new UserUpdateParam();
             userUpdateParam.setId(userDto.getId());
             userUpdateParam.setStatus("2");
-            ((UserService) BasicServer.classPathXmlApplicationContext.getBean(UserService.class)).update(userUpdateParam);
+            ((UserService) BasicServer.classPathXmlApplicationContext.getBean(UserService.class))
+                    .update(userUpdateParam);
 
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> memory user cache remove success and update db user login status success, remoteAddress = {}, thread = {}",
-                remoteAddress, Thread.currentThread().getName());
+            log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                    + " ] NioServerContext | --> memory user cache remove success and update db user login status success, remoteAddress = {}, thread = {}",
+                    remoteAddress, Thread.currentThread().getName());
         }
 
-        if(!isCloseSubReactor) {
+        if (!isCloseSubReactor) {
             return Boolean.TRUE;
         }
         // 4、移除用户对应的subReactor线程，并中断线程
         Map<String, Object> subReactorMap = ((Map) BasicServer.getMap().get(BasicConstant.GLOBAL_MAIN_REACTOR));
-        if(!CollectionUtils.isEmpty(subReactorMap)) {
+        if (!CollectionUtils.isEmpty(subReactorMap)) {
             Map<String, Object> map = ((Map) subReactorMap.remove(remoteAddress));
-            if(!CollectionUtils.isEmpty(map)) {
+            if (!CollectionUtils.isEmpty(map)) {
                 Thread thread = (Thread) map.get(BasicConstant.THREAD);
                 // 中断线程
                 thread.interrupt();
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] NioServerContext | --> subReactor user cache remove success, surplus online connections = {}, remoteAddress = {}, thread = {}",
-                    subReactorMap.size(), remoteAddress, Thread.currentThread().getName());
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] NioServerContext | --> subReactor user cache remove success, surplus online connections = {}, remoteAddress = {}, thread = {}",
+                        subReactorMap.size(), remoteAddress, Thread.currentThread().getName());
             }
         }
 
@@ -263,12 +292,13 @@ public class NioServerContext {
 
     /**
      * 获取IOC容器对象
+     * 
      * @param cls
      * @return
-     * */
+     */
     public static Object getObjectByType(Class cls) {
         ClassPathXmlApplicationContext context = BasicServer.classPathXmlApplicationContext;
-        if(Optional.ofNullable(context).isPresent()) {
+        if (Optional.ofNullable(context).isPresent()) {
             return context.getBean(cls);
         }
 
@@ -276,12 +306,23 @@ public class NioServerContext {
     }
 
     /**
+     * 获取 FileService 实例
+     * 
+     * @return FileService
+     */
+    public static com.alibaba.server.nio.repository.file.service.FileService getFileService() {
+        return (com.alibaba.server.nio.repository.file.service.FileService) getObjectByType(
+                com.alibaba.server.nio.repository.file.service.FileService.class);
+    }
+
+    /**
      * SocketChannel IOException异常重连
+     * 
      * @param socketChannel
      * @return Boolean
-     * */
+     */
     public static Boolean reConnected(SocketChannel socketChannel) {
-        if(socketChannel.isConnected()) {
+        if (socketChannel.isConnected()) {
             // 如果由于网络抖动，可能直接又连接上，则直接返回true
             return Boolean.TRUE;
         }
@@ -291,11 +332,14 @@ public class NioServerContext {
         Integer reconnectedCount = Integer.valueOf(NioServerContext.getValue(BasicConstant.SOCKET_RECONNECTED_COUNT));
         // 尝试重连
         while (index <= reconnectedCount) {
-            log.info("[" + Thread.currentThread().getName() + " ] NioServerContext | --> {} reconnected..., address = {}, thread = {}", index, NioServerContext.getLocalAddress(socketChannel), Thread.currentThread().getName());
+            log.info(
+                    "[" + Thread.currentThread().getName()
+                            + " ] NioServerContext | --> {} reconnected..., address = {}, thread = {}",
+                    index, NioServerContext.getLocalAddress(socketChannel), Thread.currentThread().getName());
 
             try {
                 socketChannel.connect((InetSocketAddress) socketChannel.getRemoteAddress());
-                if(!socketChannel.isConnected()){
+                if (!socketChannel.isConnected()) {
                     // 此处连接不上，直接等待socket超时
                     while (socketChannel.finishConnect()) {
                         reconnected = Boolean.TRUE;
@@ -305,21 +349,24 @@ public class NioServerContext {
                     reconnected = Boolean.TRUE;
                 }
             } catch (IOException e) {
-                if(e instanceof SocketTimeoutException) {
+                if (e instanceof SocketTimeoutException) {
                     // socket连接超时异常,尝试下次连接
                     index = index + 1;
                     continue;
                 }
             }
 
-            if(Boolean.TRUE.equals(reconnected)) {
-                log.info("[" + Thread.currentThread().getName() + " ] NioServerContext | --> {} reconnected success, address = {}, thread = {}", index, NioServerContext.getLocalAddress(socketChannel), Thread.currentThread().getName());
+            if (Boolean.TRUE.equals(reconnected)) {
+                log.info(
+                        "[" + Thread.currentThread().getName()
+                                + " ] NioServerContext | --> {} reconnected success, address = {}, thread = {}",
+                        index, NioServerContext.getLocalAddress(socketChannel), Thread.currentThread().getName());
                 break;
             }
         }
 
         // 判断如果达到最大重连次数后还是无法连接上，则关闭当前SocketChannel文件描述符，释放资源
-        if(index > reconnectedCount && Optional.ofNullable(socketChannel).isPresent()) {
+        if (index > reconnectedCount && Optional.ofNullable(socketChannel).isPresent()) {
             try {
                 socketChannel.shutdownInput();
                 socketChannel.shutdownOutput();
@@ -334,45 +381,46 @@ public class NioServerContext {
 
     /**
      * 启动IOC容器
-     * */
+     */
     public static void startupIocContainer() throws IOException {
-        BasicServer.classPathXmlApplicationContext = new ClassPathXmlApplicationContext("spring/applicationContext.xml");
+        BasicServer.classPathXmlApplicationContext = new ClassPathXmlApplicationContext(
+                "spring/applicationContext.xml");
         log.info("net server IOC container初始化成功, threadName = {}", Thread.currentThread().getName());
     }
 
     /**
      * 获取BasicServer Map中的元素
      *
-     * @param key  集合大key
-     * @param goOn 是否对大类key返回的value节序遍历,基本为Map类型才会进行继续遍历
+     * @param key      集合大key
+     * @param goOn     是否对大类key返回的value节序遍历,基本为Map类型才会进行继续遍历
      * @param childKey 当goOn为true时指定二次遍历时的key
      * @return optional
-     * */
+     */
     public static Optional<Object> getAssignValue(String key, Boolean goOn, String childKey) {
         Map map = BasicServer.getMap();
-        if(CollectionUtils.isEmpty(map) || !map.containsKey(key)) {
+        if (CollectionUtils.isEmpty(map) || !map.containsKey(key)) {
             return null;
         }
 
         Object obj = map.get(key);
-        if(!Optional.ofNullable(obj).isPresent()) {
+        if (!Optional.ofNullable(obj).isPresent()) {
             return null;
         }
 
-        if(obj instanceof java.util.Map) {
-            if(!goOn) {
+        if (obj instanceof java.util.Map) {
+            if (!goOn) {
                 return Optional.of(obj);
             }
 
             Map<String, Object> innerMap = (Map<String, Object>) obj;
-            if(CollectionUtils.isEmpty(innerMap) || !innerMap.containsKey(childKey)) {
+            if (CollectionUtils.isEmpty(innerMap) || !innerMap.containsKey(childKey)) {
                 return null;
             }
 
             return Optional.of(innerMap.get(childKey));
         }
 
-        if(obj instanceof java.util.List || obj instanceof java.util.List || obj instanceof java.lang.String) {
+        if (obj instanceof java.util.List || obj instanceof java.util.List || obj instanceof java.lang.String) {
             return Optional.of(obj);
         }
 

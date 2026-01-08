@@ -335,4 +335,16 @@ public class FileServiceImpl implements FileService {
         fileDto.setGmtModified(fileDo.getGmtModified());
         return fileDto;
     }
+
+    @Override
+    public void deleteFileById(Long fileId) {
+        if (fileId != null) {
+            try {
+                this.fileRepository.delete(fileId);
+                log.info("删除未完成上传的文件记录: fileId={}", fileId);
+            } catch (Exception e) {
+                log.error("删除文件记录失败: fileId={}", fileId, e);
+            }
+        }
+    }
 }

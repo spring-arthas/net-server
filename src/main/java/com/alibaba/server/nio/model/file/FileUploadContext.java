@@ -68,6 +68,11 @@ public class FileUploadContext {
     private String remoteAddress;
 
     /**
+     * 数据库记录 ID（用于断连时删除记录）
+     */
+    private Long fileId;
+
+    /**
      * 上传开始时间
      */
     private LocalDateTime startTime;
@@ -176,10 +181,8 @@ public class FileUploadContext {
 
         bytesWritten += totalWritten;
 
-        /*log.debug("写入数据: taskId={}, written={}, total={}/{}",
-                taskId, totalWritten, bytesWritten, fileSize);*/
-        double progress = (bytesWritten * 100.0) / fileSize;
-        System.out.printf("    进度: %.2f%% (%d/%d 字节,)\r", progress, bytesWritten, fileSize);
+        log.debug("写入数据: taskId={}, written={}, total={}/{}",
+                taskId, totalWritten, bytesWritten, fileSize);
 
         return totalWritten;
     }
@@ -206,7 +209,8 @@ public class FileUploadContext {
     public void markCompleted() {
         this.status = UploadStatus.COMPLETED;
         closeFileChannel();
-        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", taskId, fileName, fileSize, bytesWritten, fileSize);
+        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", taskId, fileName, fileSize,
+                bytesWritten, fileSize);
     }
 
     /**
