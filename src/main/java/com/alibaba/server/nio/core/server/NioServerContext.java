@@ -1,15 +1,13 @@
 package com.alibaba.server.nio.core.server;
 
 import com.alibaba.server.common.BasicConstant;
-import com.alibaba.server.nio.core.repository.IdGeneratorInterceptor;
-import com.alibaba.server.nio.core.repository.PageInterceptor;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
+import com.alibaba.server.nio.service.file.handler.FileUploadHandler;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
-import org.mybatis.spring.SqlSessionFactoryBean;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.util.CollectionUtils;
 
@@ -19,10 +17,8 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.channels.*;
 import java.time.LocalDateTime;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * @Auther: YSFY
@@ -208,7 +204,7 @@ public class NioServerContext {
 
                 // 0、清理该客户端未完成的文件上传
                 try {
-                    com.alibaba.server.nio.service.file.handler.FileHeadDecodeHandler.cleanupConnection(remoteAddress);
+                    FileUploadHandler.cleanupConnection(remoteAddress);
                 } catch (Exception e) {
                     log.error("清理未完成上传失败: remoteAddress={}", remoteAddress, e);
                 }

@@ -26,10 +26,6 @@ public class SocketChannelContext {
      */
     private ChannelPipeLine channelPipeLine;
     /**
-     * 本通道数据发送队列（在通道产生了写事件时该队列存放待写数据）
-     */
-    private BlockingQueue<Object> blockingQueue;
-    /**
      * 本通道缓冲区，用于从通道中的SocketChannel中读取字节数据
      */
     private ByteBuffer byteBuffer;
@@ -37,11 +33,6 @@ public class SocketChannelContext {
      * 本通道即将要处理的数据
      */
     private TransportDataModel transportDataModel;
-
-    /**
-     * 通道协议
-     */
-    private TransportProtocol transportProtocol;
     /**
      * 通道附件标识(标识当前通道附件SocketChannelContext属于文件通道还是聊天服务通道)
      */

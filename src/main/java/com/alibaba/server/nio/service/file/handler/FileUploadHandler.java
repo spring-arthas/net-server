@@ -6,7 +6,6 @@ import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
-import com.alibaba.server.nio.handler.pipe.standard.AbstractChannelContext;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.nio.model.SocketChannelContext;
@@ -31,7 +30,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 文件头原始数据解码处理器 -> 解码传送文件信息
+ * 文件上传处理器
  * 使用 FileUploadFrameParser 进行渐进式协议解析，处理 TCP 粘包/半包问题
  * 
  * 业务流程：
@@ -43,7 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @SuppressWarnings("all")
-public class FileHeadDecodeHandler extends AbstractChannelHandler {
+public class FileUploadHandler extends AbstractChannelHandler {
 
     /**
      * 上传上下文缓存：taskId -> FileUploadContext

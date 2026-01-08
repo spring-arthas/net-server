@@ -6,9 +6,11 @@
   <component name="ChangeListManager">
     <list default="true" id="1617b815-b451-4fb9-a7bb-1acb12c00284" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/WriteEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/WriteEventHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/NioServerContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/NioServerContext.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/SocketChannelContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/SocketChannelContext.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileHeadDecodeHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileHeadDecodeHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileHeadDecodeHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileUploadHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileRealDataHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileDownloadHandler.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -172,7 +174,7 @@
       <workItem from="1766544498351" duration="14728000" />
       <workItem from="1766742915669" duration="2489000" />
       <workItem from="1767689241920" duration="8525000" />
-      <workItem from="1767750836442" duration="26118000" />
+      <workItem from="1767750836442" duration="26630000" />
     </task>
     <task id="LOCAL-00001" summary="提交代码">
       <option name="closed" value="true" />
@@ -366,7 +368,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767834897842</updated>
     </task>
-    <option name="localTasksCounter" value="25" />
+    <task id="LOCAL-00025" summary="处理写事件的处理">
+      <option name="closed" value="true" />
+      <created>1767838398256</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1767838398256</updated>
+    </task>
+    <option name="localTasksCounter" value="26" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -378,7 +388,8 @@
     <MESSAGE value="提交事务配置代码" />
     <MESSAGE value="修改文件上传代码" />
     <MESSAGE value="优化当链接不可用或是关闭时，删除临时文件，关闭文件通道，同时删除DB文件记录" />
-    <option name="LAST_COMMIT_MESSAGE" value="优化当链接不可用或是关闭时，删除临时文件，关闭文件通道，同时删除DB文件记录" />
+    <MESSAGE value="处理写事件的处理" />
+    <option name="LAST_COMMIT_MESSAGE" value="处理写事件的处理" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -389,7 +400,7 @@
           <option name="timeStamp" value="1" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="java-line">
-          <url>file://$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileRealDataHandler.java</url>
+          <url>file://$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileDownloadHandler.java</url>
           <line>27</line>
           <option name="timeStamp" value="51" />
         </line-breakpoint>

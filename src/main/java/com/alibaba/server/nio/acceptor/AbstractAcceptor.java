@@ -138,19 +138,14 @@ public class AbstractAcceptor {
         socketChannelContext.setLocalAddress(NioServerContext.getLocalAddress(socketChannel));
         socketChannelContext.setRemoteAddress(NioServerContext.getRemoteAddress(socketChannel));
         socketChannelContext.setChannelPipeLine(new DefaultChannelPipeLine());
-        socketChannelContext.setBlockingQueue(new LinkedBlockingQueue<>(1000));
-        TransportProtocol transportProtocol = new TransportProtocol();
-        transportProtocol.setSocketChannel(socketChannel);
-        transportProtocol.setRealList(new CopyOnWriteArrayList<>());
-        socketChannelContext.setTransportProtocol(transportProtocol);
         socketChannelContext.setByteBuffer(ByteBuffer.allocateDirect(Integer.parseInt(NioServerContext.getValue(BasicConstant.BYTEBUFFER))));
 
-        // 3、注册通道连接处理器
+        // 3、注册通道数据处理器
         socketChannelContext.setChannelFlag(BasicConstant.FILE_CHANNEL_CONTEXT);
-        // 文件头数据解析处理器Handler
-        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileHeadDecodeHandler());
-        // 文件头实际数据处理器Handler
-        //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRealDataHandler());
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler());
+        socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler());
+
+
         //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileReceiveHandler());
         //socketChannelContext.getChannelPipeLine().addHandler(new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRemoteTransportHandler());
         // 文件上传或在线传输实时流处理
