@@ -244,9 +244,9 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         try (FileInputStream fis = new FileInputStream(file);
                 FileChannel fileChannel = fis.getChannel()) {
 
-            // 分块读取并发送
-            int bufferSize = 32500; // 8KB
-            ByteBuffer readBuffer = ByteBuffer.allocate(bufferSize);
+            // 分块读取并发送 - 使用直接缓冲区减少内存拷贝
+            int bufferSize = 131072; // 128KB
+            ByteBuffer readBuffer = ByteBuffer.allocateDirect(bufferSize);
 
             while (fileChannel.read(readBuffer) != -1) {
                 readBuffer.flip();
@@ -288,10 +288,10 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     }
 
     /**
-     * 发送数据帧
+     * 发送数据帧 - 使用直接缓冲区优化性能
      */
     private void sendDataFrame(SocketChannelContext socketChannelContext, byte[] data) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(FileUploadFrame.HEADER_LENGTH + data.length);
+        ByteBuffer buffer = ByteBuffer.allocateDirect(FileUploadFrame.HEADER_LENGTH + data.length);
         buffer.put(FileUploadFrame.MAGIC);
         buffer.put((byte) FrameType.DATA_FRAME.getCode());
         buffer.put((byte) 0);
