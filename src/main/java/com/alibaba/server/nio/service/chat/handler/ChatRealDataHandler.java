@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
  * 聊天读事件真实数据处理器
  *
  * @author spring
- * */
+ */
 
 @Slf4j
 @SuppressWarnings("all")
@@ -52,71 +52,80 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
     public void handler(Object o, ChannelContext channelContext) {
         Map<String, Object> map = (Map<String, Object>) o;
         SocketChannelContext socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
-        SocketChannel socketChannel = socketChannelContext.getTransportProtocol().getSocketChannel();
+        SocketChannel socketChannel = socketChannelContext.getSocketChannel();
         List<Object> realList = socketChannelContext.getTransportProtocol().getRealList();
-        if(CollectionUtils.isEmpty(realList)) {
+        if (CollectionUtils.isEmpty(realList)) {
             return;
         }
 
-        for(Object obj : realList) {
+        for (Object obj : realList) {
             ChatMessageFrame chatMessageFrame = (ChatMessageFrame) obj;
 
             // 注册帧
-            if(ChatMessageFrame.FrameType.REGISTER.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.REGISTER.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.registerHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 登陆帧
-            if(ChatMessageFrame.FrameType.LONGIN.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.LONGIN.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.loginHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 登出帧
-            if(ChatMessageFrame.FrameType.LOGOUT.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.LOGOUT.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.logoutHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 文本帧
-            if(ChatMessageFrame.FrameType.TEXT.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.TEXT.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.textHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 刷新用户列表帧
-            if(ChatMessageFrame.FrameType.REFRESH.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.REFRESH.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.refreshHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 搜索用户帧
-            if(ChatMessageFrame.FrameType.QUERY_USER.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.QUERY_USER.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.queryUserHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 心跳帧
-            if(ChatMessageFrame.FrameType.HEART.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.HEART.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.heartHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 个人网盘文件夹刷新帧(刷新子文件夹以及文件列表)
-            if(ChatMessageFrame.FrameType.PERSONAL_STORE_FILE_REFRESH.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.PERSONAL_STORE_FILE_REFRESH.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.personalStoreRefreshHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 个人网盘文件夹创建帧
-            if(ChatMessageFrame.FrameType.PERSONAL_STORE_FILE_CREATE.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.PERSONAL_STORE_FILE_CREATE.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.personalStoreCreateHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
 
             // 个人网盘文件夹修改帧
-            if(ChatMessageFrame.FrameType.PERSONAL_STORE_FILE_UPDATE.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.PERSONAL_STORE_FILE_UPDATE.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.personalStoreUpdateHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
@@ -126,7 +135,8 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
             // 个人网盘文件下载帧
 
             // 个人网盘文件删除帧
-            if(ChatMessageFrame.FrameType.PERSONAL_FILE_DELETE.getFrameType().equals(chatMessageFrame.getFrameType().getFrameType())) {
+            if (ChatMessageFrame.FrameType.PERSONAL_FILE_DELETE.getFrameType()
+                    .equals(chatMessageFrame.getFrameType().getFrameType())) {
                 this.personalFileDeleteHandler(socketChannel, chatMessageFrame, socketChannelContext);
                 realList.remove(chatMessageFrame);
             }
@@ -135,18 +145,20 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 注册处理,注册成功后由客户端直接发起登录,注册只是短链接
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @return
-     * */
+     */
     private void registerHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
-        ChatMessageRegister chatMessageRegister = JSON.parseObject(chatMessageFrame.getData(), ChatMessageRegister.class);
+        ChatMessageRegister chatMessageRegister = JSON.parseObject(chatMessageFrame.getData(),
+                ChatMessageRegister.class);
         // 1、判断当前用户是否已注册，未注册直接注册，已注册告知直接登录
         UserService userService = (UserService) BasicServer.classPathXmlApplicationContext.getBean(UserService.class);
         UserQueryParam userQueryParam = new UserQueryParam();
         userQueryParam.setUserName(chatMessageRegister.getUserName());
         UserDTO userDto = userService.getUserByName(userQueryParam);
-        if(Optional.ofNullable(userDto).isPresent()) {
+        if (Optional.ofNullable(userDto).isPresent()) {
             this.sendRepeatRegisterMessage(socketChannel, chatMessageRegister, o);
             return;
         }
@@ -162,7 +174,7 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         userCreateParam.setLastLoginDate(null);
         userCreateParam.setStatus(BasicConstant.NOT_LOGIN);
         userDto = userService.create(userCreateParam);
-        if(Optional.ofNullable(userDto).isPresent()) {
+        if (Optional.ofNullable(userDto).isPresent()) {
             this.sendSuccessRegisterMessage(socketChannel, chatMessageRegister, o);
         } else {
             this.sendFailRegisterMessage(socketChannel, chatMessageRegister, o);
@@ -171,10 +183,11 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 登录处理
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @return
-     * */
+     */
     private void loginHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
         ChatMessageLogin chatMessageLogin = JSON.parseObject(chatMessageFrame.getData(), ChatMessageLogin.class);
         Map userMap = (Map) BasicServer.getMap().get(BasicConstant.USER);
@@ -185,18 +198,19 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         UserQueryParam userQueryParam = new UserQueryParam();
         userQueryParam.setUserName(chatMessageLogin.getUserName());
         UserDTO userDto = userService.getUserByName(userQueryParam);
-        if(Optional.ofNullable(userDto).isPresent()) {
+        if (Optional.ofNullable(userDto).isPresent()) {
 
             // 2、判断用户名或密码是否错误
-            if(!StringUtils.equals(chatMessageLogin.getPassword(), userDto.getPassword())){
+            if (!StringUtils.equals(chatMessageLogin.getPassword(), userDto.getPassword())) {
                 this.sendFailLoginMessage(socketChannel, chatMessageLogin, o, "密码错误, 登陆失败");
                 return;
             }
 
             // 3、 判断用户是否已登录，内存判断，后期可更改为redis
-            if(!CollectionUtils.isEmpty(userMap)) {
-                Map<String, List<UserDTO>> onlineUserMap = (new ArrayList<UserDTO>(userMap.values())).stream().collect(Collectors.groupingBy(UserDTO::getUserName));
-                if(onlineUserMap.containsKey(chatMessageLogin.getUserName())) {
+            if (!CollectionUtils.isEmpty(userMap)) {
+                Map<String, List<UserDTO>> onlineUserMap = (new ArrayList<UserDTO>(userMap.values())).stream()
+                        .collect(Collectors.groupingBy(UserDTO::getUserName));
+                if (onlineUserMap.containsKey(chatMessageLogin.getUserName())) {
                     // 用户已登录，发送重复登录消息
                     this.sendRepeatLoginMessage(socketChannel, chatMessageLogin, o);
                     return;
@@ -228,10 +242,11 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 登出处理
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @return
-     * */
+     */
     private void logoutHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
         ChatMessageLogout chatMessageLogout = JSON.parseObject(chatMessageFrame.getData(), ChatMessageLogout.class);
         // 发送成功下线消息
@@ -240,22 +255,27 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 文本处理
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @return
-     * */
+     */
     private void textHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
         ChatMessageText chatMessageText = JSON.parseObject(chatMessageFrame.getData(), ChatMessageText.class);
         Map userMap = (Map) BasicServer.getMap().get(BasicConstant.USER);
-        Map<String, List<UserDTO>> onlineUserMap = (new ArrayList<UserDTO>(userMap.values())).stream().collect(Collectors.groupingBy(UserDTO::getUserName));
+        Map<String, List<UserDTO>> onlineUserMap = (new ArrayList<UserDTO>(userMap.values())).stream()
+                .collect(Collectors.groupingBy(UserDTO::getUserName));
         // 判断远程用户是否存在，存在则获取其socketChannel并发送数据
-        if(onlineUserMap.containsKey(chatMessageText.getRemoteUserName())) {
+        if (onlineUserMap.containsKey(chatMessageText.getRemoteUserName())) {
             // 获取对方用户
-            UserDTO userDto = ((UserDTO) (((List<UserDTO>) onlineUserMap.get(chatMessageText.getRemoteUserName())).get(0)));
+            UserDTO userDto = ((UserDTO) (((List<UserDTO>) onlineUserMap.get(chatMessageText.getRemoteUserName()))
+                    .get(0)));
             // 获取对方用户的Subreactor线程
             Map<String, Object> subReactorMap = (Map) BasicServer.getMap().get(BasicConstant.GLOBAL_MAIN_REACTOR);
-            SubReactor subReactor = (SubReactor) ((Map) subReactorMap.get(NioServerContext.getRemoteAddress(userDto.getChatSocketChannel()))).get("RUNNABLE");
-            this.sendChatSuccessMessage(userDto.getChatSocketChannel(), chatMessageText, subReactor.getSocketChannelContext());
+            SubReactor subReactor = (SubReactor) ((Map) subReactorMap
+                    .get(NioServerContext.getRemoteAddress(userDto.getChatSocketChannel()))).get("RUNNABLE");
+            this.sendChatSuccessMessage(userDto.getChatSocketChannel(), chatMessageText,
+                    subReactor.getSocketChannelContext());
             return;
         } else {
             this.sendChatFailMessage(socketChannel, chatMessageText, o);
@@ -264,16 +284,20 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 刷新在线用户
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @return
-     * */
+     */
     private void refreshHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
         ChatMessageRefresh chatMessageRefresh = JSON.parseObject(chatMessageFrame.getData(), ChatMessageRefresh.class);
         Map userMap = (Map) BasicServer.getMap().get(BasicConstant.USER);
 
         // 获取所有在线用户(从数据库读取)
-        List<UserDTO> onlineUser = (new ArrayList<UserDTO>(userMap.values())).stream().filter(predict -> (predict.getStatus().equals("1")) && (!StringUtils.equals(chatMessageRefresh.getUserName(), predict.getUserName()))).collect(Collectors.toList());
+        List<UserDTO> onlineUser = (new ArrayList<UserDTO>(userMap.values())).stream()
+                .filter(predict -> (predict.getStatus().equals("1"))
+                        && (!StringUtils.equals(chatMessageRefresh.getUserName(), predict.getUserName())))
+                .collect(Collectors.toList());
 
         // 构造发送数据
         Map<String, Object> refreshMap = new HashMap<>(8);
@@ -287,6 +311,7 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 搜索用户帧
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @param socketChannelContext
@@ -301,11 +326,11 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
             Entry<String, UserDTO> entry = (Entry<String, UserDTO>) iterator.next();
             UserDTO userDto = entry.getValue();
 
-            if(null != userDto) {
+            if (null != userDto) {
                 String usernName = userDto.getUserName();
-                if(usernName.startsWith(chatMessageQuery.getQueryUser())
-                    || usernName.endsWith(chatMessageQuery.getQueryUser())
-                    || usernName.contains(chatMessageQuery.getQueryUser())) {
+                if (usernName.startsWith(chatMessageQuery.getQueryUser())
+                        || usernName.endsWith(chatMessageQuery.getQueryUser())
+                        || usernName.contains(chatMessageQuery.getQueryUser())) {
 
                     queryResult.add(userDto);
                 }
@@ -321,6 +346,7 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 心跳帧
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @param o
@@ -329,9 +355,10 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
     private void heartHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
         ChatMessageHeart chatMessageHeart = JSON.parseObject(chatMessageFrame.getData(), ChatMessageHeart.class);
         // 打印客户端心跳帧
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> receive client heart frame, userName = {}, interval = {}, data = {}, address = {}, thread = {}",
-            chatMessageHeart.getUserName(), chatMessageHeart.getHeartInterval(), chatMessageHeart.getData(),
-            NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                + " ] ChatRealDataHandler | --> receive client heart frame, userName = {}, interval = {}, data = {}, address = {}, thread = {}",
+                chatMessageHeart.getUserName(), chatMessageHeart.getHeartInterval(), chatMessageHeart.getData(),
+                NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
 
         // 发送心跳响应帧
         Map<String, Object> map = new HashMap<>(8);
@@ -345,33 +372,40 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 个人网盘文件夹刷新帧
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @param o
      * @throws IOException
      */
     private void personalStoreRefreshHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
-        PersonalStoreRefresh personalStoreRefresh = JSON.parseObject(chatMessageFrame.getData(), PersonalStoreRefresh.class);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> receive client personal folder store refresh frame, address = {}, thread = {}",
-            NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
+        PersonalStoreRefresh personalStoreRefresh = JSON.parseObject(chatMessageFrame.getData(),
+                PersonalStoreRefresh.class);
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                + " ] ChatRealDataHandler | --> receive client personal folder store refresh frame, address = {}, thread = {}",
+                NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
 
         // 获取个人网盘文件夹信息
         // 判断操作系统类型， 获取个人文件路径
         String completeFilePath = "", relativeFilePath = "";
-        if(BasicServer.getMap().get(BasicConstant.OS_NAME).toString().contains("Win")) { // win
-            if(!personalStoreRefresh.getFilePath().endsWith(File.separator)) {
-                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString() + personalStoreRefresh.getFilePath() + File.separator;
+        if (BasicServer.getMap().get(BasicConstant.OS_NAME).toString().contains("Win")) { // win
+            if (!personalStoreRefresh.getFilePath().endsWith(File.separator)) {
+                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString()
+                        + personalStoreRefresh.getFilePath() + File.separator;
                 relativeFilePath = personalStoreRefresh.getFilePath() + File.separator;
             } else {
-                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString() + personalStoreRefresh.getFilePath();
+                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString()
+                        + personalStoreRefresh.getFilePath();
                 relativeFilePath = personalStoreRefresh.getFilePath();
             }
         } else { // linux or Mac
-            if(!personalStoreRefresh.getFilePath().endsWith(File.separator)) {
-                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString() + personalStoreRefresh.getFilePath() + File.separator;
+            if (!personalStoreRefresh.getFilePath().endsWith(File.separator)) {
+                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString()
+                        + personalStoreRefresh.getFilePath() + File.separator;
                 relativeFilePath = personalStoreRefresh.getFilePath() + File.separator;
             } else {
-                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString() + personalStoreRefresh.getFilePath();
+                completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString()
+                        + personalStoreRefresh.getFilePath();
                 relativeFilePath = personalStoreRefresh.getFilePath();
             }
         }
@@ -379,7 +413,8 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         // 查询文件夹信息
         FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
         FileQueryParam fileQueryParam = new FileQueryParam();
-        fileQueryParam.setPId(StringUtils.isBlank(personalStoreRefresh.getPId())?-1:Long.valueOf(personalStoreRefresh.getPId()));
+        fileQueryParam.setPId(
+                StringUtils.isBlank(personalStoreRefresh.getPId()) ? -1 : Long.valueOf(personalStoreRefresh.getPId()));
         fileQueryParam.setFileName(personalStoreRefresh.getFileName());
         fileQueryParam.setUserName(personalStoreRefresh.getUserName());
         fileQueryParam.setFileSize(personalStoreRefresh.getFileSize());
@@ -399,33 +434,37 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 个人网盘文件夹创建帧
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @param o
      * @throws IOException
      */
     private void personalStoreCreateHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
-        PersonalStoreCommon personalStoreCommon = JSON.parseObject(chatMessageFrame.getData(), PersonalStoreCommon.class);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> receive client personal folder store create Frame, userName = {}, address = {}, thread = {}",
-            personalStoreCommon.getUserName(), NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
+        PersonalStoreCommon personalStoreCommon = JSON.parseObject(chatMessageFrame.getData(),
+                PersonalStoreCommon.class);
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                + " ] ChatRealDataHandler | --> receive client personal folder store create Frame, userName = {}, address = {}, thread = {}",
+                personalStoreCommon.getUserName(), NioServerContext.getRemoteAddress(socketChannel),
+                Thread.currentThread().getName());
 
         // 获取个人网盘文件夹信息
         // 判断操作系统类型， 获取个人文件路径
         String completeFilePath = "", relativeFilePath = "";
-        if(BasicServer.getMap().get(BasicConstant.OS_NAME).toString().contains("Win")) { // win
+        if (BasicServer.getMap().get(BasicConstant.OS_NAME).toString().contains("Win")) { // win
             completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString()
-                + personalStoreCommon.getFilePath() + BasicConstant.FILE_WINDOWS_SEPARATOR;
+                    + personalStoreCommon.getFilePath() + BasicConstant.FILE_WINDOWS_SEPARATOR;
             relativeFilePath = personalStoreCommon.getFilePath() + BasicConstant.FILE_WINDOWS_SEPARATOR;
 
-            if(!personalStoreCommon.getNewFileName().equals("")) {
+            if (!personalStoreCommon.getNewFileName().equals("")) {
                 completeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_WINDOWS_SEPARATOR;
                 relativeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_WINDOWS_SEPARATOR;
             }
         } else { // linux or Mac
             completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString()
-                + personalStoreCommon.getFilePath() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
+                    + personalStoreCommon.getFilePath() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
             relativeFilePath = personalStoreCommon.getFilePath() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
-            if(!personalStoreCommon.getNewFileName().equals("")) {
+            if (!personalStoreCommon.getNewFileName().equals("")) {
                 completeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
                 relativeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
             }
@@ -453,28 +492,33 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 个人网盘文件夹修改帧
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @param o
      * @throws IOException
      */
     private void personalStoreUpdateHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
-        PersonalStoreCommon personalStoreCommon = JSON.parseObject(chatMessageFrame.getData(), PersonalStoreCommon.class);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> receive client personal folder store update Frame, userName = {}, address = {}, thread = {}",
-            personalStoreCommon.getUserName(), NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
+        PersonalStoreCommon personalStoreCommon = JSON.parseObject(chatMessageFrame.getData(),
+                PersonalStoreCommon.class);
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                + " ] ChatRealDataHandler | --> receive client personal folder store update Frame, userName = {}, address = {}, thread = {}",
+                personalStoreCommon.getUserName(), NioServerContext.getRemoteAddress(socketChannel),
+                Thread.currentThread().getName());
 
         // 获取个人网盘文件夹信息
         // 判断操作系统类型， 获取个人文件路径
         String completeFilePath = "", orginFilePath = "", newRelativeFilePath = "";
-        if(BasicServer.getMap().get(BasicConstant.OS_NAME).toString().contains("Win")) { // win
+        if (BasicServer.getMap().get(BasicConstant.OS_NAME).toString().contains("Win")) { // win
             completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString()
-                + personalStoreCommon.getFilePath() + BasicConstant.FILE_WINDOWS_SEPARATOR;
+                    + personalStoreCommon.getFilePath() + BasicConstant.FILE_WINDOWS_SEPARATOR;
 
             // 构建原始文件夹全路径
             orginFilePath = completeFilePath;
 
             // 构建新文件夹相对路径
-            int relativePostion = personalStoreCommon.getFilePath().lastIndexOf(personalStoreCommon.getOriginFileName());
+            int relativePostion = personalStoreCommon.getFilePath()
+                    .lastIndexOf(personalStoreCommon.getOriginFileName());
             newRelativeFilePath = personalStoreCommon.getFilePath().substring(0, relativePostion);
             newRelativeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_WINDOWS_SEPARATOR;
 
@@ -484,13 +528,14 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
             completeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_WINDOWS_SEPARATOR;
         } else { // linux or Mac
             completeFilePath = BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString()
-                + personalStoreCommon.getFilePath() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
+                    + personalStoreCommon.getFilePath() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
 
             // 构建原始文件夹全路径
             orginFilePath = completeFilePath;
 
             // 构建新文件夹相对路径
-            int relativePostion = personalStoreCommon.getFilePath().lastIndexOf(personalStoreCommon.getOriginFileName());
+            int relativePostion = personalStoreCommon.getFilePath()
+                    .lastIndexOf(personalStoreCommon.getOriginFileName());
             newRelativeFilePath = personalStoreCommon.getFilePath().substring(0, relativePostion);
             newRelativeFilePath += personalStoreCommon.getNewFileName() + BasicConstant.FILE_LINUX_MAC_SEPARATOR;
 
@@ -517,6 +562,7 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 个人网盘文件删除帧
+     * 
      * @param socketChannel
      * @param chatMessageFrame
      * @param o
@@ -524,25 +570,34 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
      */
     private void personalFileDeleteHandler(SocketChannel socketChannel, ChatMessageFrame chatMessageFrame, Object o) {
         PersonalFileCommon personalFileCommon = JSON.parseObject(chatMessageFrame.getData(), PersonalFileCommon.class);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> receive client personal file delete Frame, userName = {}, address = {}, thread = {}",
-            personalFileCommon.getUserName(), NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                + " ] ChatRealDataHandler | --> receive client personal file delete Frame, userName = {}, address = {}, thread = {}",
+                personalFileCommon.getUserName(), NioServerContext.getRemoteAddress(socketChannel),
+                Thread.currentThread().getName());
 
         // 1、判断操作系统类型， 获取个人文件路径
         String osName = BasicServer.getMap().get(BasicConstant.OS_NAME).toString();
-        String rootFilePath = osName.contains("Win")?BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString():BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString();
+        String rootFilePath = osName.contains("Win")
+                ? BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS).toString()
+                : BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC).toString();
 
         // 2、解析文件操作
         List<Long> fileIdList = Lists.newArrayList();
-        //String[] fileNameArray = personalFileCommon.getFileNames().contains(",")?personalFileCommon.getFileNames().split(","):new String[] {personalFileCommon.getFileNames()};
-        String[] filePathArray = personalFileCommon.getFilePaths().contains(",")?personalFileCommon.getFilePaths().split(","):new String[] {personalFileCommon.getFilePaths()};
-        String[] fileTagArray = personalFileCommon.getTags().contains(",")?personalFileCommon.getTags().split(","):new String[] {personalFileCommon.getTags()};
-        for(int i = 0; i < filePathArray.length; i++) {
+        // String[] fileNameArray =
+        // personalFileCommon.getFileNames().contains(",")?personalFileCommon.getFileNames().split(","):new
+        // String[] {personalFileCommon.getFileNames()};
+        String[] filePathArray = personalFileCommon.getFilePaths().contains(",")
+                ? personalFileCommon.getFilePaths().split(",")
+                : new String[] { personalFileCommon.getFilePaths() };
+        String[] fileTagArray = personalFileCommon.getTags().contains(",") ? personalFileCommon.getTags().split(",")
+                : new String[] { personalFileCommon.getTags() };
+        for (int i = 0; i < filePathArray.length; i++) {
             String currentFilePath = rootFilePath + filePathArray[i];
 
             // 判断当前文件是否存在，存在则删除，不考虑文件不存在的情况
             File file = new File(currentFilePath);
-            if(file.exists()) {
-                if(file.delete()) {
+            if (file.exists()) {
+                if (file.delete()) {
                     // 文件删除成功
                     fileIdList.add(Long.valueOf(fileTagArray[i]));
                 }
@@ -574,12 +629,14 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
 
     /**
      * 发送成功注册消息
+     * 
      * @param socketChannel
      * @param chatMessageRegister
      * @param o
      * @return
-     * */
-    private void sendSuccessRegisterMessage(SocketChannel socketChannel, ChatMessageRegister chatMessageRegister, Object o) {
+     */
+    private void sendSuccessRegisterMessage(SocketChannel socketChannel, ChatMessageRegister chatMessageRegister,
+            Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
         map.put("userName", chatMessageRegister.getUserName());
@@ -587,20 +644,25 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "注册成功");
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> register success, userName = {}, thread = {}",
-            chatMessageRegister.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> register success, userName = {}, thread = {}",
+                chatMessageRegister.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 
     /**
      * 发送重复注册消息
+     * 
      * @param socketChannel
      * @param chatMessageRegister
      * @param o
      * @return
-     * */
-    private void sendRepeatRegisterMessage(SocketChannel socketChannel, ChatMessageRegister chatMessageRegister, Object o) {
+     */
+    private void sendRepeatRegisterMessage(SocketChannel socketChannel, ChatMessageRegister chatMessageRegister,
+            Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
         map.put("userName", chatMessageRegister.getUserName());
@@ -609,19 +671,23 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "[ " + chatMessageRegister.getUserName() + "] 已存在, 禁止重复注册");
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> register repeated, userName = {}, thread = {}",
-            chatMessageRegister.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> register repeated, userName = {}, thread = {}",
+                chatMessageRegister.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
     }
 
     /**
      * 发送注册失败消息
+     * 
      * @param socketChannel
      * @param chatMessageLogout
      * @param o
      * @return
-     * */
-    private void sendFailRegisterMessage(SocketChannel socketChannel, ChatMessageRegister chatMessageRegister, Object o) {
+     */
+    private void sendFailRegisterMessage(SocketChannel socketChannel, ChatMessageRegister chatMessageRegister,
+            Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
         map.put("userName", chatMessageRegister.getUserName());
@@ -629,19 +695,23 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "注册失败");
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> register failed, userName = {}, thread = {}",
-            chatMessageRegister.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> register failed, userName = {}, thread = {}",
+                chatMessageRegister.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
     }
 
     /**
      * 发送成功登录消息
+     * 
      * @param socketChannel
      * @param chatMessageLogin
      * @param o
      * @return
-     * */
-    private void sendSuccessLoginMessage(SocketChannel socketChannel, ChatMessageLogin chatMessageLogin, Object o, Date loginSuccessDate) {
+     */
+    private void sendSuccessLoginMessage(SocketChannel socketChannel, ChatMessageLogin chatMessageLogin, Object o,
+            Date loginSuccessDate) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
         map.put("userName", chatMessageLogin.getUserName());
@@ -649,19 +719,23 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "登录成功");
         map.put("time", BasicConstant.SDF.format(loginSuccessDate));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> login success, userName = {}, thread = {}",
-            chatMessageLogin.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> login success, userName = {}, thread = {}",
+                chatMessageLogin.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 
     /**
      * 发送重复登录消息
+     * 
      * @param socketChannel
      * @param chatMessageLogin
      * @param o
      * @return
-     * */
+     */
     private void sendRepeatLoginMessage(SocketChannel socketChannel, ChatMessageLogin chatMessageLogin, Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 201);
@@ -670,20 +744,25 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "禁止重复登录");
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> repeat login, userName = {}, thread = {}",
-            chatMessageLogin.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> repeat login, userName = {}, thread = {}",
+                chatMessageLogin.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 
     /**
      * 发送登录失败消息
+     * 
      * @param socketChannel
      * @param chatMessageLogin
      * @param o
      * @return
-     * */
-    private void sendFailLoginMessage(SocketChannel socketChannel, ChatMessageLogin chatMessageLogin, Object o, String message) {
+     */
+    private void sendFailLoginMessage(SocketChannel socketChannel, ChatMessageLogin chatMessageLogin, Object o,
+            String message) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 202);
         map.put("userName", chatMessageLogin.getUserName());
@@ -691,19 +770,23 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", message);
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> fail login, userName = {}, thread = {}",
-            chatMessageLogin.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> fail login, userName = {}, thread = {}",
+                chatMessageLogin.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 
     /**
      * 发送登出失败消息
+     * 
      * @param socketChannel
      * @param chatMessageLogout
      * @param o
      * @return
-     * */
+     */
     private void sendFailLogoutMessage(SocketChannel socketChannel, ChatMessageLogout chatMessageLogout, Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
@@ -712,19 +795,23 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "下线失败");
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> logout failed, userName = {}, thread = {}",
-            chatMessageLogout.getUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> logout failed, userName = {}, thread = {}",
+                chatMessageLogout.getUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 
     /**
      * 发送成功登出消息
+     * 
      * @param socketChannel
      * @param chatMessageLogout
      * @param o
      * @return
-     * */
+     */
     private void sendSuccessLogoutMessage(SocketChannel socketChannel, ChatMessageLogout chatMessageLogout, Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
@@ -737,18 +824,23 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         WriteEventHandler.addSendData(map, o);
 
         // 2、下线操作，释放用户资源，但不关闭当前socketChannel连接，因为有可能以当前SocketChannel重新登录或是登录其他用户，只有关闭了客户端才关闭当前SocketChannel
-        Boolean result = NioServerContext.handleSubReactor(NioServerContext.getRemoteAddress(socketChannel), Boolean.FALSE);
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> [{}] {}, remoteAddress = {}, thread = {}",
-            String.valueOf(map.get("userName")), (result.equals(Boolean.TRUE)?"下线成功":"下线失败"), NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
+        Boolean result = NioServerContext.handleSubReactor(NioServerContext.getRemoteAddress(socketChannel),
+                Boolean.FALSE);
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> [{}] {}, remoteAddress = {}, thread = {}",
+                String.valueOf(map.get("userName")), (result.equals(Boolean.TRUE) ? "下线成功" : "下线失败"),
+                NioServerContext.getRemoteAddress(socketChannel), Thread.currentThread().getName());
     }
 
     /**
      * 发送成功聊天消息
+     * 
      * @param socketChannel
      * @param chatMessageText
      * @param o
      * @return
-     * */
+     */
     private void sendChatSuccessMessage(SocketChannel socketChannel, ChatMessageText chatMessageText, Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
@@ -757,19 +849,22 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", chatMessageText.getContent());
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> send remote user text, userName = {}, content = {}, thread = {}",
-            chatMessageText.getCurrentUserName(), chatMessageText.getContent(), Thread.currentThread().getName());
+        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                + " ] ChatRealDataHandler | --> send remote user text, userName = {}, content = {}, thread = {}",
+                chatMessageText.getCurrentUserName(), chatMessageText.getContent(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 
     /**
      * 发送聊天失败消息
+     * 
      * @param socketChannel
      * @param chatMessageText
      * @param o
      * @return
-     * */
+     */
     private void sendChatFailMessage(SocketChannel socketChannel, ChatMessageText chatMessageText, Object o) {
         Map<String, Object> map = new HashMap<>(8);
         map.put("code", 200);
@@ -778,9 +873,12 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         map.put("message", "用户已下线,请尝试刷新列表");
         map.put("time", BasicConstant.SDF.format(new Date()));
 
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] ChatRealDataHandler | --> has logout, userName = {}, thread = {}",
-            chatMessageText.getCurrentUserName(), Thread.currentThread().getName());
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] ChatRealDataHandler | --> has logout, userName = {}, thread = {}",
+                chatMessageText.getCurrentUserName(), Thread.currentThread().getName());
         WriteEventHandler.addSendData(map, o);
-        //CoreServerContext.sendMessage(socketChannel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
+        // CoreServerContext.sendMessage(socketChannel,
+        // BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR_THREAD, o);
     }
 }

@@ -69,10 +69,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             return;
         }
 
-        // 检查 handlerType，非 DOWNLOAD 则跳过本 Handler
+        // 检查 handlerType，非 DOWNLOAD 则直接返回，让 Pipeline 继续执行
         if (!"DOWNLOAD".equals(socketChannelContext.getHandlerType())) {
-            simpleChannelContext.setNeedSkip(true);
-            simpleChannelContext.setSkip(1);
             return;
         }
 
@@ -333,7 +331,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         try {
             parserMap.remove(socketChannelContext.getRemoteAddress());
             downloadingMap.remove(socketChannelContext.getRemoteAddress());
-            NioServerContext.closedAndRelease(socketChannelContext.getTransportProtocol().getSocketChannel());
+            NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
             simpleChannelContext.setNeedStop(true);
         } catch (Exception e) {
             log.error("关闭连接失败", e);

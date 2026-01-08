@@ -70,7 +70,7 @@ public final class FileUploadTask implements Runnable {
     private void closeChannelOnError() {
         try {
             // todo 后续将SocketChannel移动至SocketChannelContext中
-            SocketChannel socketChannel = this.socketChannelContext.getTransportProtocol().getSocketChannel();
+            SocketChannel socketChannel = this.socketChannelContext.getSocketChannel();
             if (socketChannel != null && socketChannel.isOpen()) {
                 // closedAndRelease 内部会：
                 // 1. 关闭 SocketChannel（shutdownInput/shutdownOutput/close）

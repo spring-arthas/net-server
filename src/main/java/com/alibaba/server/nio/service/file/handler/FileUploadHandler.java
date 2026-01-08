@@ -65,10 +65,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return;
         }
 
-        // 检查 handlerType，非 UPLOAD 则跳过本 Handler
+        // 检查 handlerType，非 UPLOAD 则直接返回，让 Pipeline 继续执行下一个 Handler
         if (!"UPLOAD".equals(socketChannelContext.getHandlerType())) {
-            simpleChannelContext.setNeedSkip(true);
-            simpleChannelContext.setSkip(1);
             return;
         }
 
@@ -291,7 +289,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             AbstractEventHandler.channelDataMap.remove(socketChannelContext.getRemoteAddress());
 
             // 5. 关闭通道
-            NioServerContext.closedAndRelease(socketChannelContext.getTransportProtocol().getSocketChannel());
+            NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
 
             // 6. 终止后续 Handler
             simpleChannelContext.setNeedStop(Boolean.TRUE);
@@ -324,7 +322,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
     private void sendAckFrame(SocketChannelContext socketChannelContext,
             String taskId, String status, String message) {
         try {
-            SocketChannel socketChannel = socketChannelContext.getTransportProtocol().getSocketChannel();
+            SocketChannel socketChannel = socketChannelContext.getSocketChannel();
             if (socketChannel == null || !socketChannel.isOpen()) {
                 log.warn("通道已关闭，无法发送 ACK");
                 return;

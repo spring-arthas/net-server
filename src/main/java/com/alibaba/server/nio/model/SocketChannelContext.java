@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -45,9 +46,9 @@ public class SocketChannelContext {
     private String handlerType;
 
     /**
-     * 通道协议
+     * 通道
      */
-    private TransportProtocol transportProtocol;
+    private SocketChannel socketChannel;
 
     /**
      * 待写入的缓冲区（仅在一次 write 无法完成时使用）

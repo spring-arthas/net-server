@@ -19,8 +19,9 @@ import java.util.*;
 
 /**
  * 文件上传或在线传输实时流处理
+ * 
  * @author spring
- * */
+ */
 
 @Slf4j
 @SuppressWarnings("all")
@@ -37,19 +38,20 @@ public class FileUploadTransportStreamHandler extends AbstractChannelHandler {
         Map<String, Object> map = (Map<String, Object>) o;
         SocketChannelContext socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
         List<Map<String, Object>> list = (List<Map<String, Object>>) ((SimpleChannelContext) channelContext).getObj();
-        if(!CollectionUtils.isEmpty(list)) {
+        if (!CollectionUtils.isEmpty(list)) {
             // 按照帧序号排序,升序排序，此处的顺序必须为1~...,且序号必须连续相差1，否则文件流顺序写入错误，终止写入
-            if(!this.sortStreamList(list)) {
-                NioServerContext.closedAndRelease(socketChannelContext.getTransportProtocol().getSocketChannel());
+            if (!this.sortStreamList(list)) {
+                NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
                 fileChannel.close();
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileUploadTransportStreamHandler | --> 文件 [{}] 在流写入过程出现流索引差值不连续(相差结果不为1)，已终止文件流写入 thread = {}",
-                    fileName, Thread.currentThread().getName());
+                log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] FileUploadTransportStreamHandler | --> 文件 [{}] 在流写入过程出现流索引差值不连续(相差结果不为1)，已终止文件流写入 thread = {}",
+                        fileName, Thread.currentThread().getName());
                 return;
             }
 
-            for(Map<String, Object> fileTaskMap : list) {
+            for (Map<String, Object> fileTaskMap : list) {
                 Object obj = null;
-                if(!Optional.ofNullable(obj = fileTaskMap.get(BasicConstant.FILE_TASK)).isPresent()) {
+                if (!Optional.ofNullable(obj = fileTaskMap.get(BasicConstant.FILE_TASK)).isPresent()) {
                     continue;
                 }
 
@@ -63,12 +65,14 @@ public class FileUploadTransportStreamHandler extends AbstractChannelHandler {
 
     /**
      * 写入发送过来的文件流数据
+     * 
      * @param obj
      * @param fileTaskMap
      * @param socketChannelContext
      * @throws IOException
      */
-    private void writeBytes(Object obj, Map<String, Object> fileTaskMap, SocketChannelContext socketChannelContext) throws IOException {
+    private void writeBytes(Object obj, Map<String, Object> fileTaskMap, SocketChannelContext socketChannelContext)
+            throws IOException {
         // 文件任务
         Map<String, Object> currentFileTaskMap = (Map<String, Object>) obj;
 
@@ -80,30 +84,36 @@ public class FileUploadTransportStreamHandler extends AbstractChannelHandler {
 
         fileName = ((File) currentFileTaskMap.get("FILE")).getName();
         fileChannel = (FileChannel) currentFileTaskMap.get("FILE_CHANNEL");
-        if(!fileChannel.isOpen()) {
+        if (!fileChannel.isOpen()) {
             // 文件通道未打开，写入失败，释放资源
-            NioServerContext.closedAndRelease(socketChannelContext.getTransportProtocol().getSocketChannel());
+            NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
             fileChannel.close();
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileUploadTransportStreamHandler | --> 文件 [{}] 通道未打开，已终止文件流写入, thread = {}",
-                fileName, Thread.currentThread().getName());
+            log.info(
+                    "[ " + LocalTime.formatDate(LocalDateTime.now())
+                            + " ] FileUploadTransportStreamHandler | --> 文件 [{}] 通道未打开，已终止文件流写入, thread = {}",
+                    fileName, Thread.currentThread().getName());
         }
 
         // 向文件通道写入数据
         this.writeFileSize += fileChannel.write(ByteBuffer.wrap(originFileStreamData, 0, originFileStreamData.length));
-        log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileUploadTransportStreamHandler | --> 当前线程 [{}] 完成文件 [{} - {}] 个字节流上传", Thread.currentThread().getName(), fileName, this.writeFileSize);
+        log.info(
+                "[ " + LocalTime.formatDate(LocalDateTime.now())
+                        + " ] FileUploadTransportStreamHandler | --> 当前线程 [{}] 完成文件 [{} - {}] 个字节流上传",
+                Thread.currentThread().getName(), fileName, this.writeFileSize);
     }
 
     /**
      * 按照帧序号排序,升序排序，此处的顺序必须为1~...
+     * 
      * @param list
      */
     private Boolean sortStreamList(List<Map<String, Object>> list) {
-        if(list.size() == 1) {
+        if (list.size() == 1) {
             return Boolean.TRUE;
         }
 
         // 先自增排序
-        //list.stream().sorted(Comparator.comparing(EmployeePayrollProfileDTO::getEffectiveStartDate).reversed())
+        // list.stream().sorted(Comparator.comparing(EmployeePayrollProfileDTO::getEffectiveStartDate).reversed())
         Collections.sort(list, new Comparator<Map<String, Object>>() {
             @Override
             public int compare(Map<String, Object> m1, Map<String, Object> m2) {
@@ -114,10 +124,10 @@ public class FileUploadTransportStreamHandler extends AbstractChannelHandler {
         });
 
         // 在判断元素间的差值是否为1
-        for(int i = 0; i < (list.size() - 1); i++) {
+        for (int i = 0; i < (list.size() - 1); i++) {
             Integer index1 = ((FileMessageFrame) list.get(i).get(BasicConstant.FILE_FRAME)).getFrameIndex();
             Integer index2 = ((FileMessageFrame) list.get(i + 1).get(BasicConstant.FILE_FRAME)).getFrameIndex();
-            if(!((index2 - index1) == 1)) {
+            if (!((index2 - index1) == 1)) {
                 System.out.println("差值不为1，发送失败, 当前list中的帧序号为: " + index1 + "~" + index2);
                 return Boolean.FALSE;
             }

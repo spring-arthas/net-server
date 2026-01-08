@@ -247,7 +247,11 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public FileDto getFileById(FileQueryParam fileQueryParam) {
-        return this.doToDto(this.fileRepository.get(fileQueryParam.getId()));
+        FileDo fileDo = this.fileRepository.get(fileQueryParam.getId());
+        if(Objects.isNull(fileDo)) {
+            return null;
+        }
+        return this.doToDto(fileDo);
     }
 
     /**

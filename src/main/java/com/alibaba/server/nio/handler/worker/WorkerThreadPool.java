@@ -193,10 +193,10 @@ public class WorkerThreadPool {
          */
         private boolean isChannelClosed() {
             try {
-                if (this.socketChannelContext.getTransportProtocol() == null) {
+                if (this.socketChannelContext.getSocketChannel() == null) {
                     return true;
                 }
-                SocketChannel socketChannel = this.socketChannelContext.getTransportProtocol().getSocketChannel();
+                SocketChannel socketChannel = this.socketChannelContext.getSocketChannel();
                 // 通道为空或已关闭，需要退出任务
                 return socketChannel == null || !socketChannel.isOpen();
             } catch (Exception e) {
@@ -305,10 +305,10 @@ public class WorkerThreadPool {
          */
         private void closeChannelOnError() {
             try {
-                if (this.socketChannelContext.getTransportProtocol() == null) {
+                if (this.socketChannelContext.getSocketChannel() == null) {
                     return;
                 }
-                SocketChannel socketChannel = this.socketChannelContext.getTransportProtocol().getSocketChannel();
+                SocketChannel socketChannel = this.socketChannelContext.getSocketChannel();
                 if (socketChannel != null && socketChannel.isOpen()) {
                     NioServerContext.closedAndRelease(socketChannel);
                     log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
