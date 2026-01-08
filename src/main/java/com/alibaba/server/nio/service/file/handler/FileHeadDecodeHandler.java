@@ -313,7 +313,7 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
     }
 
     /**
-     * 发送 ACK 帧给客户端
+     * 发送 ACK 帧给客户端（使用 NIO 事件驱动的写操作）
      */
     private void sendAckFrame(SocketChannelContext socketChannelContext,
             String taskId, String status, String message) {
@@ -343,7 +343,8 @@ public class FileHeadDecodeHandler extends AbstractChannelHandler {
             buffer.put(ackData); // 数据
             buffer.flip();
 
-            socketChannel.write(buffer);
+            // 使用 NIO 事件驱动的写操作（替代直接 write）
+            com.alibaba.server.nio.handler.event.concret.WriteQueueHelper.submitWrite(socketChannelContext, buffer);
 
             log.debug("发送 ACK 帧: taskId={}, status={}", taskId, status);
 
