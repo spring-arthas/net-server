@@ -99,10 +99,9 @@ public class WriteEventHandler extends AbstractEventHandler {
     @Deprecated
     public static void addSendData(java.util.Map map, Object o) {
         SocketChannelContext socketChannelContext = (SocketChannelContext) o;
-        java.util.concurrent.LinkedBlockingQueue linkedBlockingQueue = ((java.util.concurrent.LinkedBlockingQueue) socketChannelContext
-                .getBlockingQueue());
+        /*java.util.concurrent.LinkedBlockingQueue linkedBlockingQueue = ((java.util.concurrent.LinkedBlockingQueue) socketChannelContext.getBlockingQueue());
         if (linkedBlockingQueue.remainingCapacity() > 0) {
             linkedBlockingQueue.offer(map);
-        }
+        }*/
     }
 }

@@ -81,7 +81,7 @@ public class WorkerThreadPool {
         String dataType = socketChannelContext.getTransportDataModel().getDataType();
 
         // 目前只处理文件上传任务
-        if (!StringUtils.equals(ChannelEventModelEnum.FILE_UPLOAD.getName(), dataType)) {
+        if (StringUtils.equals(ChannelEventModelEnum.TEXT_TRANSMISSION.getName(), dataType)) {
             // 文字传输和文件下载暂未实现，直接返回
             return;
         }

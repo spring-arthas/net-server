@@ -62,7 +62,7 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
                 }
 
                 if (acceptedCount > 0) {
-                    log.debug("本次唤醒共接受 {} 个客户端连接", acceptedCount);
+                    log.debug("本次唤醒共接受 {} 个客户端上传连接", acceptedCount);
                 }
 
                 // 所有连接都处理完毕后再 park，等待 Selector 唤醒
