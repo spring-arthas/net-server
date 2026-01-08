@@ -141,7 +141,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      */
     private void handleDownloadRequest(FileUploadFrame frame,
             SocketChannelContext socketChannelContext,
-            SimpleChannelContext simpleChannelContext) {
+            SimpleChannelContext simpleChannelContext) throws IOException {
         try {
             // 1. 解析请求 JSON
             String jsonData = frame.getDataAsString();
@@ -200,7 +200,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      */
     private void handleClientAck(FileUploadFrame frame,
             SocketChannelContext socketChannelContext,
-            SimpleChannelContext simpleChannelContext) {
+            SimpleChannelContext simpleChannelContext) throws IOException {
         try {
             String jsonData = frame.getDataAsString();
             JSONObject ack = JSON.parseObject(jsonData);
@@ -231,7 +231,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      */
     private void transferFile(SocketChannelContext socketChannelContext,
             SimpleChannelContext simpleChannelContext,
-            String filePath) {
+            String filePath) throws IOException {
         File file = new File(filePath);
         if (!file.exists()) {
             sendErrorFrame(socketChannelContext, "文件不存在");
@@ -245,7 +245,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 FileChannel fileChannel = fis.getChannel()) {
 
             // 分块读取并发送
-            int bufferSize = 8192; // 8KB
+            int bufferSize = 32500; // 8KB
             ByteBuffer readBuffer = ByteBuffer.allocate(bufferSize);
 
             while (fileChannel.read(readBuffer) != -1) {
@@ -260,11 +260,18 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 readBuffer.clear();
             }
 
+            // 等待所有 DATA_FRAME 发送完成（无限等待，但如果30秒无进展则认为卡死）
+            log.info("等待所有数据帧发送完成...");
+            WriteQueueHelper.waitForQueueDrain(socketChannelContext, 30000); // 30秒无进展超时
+
             // 发送结束帧
             JSONObject endJson = new JSONObject();
             endJson.put("status", "success");
             endJson.put("totalBytes", totalBytes);
             sendFrame(socketChannelContext, FrameType.END_FRAME, endJson.toJSONString());
+
+            // 等待 END_FRAME 发送完成
+            WriteQueueHelper.waitForQueueDrain(socketChannelContext, 10000); // 10秒无进展超时
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("[ {} ] FileDownloadHandler | --> 文件传输完成: fileName={}, size={}, 耗时={}ms",
@@ -283,7 +290,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     /**
      * 发送数据帧
      */
-    private void sendDataFrame(SocketChannelContext socketChannelContext, byte[] data) {
+    private void sendDataFrame(SocketChannelContext socketChannelContext, byte[] data) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(FileUploadFrame.HEADER_LENGTH + data.length);
         buffer.put(FileUploadFrame.MAGIC);
         buffer.put((byte) FrameType.DATA_FRAME.getCode());
@@ -298,7 +305,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     /**
      * 发送帧
      */
-    private void sendFrame(SocketChannelContext socketChannelContext, FrameType type, String jsonData) {
+    private void sendFrame(SocketChannelContext socketChannelContext, FrameType type, String jsonData)
+            throws IOException {
         byte[] data = jsonData.getBytes(StandardCharsets.UTF_8);
 
         ByteBuffer buffer = ByteBuffer.allocate(FileUploadFrame.HEADER_LENGTH + data.length);
@@ -316,7 +324,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     /**
      * 发送错误帧
      */
-    private void sendErrorFrame(SocketChannelContext socketChannelContext, String message) {
+    private void sendErrorFrame(SocketChannelContext socketChannelContext, String message) throws IOException {
         JSONObject errorJson = new JSONObject();
         errorJson.put("status", "error");
         errorJson.put("message", message);

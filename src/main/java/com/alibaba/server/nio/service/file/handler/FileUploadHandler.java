@@ -139,7 +139,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
      */
     private void handleMetaFrame(FileUploadFrame frame,
             SocketChannelContext socketChannelContext,
-            SimpleChannelContext simpleChannelContext) {
+            SimpleChannelContext simpleChannelContext) throws IOException {
         try {
             // 1. 解析 JSON 元数据
             String jsonData = frame.getDataAsString();
@@ -320,7 +320,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
      * 发送 ACK 帧给客户端（使用 NIO 事件驱动的写操作）
      */
     private void sendAckFrame(SocketChannelContext socketChannelContext,
-            String taskId, String status, String message) {
+            String taskId, String status, String message) throws IOException {
         try {
             SocketChannel socketChannel = socketChannelContext.getSocketChannel();
             if (socketChannel == null || !socketChannel.isOpen()) {
@@ -354,6 +354,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
         } catch (Exception e) {
             log.error("发送 ACK 帧失败", e);
+            throw e;
         }
     }
 

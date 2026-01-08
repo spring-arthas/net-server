@@ -56,9 +56,9 @@ public class SocketChannelContext {
     private java.util.List<Object> realList = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     /**
-     * 待写入的缓冲区（仅在一次 write 无法完成时使用）
-     * 采用「先尝试直接写，写不完才保存」的策略，减少内存占用
+     * 待写入的缓冲区队列（支持多个待写数据排队）
+     * 使用队列避免快速连续调用时数据丢失
      */
-    private java.nio.ByteBuffer pendingWriteBuffer;
+    private java.util.concurrent.ConcurrentLinkedQueue<java.nio.ByteBuffer> pendingWriteQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
 }

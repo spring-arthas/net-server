@@ -138,14 +138,16 @@ public class FileDownloadClient {
             // 解析所有完整的帧
             accumulator.flip();
             while (accumulator.remaining() >= HEADER_LENGTH) {
-                // 检查魔数
-                int startPos = accumulator.position();
+                accumulator.mark(); // 标记当前位置
                 byte magic1 = accumulator.get();
                 byte magic2 = accumulator.get();
 
                 if (magic1 != MAGIC[0] || magic2 != MAGIC[1]) {
-                    System.err.println("无效的魔数，跳过");
-                    continue;
+                    System.err.printf("无效的魔数，关闭连接。期望: 0x%02X 0x%02X, 实际: 0x%02X 0x%02X%n",
+                            MAGIC[0] & 0xFF, MAGIC[1] & 0xFF, magic1 & 0xFF, magic2 & 0xFF);
+                    completed = true;
+                    socketChannel.close();
+                    break;
                 }
 
                 byte type = accumulator.get();
@@ -155,7 +157,7 @@ public class FileDownloadClient {
                 // 检查数据是否完整（半包处理）
                 if (accumulator.remaining() < dataLength) {
                     // 数据不完整，回退位置，等待更多数据
-                    accumulator.position(startPos);
+                    accumulator.reset();
                     break;
                 }
 
@@ -176,6 +178,9 @@ public class FileDownloadClient {
 
                         // 创建输出文件
                         File outputFile = new File(saveDir, fileName);
+                        if (!outputFile.getParentFile().exists()) {
+                            outputFile.getParentFile().mkdirs();
+                        }
                         fileChannel = FileChannel.open(outputFile.toPath(),
                                 StandardOpenOption.CREATE, StandardOpenOption.WRITE,
                                 StandardOpenOption.TRUNCATE_EXISTING);

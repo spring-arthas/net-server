@@ -43,7 +43,7 @@ public class WriteEventHandler extends AbstractEventHandler {
 
     /**
      * 执行写操作
-     * 从 writeQueue 中取出数据写入 SocketChannel
+     * 从 pendingWriteQueue 中取出数据写入 SocketChannel
      * 队列空时取消 OP_WRITE 事件，避免水平触发死循环
      */
     private ChannelEventModel handler(ChannelEventModel eventModel) {
@@ -56,34 +56,44 @@ public class WriteEventHandler extends AbstractEventHandler {
             return eventModel;
         }
 
-        ByteBuffer pendingBuffer = socketChannelContext.getPendingWriteBuffer();
+        java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue = socketChannelContext.getPendingWriteQueue();
 
-        // 没有待写数据，取消 OP_WRITE
-        if (pendingBuffer == null || !pendingBuffer.hasRemaining()) {
-            socketChannelContext.setPendingWriteBuffer(null);
-            WriteQueueHelper.cancelWriteInterest(selectionKey);
-            return eventModel;
-        }
-
-        SocketChannel socketChannel = (SocketChannel) selectionKey.channel();
-
-        try {
-            // 继续写入剩余数据
-            int written = socketChannel.write(pendingBuffer);
-            log.debug("WriteEventHandler 写入: {} 字节, 剩余: {} 字节", written, pendingBuffer.remaining());
-
-            // 写完后清理 pendingBuffer 并取消 OP_WRITE
-            if (!pendingBuffer.hasRemaining()) {
-                socketChannelContext.setPendingWriteBuffer(null);
+        // 同步块：防止与 WriteQueueHelper.submitWrite() 并发修改 ByteBuffer.position()
+        synchronized (queue) {
+            // 没有待写数据，取消 OP_WRITE
+            if (queue.isEmpty()) {
                 WriteQueueHelper.cancelWriteInterest(selectionKey);
-                log.debug("数据全部写完，已取消 OP_WRITE");
+                return eventModel;
             }
-            // 如果还有剩余，保持 OP_WRITE 注册，等下次写事件继续
 
-        } catch (IOException e) {
-            log.error("写入数据失败: remoteAddress={}", socketChannelContext.getRemoteAddress(), e);
-            socketChannelContext.setPendingWriteBuffer(null);
-            WriteQueueHelper.cancelWriteInterest(selectionKey);
+            SocketChannel socketChannel = (SocketChannel) selectionKey.channel();
+
+            try {
+                // 从队列中取出并写入数据
+                ByteBuffer pendingBuffer;
+                while ((pendingBuffer = queue.peek()) != null) {
+                    int written = socketChannel.write(pendingBuffer);
+                    log.debug("WriteEventHandler 写入: {} 字节, 剩余: {} 字节", written, pendingBuffer.remaining());
+
+                    if (pendingBuffer.hasRemaining()) {
+                        // 没写完，保持 OP_WRITE 注册，等下次写事件继续
+                        break;
+                    }
+                    // 写完了，移除队列头
+                    queue.poll();
+                }
+
+                // 队列空了，取消 OP_WRITE
+                if (queue.isEmpty()) {
+                    WriteQueueHelper.cancelWriteInterest(selectionKey);
+                    log.debug("队列数据全部写完，已取消 OP_WRITE");
+                }
+
+            } catch (IOException e) {
+                log.error("写入数据失败: remoteAddress={}", socketChannelContext.getRemoteAddress(), e);
+                queue.clear();
+                WriteQueueHelper.cancelWriteInterest(selectionKey);
+            }
         }
 
         return eventModel;
@@ -99,9 +109,13 @@ public class WriteEventHandler extends AbstractEventHandler {
     @Deprecated
     public static void addSendData(java.util.Map map, Object o) {
         SocketChannelContext socketChannelContext = (SocketChannelContext) o;
-        /*java.util.concurrent.LinkedBlockingQueue linkedBlockingQueue = ((java.util.concurrent.LinkedBlockingQueue) socketChannelContext.getBlockingQueue());
-        if (linkedBlockingQueue.remainingCapacity() > 0) {
-            linkedBlockingQueue.offer(map);
-        }*/
+        /*
+         * java.util.concurrent.LinkedBlockingQueue linkedBlockingQueue =
+         * ((java.util.concurrent.LinkedBlockingQueue)
+         * socketChannelContext.getBlockingQueue());
+         * if (linkedBlockingQueue.remainingCapacity() > 0) {
+         * linkedBlockingQueue.offer(map);
+         * }
+         */
     }
 }
