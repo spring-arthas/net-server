@@ -139,6 +139,7 @@ public class AbstractAcceptor {
         socketChannelContext.setRemoteAddress(NioServerContext.getRemoteAddress(socketChannel));
         socketChannelContext.setChannelPipeLine(new DefaultChannelPipeLine());
         socketChannelContext.setByteBuffer(ByteBuffer.allocateDirect(Integer.parseInt(NioServerContext.getValue(BasicConstant.BYTEBUFFER))));
+        socketChannelContext.setSocketChannel(socketChannel);
 
         // 3、注册通道数据处理器
         socketChannelContext.setChannelFlag(BasicConstant.FILE_CHANNEL_CONTEXT);

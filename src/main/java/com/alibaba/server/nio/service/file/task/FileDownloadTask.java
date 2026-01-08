@@ -14,13 +14,15 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 文件写任务处理
+ * 
  * @author spring
- * */
+ */
 @Slf4j
 @SuppressWarnings("all")
 public final class FileDownloadTask implements Runnable {
     private SocketChannelContext socketChannelContext;
     private Map<String, Object> map;
+
     public FileDownloadTask(Map<String, Object> map) {
         this.map = map;
         this.socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
@@ -37,25 +39,33 @@ public final class FileDownloadTask implements Runnable {
                     e.printStackTrace();
                 }
             }
-            //log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileDownloadTask | --> success acquire lock, thread = {}", Thread.currentThread().getName());
+            // log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ]
+            // FileDownloadTask | --> success acquire lock, thread = {}",
+            // Thread.currentThread().getName());
 
             // 2、数据处理
             this.handler();
         } catch (Exception e) {
             e.printStackTrace();
             // 结束执行单元
-            log.error("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileDownloadTask | --> thread = {}, error = {}", Thread.currentThread().getName() , e.getMessage());
+            log.error(
+                    "[ " + LocalTime.formatDate(LocalDateTime.now())
+                            + " ] FileDownloadTask | --> thread = {}, error = {}",
+                    Thread.currentThread().getName(), e.getMessage());
         } finally {
             BasicServer.fileLock.unlock();
 
             // 删除已处理的帧
-            this.socketChannelContext.getTransportProtocol().getRealList().clear();
-            //log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ] FileDownloadTask | --> success release lock, thread = {}", Thread.currentThread().getName());
+            this.socketChannelContext.getRealList().clear();
+            // log.info("[ " + LocalTime.formatDate(LocalDateTime.now()) + " ]
+            // FileDownloadTask | --> success release lock, thread = {}",
+            // Thread.currentThread().getName());
         }
     }
 
     private void handler() throws IOException {
-        //((DefaultChannelPipeLine) this.socketChannelContext.getChannelPipeLine()).executeHandler(this.map);
+        // ((DefaultChannelPipeLine)
+        // this.socketChannelContext.getChannelPipeLine()).executeHandler(this.map);
     }
 
 }

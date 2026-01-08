@@ -53,7 +53,7 @@ public class ChatRealDataHandler extends AbstractChannelHandler {
         Map<String, Object> map = (Map<String, Object>) o;
         SocketChannelContext socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
         SocketChannel socketChannel = socketChannelContext.getSocketChannel();
-        List<Object> realList = socketChannelContext.getTransportProtocol().getRealList();
+        List<Object> realList = socketChannelContext.getRealList();
         if (CollectionUtils.isEmpty(realList)) {
             return;
         }

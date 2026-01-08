@@ -18,7 +18,7 @@ import java.util.*;
  * 聊天读事件原始数据解码处理器
  *
  * @author spring
- * */
+ */
 
 @Slf4j
 @SuppressWarnings("all")
@@ -29,31 +29,33 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
         Map<String, Object> map = (Map<String, Object>) o;
         SocketChannelContext socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
         List<ChannelEventModel.GroupData> completeList = (List<ChannelEventModel.GroupData>) map.get("COMPLETE_LIST");
-        if(CollectionUtils.isEmpty(completeList)) {
+        if (CollectionUtils.isEmpty(completeList)) {
             return;
         }
 
         // 解析数据
-        for(ChannelEventModel.GroupData groupData : completeList) {
+        for (ChannelEventModel.GroupData groupData : completeList) {
             this.parseBytes(groupData, socketChannelContext, channelContext);
         }
     }
 
     /**
      * 解码字节数据
-     * @param groupData  原始数据对象
+     * 
+     * @param groupData            原始数据对象
      * @param socketChannelContext
      * @param channelContext
-     * */
-    private void parseBytes(ChannelEventModel.GroupData groupData, SocketChannelContext socketChannelContext, ChannelContext channelContext) {
+     */
+    private void parseBytes(ChannelEventModel.GroupData groupData, SocketChannelContext socketChannelContext,
+            ChannelContext channelContext) {
         // 是否开始读取具体数据
         boolean isBeginReadData = true, isRetainLastPacket = false;
         int i = 0;
         ChatMessageFrame chatMessageFrame = null;
         while (i < groupData.getLength()) {
-            if(isBeginReadData) {
+            if (isBeginReadData) {
                 // 每次进行新的帧解析需要判断剩余字节数据是否够一帧的基本数据,不够三个字节，则不进行处理，等待下次数据到来一并处理,如果符合该if，则一定是原始数据list最后一个包的数据，此时只要将该包的数据状态更新即可
-                if(groupData.getLength() - i < ChatMessageFrame.COMMON) {
+                if (groupData.getLength() - i < ChatMessageFrame.COMMON) {
                     isRetainLastPacket = true;
                     break;
                 }
@@ -63,7 +65,8 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
                 isBeginReadData = false;
             } else {
                 // 判断帧类型是否为空或需要读取的真实数据长度是否为
-                if(chatMessageFrame.getFrameType() == null || chatMessageFrame.getFrameLength() == null || chatMessageFrame.getFrameLength() == 0) {
+                if (chatMessageFrame.getFrameType() == null || chatMessageFrame.getFrameLength() == null
+                        || chatMessageFrame.getFrameLength() == 0) {
                     // 有可能存在读取某帧时出现三个字节中在解析帧类型或是帧长度出现问题，此处导致死循环，释放不了锁，解决方案为逃过当前三个字节，尝试解析下一个帧的三个字节,从而辅助跳出while循环
                     i = i + 3;
                     isBeginReadData = true;
@@ -73,7 +76,7 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
                 // 读取相应长度的数据
                 byte[] content = new byte[chatMessageFrame.getFrameLength()];
                 int k = 0;
-                for(int j = i; j < (i + content.length); j++) {
+                for (int j = i; j < (i + content.length); j++) {
                     content[k] = groupData.getBytes()[j];
                     k++;
                 }
@@ -84,7 +87,7 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
                 } catch (UnsupportedEncodingException e) {
                     e.printStackTrace();
                 }
-                socketChannelContext.getTransportProtocol().getRealList().add(chatMessageFrame);
+                socketChannelContext.getRealList().add(chatMessageFrame);
 
                 // 设置下一个新数据帧读取索引位置，即需要开始解析新的帧
                 i = i + content.length;
@@ -95,12 +98,13 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
     }
 
     /**
-     * @param k 当前字节数据解析索引位置
+     * @param k                当前字节数据解析索引位置
      * @param groupData
      * @param chatMessageFrame 当前帧数据
      * @return
      */
-    private Integer parseFrameBasicInfo(Integer k, ChannelEventModel.GroupData groupData, ChatMessageFrame chatMessageFrame) {
+    private Integer parseFrameBasicInfo(Integer k, ChannelEventModel.GroupData groupData,
+            ChatMessageFrame chatMessageFrame) {
         // 是否是结束帧
         chatMessageFrame.setEndFrame(groupData.getBytes()[k]);
         // 解析帧类型
@@ -115,17 +119,19 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
 
     /**
      * 解析帧类型
+     * 
      * @param b
      * @param chatMessageFrame
      * @return
-     * */
+     */
     private void getFrameType(byte b, ChatMessageFrame chatMessageFrame) {
         StringBuilder stringBuilder = new StringBuilder(Integer.toBinaryString(b));
         while (stringBuilder.toString().length() != 8) {
             stringBuilder.insert(0, "0");
         }
 
-        ChatMessageFrame.FrameType frameType = ((Map<String, ChatMessageFrame.FrameType>) BasicServer.getMap().get(BasicConstant.CHAT_MESSAGE_FRAME_TYPE)).get(stringBuilder.toString());
+        ChatMessageFrame.FrameType frameType = ((Map<String, ChatMessageFrame.FrameType>) BasicServer.getMap()
+                .get(BasicConstant.CHAT_MESSAGE_FRAME_TYPE)).get(stringBuilder.toString());
         chatMessageFrame.setFrameType(frameType);
     }
 
@@ -137,7 +143,7 @@ public class ChatDecodeHandler extends AbstractChannelHandler {
      * @param chatMessageFrame
      *
      * @return
-     * */
+     */
     private void getFrameLength(byte b1, byte b2, ChatMessageFrame chatMessageFrame) {
         byte[] shortBytes = new byte[2];
         shortBytes[0] = b1;

@@ -58,7 +58,7 @@ public final class FileUploadTask implements Runnable {
             BasicServer.fileLock.unlock();
 
             // 删除已处理的帧,如果不清空，会导致数据重复处理
-            this.socketChannelContext.getTransportProtocol().getRealList().clear();
+            this.socketChannelContext.getRealList().clear();
         }
     }
 

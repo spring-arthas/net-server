@@ -4,10 +4,7 @@ import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.pipe.standard.DefaultChannelPipeLine;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
-import com.alibaba.server.nio.handler.worker.WorkerThreadPool;
 import com.alibaba.server.nio.model.SocketChannelContext;
-import com.alibaba.server.nio.model.TransportDataModel;
-import com.alibaba.server.nio.model.TransportProtocol;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.nio.service.chat.handler.ChatDecodeHandler;
 import com.alibaba.server.nio.service.chat.handler.ChatRealDataHandler;
@@ -124,10 +121,7 @@ public class SubReactor implements Runnable {
         socketChannelContext.setLocalAddress(NioServerContext.getLocalAddress(socketChannel));
         socketChannelContext.setRemoteAddress(NioServerContext.getRemoteAddress(socketChannel));
         socketChannelContext.setChannelPipeLine(new DefaultChannelPipeLine());
-        TransportProtocol transportProtocol = new TransportProtocol();
-        transportProtocol.setSocketChannel(socketChannel);
-        transportProtocol.setRealList(new CopyOnWriteArrayList<>());
-        socketChannelContext.setTransportProtocol(transportProtocol);
+        socketChannelContext.setSocketChannel(socketChannel);
         socketChannelContext.setByteBuffer(
                 ByteBuffer.allocateDirect(Integer.parseInt(NioServerContext.getValue(BasicConstant.BYTEBUFFER))));
 

@@ -15,8 +15,9 @@ import java.util.Map;
 
 /**
  * 文件下载实时流处理
+ * 
  * @author spring
- * */
+ */
 
 @Slf4j
 @SuppressWarnings("all")
@@ -33,15 +34,17 @@ public class FileDownloadTransportStreamHandler extends AbstractChannelHandler {
         SocketChannelContext socketChannelContext = (SocketChannelContext) map.get("SOCKET_CHANNEL_CONTEXT");
 
         // 1、处理文件数据(realList 中可能包含多个待处理文件)
-        List<Object> realList = socketChannelContext.getTransportProtocol().getRealList();
-        for(Object obj : realList) { // --> 每一个 [FileMessageFrame] 帧均为一个待下载的文件请求
+        List<Object> realList = socketChannelContext.getRealList();
+        for (Object obj : realList) { // --> 每一个 [FileMessageFrame] 帧均为一个待下载的文件请求
             FileMessageFrame fileMessageFrame = (FileMessageFrame) obj;
 
             // 获取当前用户待发送的文件信息
             UserQueryParam userQueryParam = new UserQueryParam();
             userQueryParam.setUserName(fileMessageFrame.getFileTransport().getLaunchUserName());
-            UserDTO userDto = ((UserService) BasicServer.classPathXmlApplicationContext.getBean(UserService.class)).getOnlineUser(userQueryParam);
-            Map<String, Object> currentDownloadFileMap = userDto.getDownloadFileMap().get(fileMessageFrame.getFileTransport().getTag());
+            UserDTO userDto = ((UserService) BasicServer.classPathXmlApplicationContext.getBean(UserService.class))
+                    .getOnlineUser(userQueryParam);
+            Map<String, Object> currentDownloadFileMap = userDto.getDownloadFileMap()
+                    .get(fileMessageFrame.getFileTransport().getTag());
 
             // 开启异步线程直接发送文件
             super.addFileDownloadTask(currentDownloadFileMap, socketChannelContext);
