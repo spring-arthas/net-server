@@ -4,9 +4,9 @@ import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.handler.event.EventHandlerContext;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.model.ChannelEventModel;
-import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -16,21 +16,22 @@ import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @Auther: YSFY
+ * 文本传输选择器(包含聊天和网盘文件夹处理)
+ * @Auther: duyao
  * @Date: 2020-11-21 10:38
  * @Pacage_name: com.alibaba.server.nio.selector
  * @Project_Name: net-server
- * @Description: 聊天Selector
+ * @Description: TextTransmissionSelector
  */
 
 @Slf4j
 @SuppressWarnings("all")
-public class MainChatSelector extends AbstractSelector implements Runnable {
+public class TextTransmissionSelector extends AbstractSelector implements Runnable {
 
     @Override
     public void run() {
         // 1、获取Selector
-        Selector selector = super.getCheck(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR);
+        Selector selector = super.getCheck(BasicConstant.NIO_SERVER_MAIN_CORE_TEXT_SELECTOR);
 
         // 2、启动Selector轮询
         Integer SELECTOR_POLL_TIMEOUT = Integer.parseInt(NioServerContext.getValue(BasicConstant.SELECTOR_POLL_TIMEOUT));
@@ -43,21 +44,14 @@ public class MainChatSelector extends AbstractSelector implements Runnable {
 
                 Iterator iterator = selector.selectedKeys().iterator();
                 while (iterator.hasNext()) {
-                    ChannelEventModel eventModel = new ChannelEventModel();
-                    SelectionKey selectionKey = (SelectionKey) iterator.next();
-                    eventModel.setSelectionKey(selectionKey);
-                    if(selectionKey.channel() instanceof SocketChannel) {
-                        eventModel.setRemoteAddress(NioServerContext.getRemoteAddress(((SocketChannel) selectionKey.channel())));
-                    }
-                    //eventModel.setEventModelEnum(ChannelEventModelEnum.CHAT_TASK);
+                    ChannelEventModel channelEventModel = new ChannelEventModel();
+                    this.setEventModel(channelEventModel, (SelectionKey) iterator.next());
                     iterator.remove();
-
                     // 执行处理
-                    EventHandlerContext.getEventHandlerContext().execute(eventModel);
+                    EventHandlerContext.getEventHandlerContext().execute(channelEventModel);
                 }
             } catch (Exception e) {
-                log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] MainChatSelector | --> selector handle selectionKey error, error = {}", e.getMessage());
-                e.printStackTrace();
+                log.error("TextTransmissionSelector事件处理：多路复用处理错误, error = {}", ExceptionUtils.getStackTrace(e));
             }
         }
     }

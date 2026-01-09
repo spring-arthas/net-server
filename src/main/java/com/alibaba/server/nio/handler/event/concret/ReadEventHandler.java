@@ -76,26 +76,14 @@ public class ReadEventHandler extends AbstractEventHandler {
         if (Objects.equals(FrameReadResultEnum.END, frameReadResultEnum)) { // 通道关闭直接返回，内部已经完成了资源的释放
             return;
         }
-        // 3. 按需处理已经完成读取的字节数据
-        // 3.1 如果当前读事件对应的通道为文本处理通道，则按照文本方式处理
-        if (Objects.equals(ChannelEventModelEnum.TEXT_TRANSMISSION, channelEventModel.getEventModelEnum())) {
-            this.doTextDataHandle(channelEventModel);
-            return;
-        }
-        // 3.2、如果当前读事件对应的通道为文件处理通道，则按照文件方式处理
-        if (Objects.equals(ChannelEventModelEnum.FILE_UPLOAD, channelEventModel.getEventModelEnum())
-                || Objects.equals(ChannelEventModelEnum.FILE_DOWNLOAD, channelEventModel.getEventModelEnum())) {
-            // 将本次待处理的数据缓存至socketChannelContext中
-            SocketChannelContext socketChannelContext = (SocketChannelContext) channelEventModel.getSelectionKey()
-                    .attachment();
-            TransportDataModel transportDataModel = new TransportDataModel();
-            transportDataModel.setDataType(channelEventModel.getEventModelEnum().getName());
-            transportDataModel.setWaitHandleDataList(channelEventDataCacheModel.getWaitHandleDataList());
-            socketChannelContext.setTransportDataModel(transportDataModel);
-            // 将本次读事件产生的数据传递至事件对应通道的线程内进行处理，注意当前线程依旧是MainFileSelector线程
-            WorkerThreadPool.submit(socketChannelContext);
-        }
-
+        // 3. 将本次待处理的数据缓存至socketChannelContext中
+        SocketChannelContext socketChannelContext = (SocketChannelContext) channelEventModel.getSelectionKey().attachment();
+        TransportDataModel transportDataModel = new TransportDataModel();
+        transportDataModel.setDataType(channelEventModel.getEventModelEnum().getName());
+        transportDataModel.setWaitHandleDataList(channelEventDataCacheModel.getWaitHandleDataList());
+        socketChannelContext.setTransportDataModel(transportDataModel);
+        // 将本次读事件产生的数据传递至事件对应通道的线程内进行处理
+        WorkerThreadPool.submit(socketChannelContext);
         // 4. 释放缓存数据:【修复】：清空 completeList，防止数据重复处理
         channelEventDataCacheModel.getWaitHandleDataList().clear();
 
@@ -226,37 +214,5 @@ public class ReadEventHandler extends AbstractEventHandler {
      * @param channelEventModel
      */
     private void doTextDataHandle(ChannelEventModel channelEventModel) {
-        channelEventModel.setIndex((chatIndex > Integer.MAX_VALUE) ? 0 : chatIndex++);
-
-        // 2.1、获取当前通道对应的subReactor线程
-        SubReactor reactor = GlobalMainReactor
-                .getSubReactorForSocketChannel((SocketChannel) channelEventModel.getSelectionKey().channel());
-        if (!Optional.ofNullable(reactor).isPresent()) {
-            // 为空，表示没有找到当前通道对应的Subreacto线程，有可能为之前用户下线导致清除了用户对应的SubReactor线程，但是socketChannel并未断开，故此时重新建立新的Subreactor即可
-            this.registerSubReactor(channelEventModel, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR);
-            return;
-        }
-
-        // 2.2、将当前通道触发的读事件数据 --> 加入当前SocketChannel连接对应的的Subreactor线程数据处理队列, 可用空间必须大于0
-        if (reactor.getQueue().remainingCapacity() > 0) {
-            // Map<String, Object> queueMap = new HashMap<>();
-            // queueMap.put("SOCKET_CHANNEL_CONTEXT",
-            // channelEventModel.getSelectionKey().attachment());
-            // queueMap.put("COMPLETE_LIST", channelEventModel.getWaitHandleDataList());
-            // reactor.getQueue().offer(queueMap);
-            //
-            // // 【修复】：清空 completeList，防止数据重复处理
-            // // completeList 已经传递给下游，必须清空，否则下次读事件会携带旧数据
-            // channelEventModel.getWaitHandleDataList().clear();
-            return;
-        }
-
-        log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
-                + " ] ReadEventHandler | --> 聊天服务通道 [{}] 对应的SubReactor线程数据处理队列已满, 队列可用空间 = [{}], address = {}, thread = {}",
-                ((SocketChannelContext) channelEventModel.getSelectionKey().attachment()).getRemoteAddress(),
-                reactor.getQueue().remainingCapacity(), Thread.currentThread().getName());
-
-        // 【修复】：队列满时不丢弃数据，保持 completeList 不清空，等待下次重试
-        // 但需要注意：如果队列长时间满载，会导致内存累积
     }
 }

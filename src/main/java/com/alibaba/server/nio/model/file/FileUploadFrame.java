@@ -45,7 +45,47 @@ public class FileUploadFrame {
         /**
          * 确认帧：服务端发送给客户端的确认响应
          */
-        ACK_FRAME(0x04, "确认帧");
+        ACK_FRAME(0x04, "确认帧"),
+
+        // ========== 目录操作帧 (0x10-0x1F) ==========
+        /**
+         * 目录新建请求
+         */
+        DIR_CREATE_REQ(0x10, "目录新建请求"),
+        /**
+         * 目录删除请求
+         */
+        DIR_DELETE_REQ(0x11, "目录删除请求"),
+        /**
+         * 目录更新请求
+         */
+        DIR_UPDATE_REQ(0x12, "目录更新请求"),
+        /**
+         * 目录移动请求
+         */
+        DIR_MOVE_REQ(0x13, "目录移动请求"),
+        /**
+         * 目录操作响应
+         */
+        DIR_RESPONSE(0x14, "目录操作响应"),
+
+        // ========== 目录文件上传帧 (0x20-0x2F) ==========
+        /**
+         * 目录文件元数据帧
+         */
+        DIR_FILE_META(0x20, "目录文件元数据"),
+        /**
+         * 目录文件数据帧
+         */
+        DIR_FILE_DATA(0x21, "目录文件数据"),
+        /**
+         * 目录文件结束帧
+         */
+        DIR_FILE_END(0x22, "目录文件结束"),
+        /**
+         * 目录文件确认帧
+         */
+        DIR_FILE_ACK(0x23, "目录文件确认");
 
         private final int code;
         private final String description;

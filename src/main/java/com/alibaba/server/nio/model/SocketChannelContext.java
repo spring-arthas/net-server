@@ -41,7 +41,7 @@ public class SocketChannelContext {
 
     /**
      * Handler 类型标识（用于区分上传/下载）
-     * 值为 "UPLOAD" 或 "DOWNLOAD"
+     * 值为 "UPLOAD" 或 "DOWNLOAD" 或 "TEXT"
      */
     private String handlerType;
 

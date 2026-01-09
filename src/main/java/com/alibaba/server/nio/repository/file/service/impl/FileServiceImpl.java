@@ -248,7 +248,7 @@ public class FileServiceImpl implements FileService {
     @Override
     public FileDto getFileById(FileQueryParam fileQueryParam) {
         FileDo fileDo = this.fileRepository.get(fileQueryParam.getId());
-        if(Objects.isNull(fileDo)) {
+        if (Objects.isNull(fileDo)) {
             return null;
         }
         return this.doToDto(fileDo);
@@ -350,5 +350,242 @@ public class FileServiceImpl implements FileService {
                 log.error("删除文件记录失败: fileId={}", fileId, e);
             }
         }
+    }
+
+    // ========== 目录操作实现 ==========
+
+    /**
+     * 顶层目录ID
+     */
+    private static final Long ROOT_DIR_ID = 7408085068658278401L;
+
+    /**
+     * 目录名最大长度
+     */
+    private static final int MAX_DIR_NAME_LENGTH = 5;
+
+    @Override
+    public FileDto createDirectory(Long parentId, String dirName) {
+        // 1. 校验参数
+        if (parentId == null || dirName == null || dirName.trim().isEmpty()) {
+            throw new IllegalArgumentException("参数无效");
+        }
+        dirName = dirName.trim();
+        if (dirName.length() > MAX_DIR_NAME_LENGTH) {
+            throw new IllegalArgumentException("目录名称超过" + MAX_DIR_NAME_LENGTH + "个字符");
+        }
+
+        // 2. 校验父目录是否存在且为目录
+        if (!isDirectory(parentId)) {
+            throw new IllegalArgumentException("父目录不存在或不是目录类型");
+        }
+
+        // 3. 检查同级是否有重名
+        if (existsSameName(parentId, dirName, null)) {
+            throw new IllegalArgumentException("同级目录已存在同名目录");
+        }
+
+        // 4. 构建文件系统路径并创建目录
+        String parentPath = buildDirectoryPath(parentId);
+        String newDirPath = parentPath + File.separator + dirName;
+        File newDir = new File(newDirPath);
+        if (!newDir.exists()) {
+            if (!newDir.mkdirs()) {
+                throw new RuntimeException("文件系统目录创建失败: " + newDirPath);
+            }
+        }
+
+        // 5. 创建DB记录
+        FileCreateParam createParam = new FileCreateParam();
+        createParam.setPId(parentId);
+        createParam.setFileName(dirName);
+        createParam.setFilePath(newDirPath);
+        createParam.setFileType("NOT_FILE");
+        createParam.setIsFile(YesOrNoEnum.N.name());
+        createParam.setIsExist(YesOrNoEnum.Y.name());
+        createParam.setHasChild(YesOrNoEnum.N.name());
+        createParam.setUserName("system");
+        FileDo fileDo = this.createParamToDo(createParam);
+        this.fileRepository.insertSelective(fileDo);
+
+        // 6. 更新父目录的hasChild状态
+        FileDo parentUpdate = new FileDo();
+        parentUpdate.setId(parentId);
+        parentUpdate.setHasChild(YesOrNoEnum.Y.name());
+        this.fileRepository.updateSelective(parentUpdate);
+
+        log.info("创建目录成功: id={}, name={}, path={}", fileDo.getId(), dirName, newDirPath);
+        return this.doToDto(fileDo);
+    }
+
+    @Override
+    public boolean deleteDirectory(Long dirId) {
+        // 1. 校验目录存在
+        FileDo dirDo = this.fileRepository.get(dirId);
+        if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
+            throw new IllegalArgumentException("目录不存在");
+        }
+
+        // 2. 检查是否有子项
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setPId(dirId);
+        queryParam.setDel(YesOrNoEnum.N.name());
+        List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
+        if (!CollectionUtils.isEmpty(children)) {
+            throw new IllegalStateException("目录下存在子项，无法删除");
+        }
+
+        // 3. 删除文件系统目录
+        String dirPath = buildDirectoryPath(dirId);
+        File dir = new File(dirPath);
+        if (dir.exists() && dir.isDirectory()) {
+            if (!dir.delete()) {
+                throw new RuntimeException("文件系统目录删除失败: " + dirPath);
+            }
+        }
+
+        // 4. 删除DB记录
+        this.fileRepository.delete(dirId);
+
+        log.info("删除目录成功: id={}, path={}", dirId, dirPath);
+        return true;
+    }
+
+    @Override
+    public FileDto updateDirectory(Long dirId, String newName) {
+        // 1. 校验参数
+        if (newName == null || newName.trim().isEmpty()) {
+            throw new IllegalArgumentException("新名称不能为空");
+        }
+        newName = newName.trim();
+        if (newName.length() > MAX_DIR_NAME_LENGTH) {
+            throw new IllegalArgumentException("目录名称超过" + MAX_DIR_NAME_LENGTH + "个字符");
+        }
+
+        // 2. 获取目录信息
+        FileDo dirDo = this.fileRepository.get(dirId);
+        if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
+            throw new IllegalArgumentException("目录不存在");
+        }
+
+        // 3. 检查同级重名（排除自身）
+        if (existsSameName(dirDo.getPId(), newName, dirId)) {
+            throw new IllegalArgumentException("同级目录已存在同名目录");
+        }
+
+        // 4. 重命名文件系统目录
+        String oldPath = buildDirectoryPath(dirId);
+        String parentPath = oldPath.substring(0, oldPath.lastIndexOf(File.separator));
+        String newPath = parentPath + File.separator + newName;
+        File oldDir = new File(oldPath);
+        File newDir = new File(newPath);
+        if (oldDir.exists() && oldDir.isDirectory()) {
+            if (!oldDir.renameTo(newDir)) {
+                throw new RuntimeException("文件系统目录重命名失败");
+            }
+        }
+
+        // 5. 更新DB记录
+        FileDo updateDo = new FileDo();
+        updateDo.setId(dirId);
+        updateDo.setFileName(newName);
+        updateDo.setFilePath(newPath);
+        updateDo.setGmtModified(new Date());
+        this.fileRepository.updateSelective(updateDo);
+
+        log.info("更新目录成功: id={}, newName={}", dirId, newName);
+        return this.doToDto(this.fileRepository.get(dirId));
+    }
+
+    @Override
+    public FileDto moveDirectory(Long dirId, Long targetParentId) {
+        // 1. 校验目标父目录
+        if (!isDirectory(targetParentId)) {
+            throw new IllegalArgumentException("目标父目录不存在或不是目录类型");
+        }
+
+        // 2. 获取目录信息
+        FileDo dirDo = this.fileRepository.get(dirId);
+        if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
+            throw new IllegalArgumentException("目录不存在");
+        }
+
+        // 3. 检查目标目录下是否有同名
+        if (existsSameName(targetParentId, dirDo.getFileName(), null)) {
+            throw new IllegalArgumentException("目标目录下已存在同名目录");
+        }
+
+        // 4. 移动文件系统目录
+        String oldPath = buildDirectoryPath(dirId);
+        String targetParentPath = buildDirectoryPath(targetParentId);
+        String newPath = targetParentPath + File.separator + dirDo.getFileName();
+        File oldDir = new File(oldPath);
+        File newDir = new File(newPath);
+        if (oldDir.exists() && oldDir.isDirectory()) {
+            if (!oldDir.renameTo(newDir)) {
+                throw new RuntimeException("文件系统目录移动失败");
+            }
+        }
+
+        // 5. 更新DB记录
+        FileDo updateDo = new FileDo();
+        updateDo.setId(dirId);
+        updateDo.setPId(targetParentId);
+        updateDo.setFilePath(newPath);
+        updateDo.setGmtModified(new Date());
+        this.fileRepository.updateSelective(updateDo);
+
+        // 6. 更新目标父目录的hasChild状态
+        FileDo parentUpdate = new FileDo();
+        parentUpdate.setId(targetParentId);
+        parentUpdate.setHasChild(YesOrNoEnum.Y.name());
+        this.fileRepository.updateSelective(parentUpdate);
+
+        log.info("移动目录成功: id={}, targetParentId={}", dirId, targetParentId);
+        return this.doToDto(this.fileRepository.get(dirId));
+    }
+
+    @Override
+    public boolean isDirectory(Long id) {
+        if (id == null) {
+            return false;
+        }
+        FileDo fileDo = this.fileRepository.get(id);
+        return fileDo != null && YesOrNoEnum.N.name().equals(fileDo.getIsFile());
+    }
+
+    @Override
+    public String buildDirectoryPath(Long dirId) {
+        if (dirId == null) {
+            return "";
+        }
+        FileDo fileDo = this.fileRepository.get(dirId);
+        if (fileDo == null) {
+            return "";
+        }
+        // 如果是顶层目录，直接返回其路径
+        if (fileDo.getPId() == null || fileDo.getPId() == -1L) {
+            return fileDo.getFilePath();
+        }
+        // 递归构建路径
+        String parentPath = buildDirectoryPath(fileDo.getPId());
+        return parentPath + File.separator + fileDo.getFileName();
+    }
+
+    @Override
+    public boolean existsSameName(Long parentId, String dirName, Long excludeId) {
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setPId(parentId);
+        queryParam.setFileName(dirName);
+        queryParam.setIsFile(YesOrNoEnum.N.name());
+        queryParam.setDel(YesOrNoEnum.N.name());
+        List<FileDo> list = this.fileRepository.getAssignFiles(queryParam);
+        if (CollectionUtils.isEmpty(list)) {
+            return false;
+        }
+        if (excludeId == null) {
+            return true;
+        }
+        return list.stream().anyMatch(f -> !f.getId().equals(excludeId));
     }
 }

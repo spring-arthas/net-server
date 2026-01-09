@@ -6,8 +6,20 @@
   <component name="ChangeListManager">
     <list default="true" id="1617b815-b451-4fb9-a7bb-1acb12c00284" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/common/BasicConstant.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/common/BasicConstant.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileDownloadHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileDownloadHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/MainChatAcceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/TextTransmissionAcceptor.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/CoreServer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/CoreServer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/ReadEventHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/event/concret/ReadEventHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/worker/WorkerThreadPool.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/handler/worker/WorkerThreadPool.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/SocketChannelContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/SocketChannelContext.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/file/FileUploadFrame.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/file/FileUploadFrame.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/FileService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/FileService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/impl/FileServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/impl/FileServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/AbstractSelector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/AbstractSelector.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/MainChatSelector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/TextTransmissionSelector.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileRemoteTransportHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/FileDirectoryHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/resources/server.properties" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/server.properties" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -436,7 +448,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767869730960</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="修改WorkerThreadPool增加文件下载处理">
+      <option name="closed" value="true" />
+      <created>1767873719876</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1767873719876</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

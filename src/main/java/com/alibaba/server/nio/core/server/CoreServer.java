@@ -1,7 +1,7 @@
 package com.alibaba.server.nio.core.server;
 
 import com.alibaba.server.common.BasicConstant;
-import com.alibaba.server.nio.acceptor.MainChatAcceptor;
+import com.alibaba.server.nio.acceptor.TextTransmissionAcceptor;
 import com.alibaba.server.nio.acceptor.MainFileDownloadAcceptor;
 import com.alibaba.server.nio.acceptor.MainFileUploadAcceptor;
 import com.alibaba.server.nio.core.page.PaginatedListObjFactory;
@@ -13,7 +13,7 @@ import com.alibaba.server.nio.handler.event.concret.ConnectEventHandler;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteEventHandler;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
-import com.alibaba.server.nio.selector.MainChatSelector;
+import com.alibaba.server.nio.selector.TextTransmissionSelector;
 import com.alibaba.server.nio.selector.MainFileSelector;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.logging.stdout.StdOutImpl;
@@ -63,7 +63,7 @@ public class CoreServer {
     private static void startup() throws IOException {
         // 启动Spring IOC容器
         NioServerContext.startupIocContainer();
-        // 启动聊天和文件多路复用选择器
+        // 启动文本和文件操作多路复用选择器
         startupSelector();
         // 创建聊天、文件上传和下载的Acceptor线程，即用于监听客户端连接
         startupMainAcceptor();
@@ -75,13 +75,10 @@ public class CoreServer {
      * @throws IOException
      */
     private static void startupSelector() throws IOException {
-        create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_SELECTOR, new MainChatSelector(),
+        create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_TEXT_SELECTOR, new TextTransmissionSelector(),
                 Boolean.TRUE);
         create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR, new MainFileSelector(),
                 Boolean.TRUE);
-        // create(BasicConstant.SELECTOR,
-        // BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_SELECTOR, new
-        // MainWebSocketSelector(), Boolean.TRUE);
     }
 
     /**
@@ -92,7 +89,7 @@ public class CoreServer {
     private static void startupMainAcceptor() throws IOException {
         create(BasicConstant.ACCEPTOR,
                 ChannelEventModelEnum.TEXT_TRANSMISSION.getName(),
-                new MainChatAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR),
+                new TextTransmissionAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_TEXT_ACCEPTOR),
                 Boolean.FALSE);
         create(BasicConstant.ACCEPTOR,
                 ChannelEventModelEnum.FILE_UPLOAD.getName(),
@@ -102,10 +99,6 @@ public class CoreServer {
                 ChannelEventModelEnum.FILE_DOWNLOAD.getName(),
                 new MainFileDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR),
                 Boolean.FALSE);
-        // create(BasicConstant.ACCEPTOR,
-        // BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR, new
-        // MainWebSocketAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR),
-        // Boolean.FALSE);
     }
 
     /**

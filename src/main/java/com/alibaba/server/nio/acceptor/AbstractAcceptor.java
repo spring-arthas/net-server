@@ -6,6 +6,7 @@ import com.alibaba.server.nio.handler.pipe.standard.DefaultChannelPipeLine;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.model.TransportProtocol;
+import com.alibaba.server.nio.model.chat.ChatMessageFrame;
 import com.alibaba.server.nio.service.file.handler.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -84,24 +85,19 @@ public class AbstractAcceptor {
         if (StringUtils.isBlank(ip) || StringUtils.isEmpty(ip)) {
             throw new RuntimeException("ServerSocektChannle Listener Ip is empty or blank");
         }
-
         String port = "";
-        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_CHAT_ACCEPTOR, assign)) {
-            port = NioServerContext.getValue(BasicConstant.NIO_MESSAGE_PORT);
+        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_TEXT_ACCEPTOR, assign)) { // 文本传输端口
+            port = NioServerContext.getValue(BasicConstant.NIO_TEXT_PORT);
         }
-
-        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR, assign)) {
+        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_UPLOAD_ACCEPTOR, assign)) { // 文件上传端口
             port = NioServerContext.getValue(BasicConstant.NIO_FILE_UPLOAD_PORT);
         }
-
-        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR, assign)) {
+        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR, assign)) { // 文件下载端口
             port = NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT);
         }
-
-        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR, assign)) {
+        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR, assign)) { // WebSocket端口
             port = NioServerContext.getValue(BasicConstant.NIO_WEBSOCKET_PORT);
         }
-
         if (StringUtils.isBlank(ip) || StringUtils.isEmpty(ip)) {
             throw new RuntimeException("ServerSocektChannle Listener port is empty or blank");
         }
@@ -163,9 +159,11 @@ public class AbstractAcceptor {
         // 3、注册通道数据处理器
         socketChannelContext.setChannelFlag(BasicConstant.FILE_CHANNEL_CONTEXT);
         socketChannelContext.getChannelPipeLine().addHandler(
-                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler());
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDirectoryHandler()); // 文件夹处理器
         socketChannelContext.getChannelPipeLine().addHandler(
-                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler());
+            new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
+        socketChannelContext.getChannelPipeLine().addHandler(
+            new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
 
         // socketChannelContext.getChannelPipeLine().addHandler(new
         // SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new

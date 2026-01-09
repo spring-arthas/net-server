@@ -75,4 +75,69 @@ public interface FileService {
      * @param fileId
      */
     void deleteFileById(Long fileId);
+
+    // ========== 目录操作接口 ==========
+
+    /**
+     * 创建目录（DB + 文件系统）
+     * 
+     * @param parentId 父目录ID
+     * @param dirName  目录名称（≤5字符）
+     * @return 创建的目录信息
+     * @throws IllegalArgumentException 名称过长或参数无效
+     */
+    FileDto createDirectory(Long parentId, String dirName);
+
+    /**
+     * 删除目录（DB + 文件系统）
+     * 
+     * @param dirId 目录ID
+     * @return true=成功
+     * @throws IllegalStateException 目录下有子项
+     */
+    boolean deleteDirectory(Long dirId);
+
+    /**
+     * 更新目录名称（DB + 文件系统）
+     * 
+     * @param dirId   目录ID
+     * @param newName 新名称（≤5字符，同级不重复）
+     * @return 更新后的目录信息
+     */
+    FileDto updateDirectory(Long dirId, String newName);
+
+    /**
+     * 移动目录（DB + 文件系统）
+     * 
+     * @param dirId          目录ID
+     * @param targetParentId 目标父目录ID
+     * @return 移动后的目录信息
+     */
+    FileDto moveDirectory(Long dirId, Long targetParentId);
+
+    /**
+     * 检查指定ID是否为目录类型
+     * 
+     * @param id 文件/目录ID
+     * @return true=是目录
+     */
+    boolean isDirectory(Long id);
+
+    /**
+     * 构建目录的完整文件系统路径（递归拼接）
+     * 
+     * @param dirId 目录ID
+     * @return 完整路径
+     */
+    String buildDirectoryPath(Long dirId);
+
+    /**
+     * 检查同级目录下是否存在同名目录
+     * 
+     * @param parentId  父目录ID
+     * @param dirName   目录名称
+     * @param excludeId 排除的目录ID（用于更新时排除自身）
+     * @return true=存在重名
+     */
+    boolean existsSameName(Long parentId, String dirName, Long excludeId);
 }
