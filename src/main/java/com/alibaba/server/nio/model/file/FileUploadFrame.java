@@ -85,7 +85,29 @@ public class FileUploadFrame {
         /**
          * 目录文件确认帧
          */
-        DIR_FILE_ACK(0x23, "目录文件确认");
+        DIR_FILE_ACK(0x23, "目录文件确认"),
+
+        // ========== 用户认证帧 (0x30-0x3F) ==========
+        /**
+         * 用户注册请求
+         */
+        USER_REGISTER_REQ(0x30, "用户注册请求"),
+        /**
+         * 用户登录请求
+         */
+        USER_LOGIN_REQ(0x31, "用户登录请求"),
+        /**
+         * 用户修改密码请求
+         */
+        USER_CHANGE_PWD_REQ(0x32, "用户修改密码请求"),
+        /**
+         * 用户退出登录请求
+         */
+        USER_LOGOUT_REQ(0x33, "用户退出登录请求"),
+        /**
+         * 用户操作响应
+         */
+        USER_RESPONSE(0x34, "用户操作响应");
 
         private final int code;
         private final String description;

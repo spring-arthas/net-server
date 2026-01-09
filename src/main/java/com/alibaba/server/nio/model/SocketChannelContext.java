@@ -61,4 +61,31 @@ public class SocketChannelContext {
      */
     private java.util.concurrent.ConcurrentLinkedQueue<java.nio.ByteBuffer> pendingWriteQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
+    /**
+     * 通道属性（用于存储登录用户信息等）
+     */
+    private java.util.concurrent.ConcurrentHashMap<String, Object> attributes = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 设置属性
+     */
+    public void putAttribute(String key, Object value) {
+        if (key != null && value != null) {
+            attributes.put(key, value);
+        }
+    }
+
+    /**
+     * 获取属性
+     */
+    public Object getAttribute(String key) {
+        return key == null ? null : attributes.get(key);
+    }
+
+    /**
+     * 移除属性
+     */
+    public Object removeAttribute(String key) {
+        return key == null ? null : attributes.remove(key);
+    }
 }

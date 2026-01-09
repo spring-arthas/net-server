@@ -127,10 +127,14 @@ public class AbstractAcceptor {
         socketChannel.socket().setSoLinger(true, 20);
         // 对ServerSocket来说表示等待连接的最长空等待时间; 对Socket来说表示读数据最长空等待时间。
         socketChannel.socket().setSoTimeout(Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_TIMEOUT)));
-       /* socketChannel.socket().setReceiveBufferSize(
-                Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_RECEIVE_BUFFER_SIZE)));
-        socketChannel.socket()
-                .setSendBufferSize(Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_SEND_BUFFER_SIZE)));*/
+        /*
+         * socketChannel.socket().setReceiveBufferSize(
+         * Integer.parseInt(NioServerContext.getValue(BasicConstant.
+         * SOCKET_RECEIVE_BUFFER_SIZE)));
+         * socketChannel.socket()
+         * .setSendBufferSize(Integer.parseInt(NioServerContext.getValue(BasicConstant.
+         * SOCKET_SEND_BUFFER_SIZE)));
+         */
 
         // 使用 StandardSocketOptions 设置更大的 TCP 缓冲区（优化大文件传输性能）
         try {
@@ -142,7 +146,7 @@ public class AbstractAcceptor {
         } catch (Exception e) {
             log.warn("设置TCP缓冲区失败，使用默认值", e);
         }
-/**/
+        /**/
         // 2、注册SocketChannel，并添加通道附件参数
         SocketChannelContext socketChannelContext = new SocketChannelContext();
         socketChannelContext.setLocalAddress(NioServerContext.getLocalAddress(socketChannel));
@@ -155,13 +159,11 @@ public class AbstractAcceptor {
         // 3、注册通道数据处理器
         socketChannelContext.setChannelFlag(BasicConstant.FILE_CHANNEL_CONTEXT);
         socketChannelContext.getChannelPipeLine().addHandler(
-                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new UserAuthHandler()); // 用户认证处理器
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new TextTransmissionHandler()); // 文本传输处理器（用户认证+目录操作）
         socketChannelContext.getChannelPipeLine().addHandler(
-                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDirectoryHandler()); // 文件夹处理器
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
         socketChannelContext.getChannelPipeLine().addHandler(
-            new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
-        socketChannelContext.getChannelPipeLine().addHandler(
-            new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
 
         // socketChannelContext.getChannelPipeLine().addHandler(new
         // SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new

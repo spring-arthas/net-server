@@ -9,7 +9,7 @@ import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
  * 用户服务
  *
  * @author spring
- * */
+ */
 public interface UserService {
 
     /**
@@ -43,4 +43,36 @@ public interface UserService {
      * @return userDto
      */
     UserDTO getOnlineUser(UserQueryParam param);
+
+    // ========== 用户认证接口 ==========
+
+    /**
+     * 用户注册
+     * 
+     * @param userName 用户名（≤5字符）
+     * @param password 密码
+     * @return 注册成功的用户信息
+     * @throws IllegalArgumentException 用户名过长或已存在
+     */
+    UserDTO register(String userName, String password);
+
+    /**
+     * 用户登录
+     * 
+     * @param userName 用户名
+     * @param password 密码
+     * @return 登录成功的用户信息
+     * @throws IllegalArgumentException 用户名不存在或密码错误
+     */
+    UserDTO login(String userName, String password);
+
+    /**
+     * 修改密码
+     * 
+     * @param userId      用户ID
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     * @throws IllegalArgumentException 旧密码错误
+     */
+    void changePassword(Long userId, String oldPassword, String newPassword);
 }
