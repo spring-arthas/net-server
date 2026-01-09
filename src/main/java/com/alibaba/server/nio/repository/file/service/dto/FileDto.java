@@ -8,6 +8,7 @@ import java.util.List;
 
 /**
  * 文件 Dto
+ * 
  * @author spring
  */
 @Data
@@ -15,7 +16,7 @@ public class FileDto extends BaseDTO {
 
     /**
      * 父id
-     * */
+     */
     private Long pId;
 
     /**
@@ -45,7 +46,7 @@ public class FileDto extends BaseDTO {
 
     /**
      * 是否存在
-     * */
+     */
     private String isExist;
 
     /**
@@ -55,21 +56,31 @@ public class FileDto extends BaseDTO {
 
     /**
      * 如果hasChild为true，则将字节点文件信息最佳到该List中
-     * */
+     */
     private List<FileDto> childFileList;
 
     /**
      * 所属用户
-     * */
+     */
     private String userName;
 
     /**
      * 是否重复创建
-     * */
+     */
     private String repeatCreate;
 
     /**
      * 当前文件夹下的文件总数量
-     * */
+     */
     private Long fileCount;
+
+    /**
+     * 所属用户ID
+     */
+    private Long userId;
+
+    /**
+     * 所属目录名称（用于文件详情展示）
+     */
+    private String parentDirName;
 }

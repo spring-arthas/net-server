@@ -107,7 +107,25 @@ public class FileUploadFrame {
         /**
          * 用户操作响应
          */
-        USER_RESPONSE(0x34, "用户操作响应");
+        USER_RESPONSE(0x34, "用户操作响应"),
+
+        // ========== 文件操作帧 (0x40-0x4F) ==========
+        /**
+         * 文件列表分页请求
+         */
+        FILE_LIST_REQ(0x40, "文件列表请求"),
+        /**
+         * 文件详情请求
+         */
+        FILE_DETAIL_REQ(0x41, "文件详情请求"),
+        /**
+         * 文件删除请求
+         */
+        FILE_DELETE_REQ(0x42, "文件删除请求"),
+        /**
+         * 文件操作响应
+         */
+        FILE_RESPONSE(0x43, "文件操作响应");
 
         private final int code;
         private final String description;

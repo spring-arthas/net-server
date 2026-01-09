@@ -5,8 +5,9 @@ import lombok.Data;
 
 /**
  * 查询文件
+ * 
  * @author spring
- * */
+ */
 
 @Data
 public class FileQueryParam extends PageQueryParam {
@@ -15,7 +16,7 @@ public class FileQueryParam extends PageQueryParam {
 
     /**
      * 父节点
-     * */
+     */
     private Long pId;
 
     /**
@@ -45,7 +46,7 @@ public class FileQueryParam extends PageQueryParam {
 
     /**
      * 是否存在
-     * */
+     */
     private String isExist;
 
     /**
@@ -55,6 +56,11 @@ public class FileQueryParam extends PageQueryParam {
 
     /**
      * 所属用户
-     * */
+     */
     private String userName;
+
+    /**
+     * 所属用户ID
+     */
+    private Long userId;
 }

@@ -148,11 +148,26 @@ public class FileUploadHandler extends AbstractChannelHandler {
             String fileName = meta.getString("fileName");
             long fileSize = meta.getLongValue("fileSize");
             String fileType = meta.getString("fileType");
+            Long dirId = meta.getLong("dirId");
+            Long userId = meta.getLong("userId");
 
-            log.info("[ {} ] FileHeadDecodeHandler | --> 接收到元数据帧: fileName={}, fileSize={}, fileType={}",
-                    LocalTime.formatDate(LocalDateTime.now()), fileName, fileSize, fileType);
+            log.info(
+                    "[ {} ] FileHeadDecodeHandler | --> 接收到元数据帧: fileName={}, fileSize={}, fileType={}, dirId={}, userId={}",
+                    LocalTime.formatDate(LocalDateTime.now()), fileName, fileSize, fileType, dirId, userId);
 
-            // 2. 创建上传上下文
+            // 2. 校验目录是否存在且为目录类型
+            FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
+            String dirPath = null;
+            if (dirId != null) {
+                dirPath = fileService.validateDirectory(dirId);
+                if (dirPath == null) {
+                    log.error("目录不存在或类型错误: dirId={}", dirId);
+                    sendAckFrame(socketChannelContext, null, "error", "目录不存在或类型错误");
+                    return;
+                }
+            }
+
+            // 3. 创建上传上下文
             FileUploadContext uploadContext = new FileUploadContext();
             uploadContext.setTaskId(FileUploadContext.generateTaskId());
             uploadContext.setFileName(fileName);
@@ -160,15 +175,20 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setFileType(fileType);
             // 关联远程客户端连接，用于后续精确匹配
             uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
+            // 如果有目录，使用目录路径存储文件
+            if (dirPath != null) {
+                uploadContext.setBasePath(dirPath);
+            }
 
-            // 3. 创建数据库记录（状态：上传中）
+            // 4. 创建数据库记录（状态：上传中）
             try {
-                FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
                 FileQueryParam fileQueryParam = new FileQueryParam();
                 fileQueryParam.setFileName(fileName);
                 fileQueryParam.setFileSize(fileSize);
                 fileQueryParam.setFileType(fileType);
-                fileQueryParam.setUserName("毒药");
+                fileQueryParam.setPId(dirId);
+                fileQueryParam.setUserId(userId);
+                fileQueryParam.setUserName(userId != null ? String.valueOf(userId) : "unknown");
                 fileQueryParam.setFilePath(uploadContext.buildFilePath());
                 com.alibaba.server.nio.repository.file.service.dto.FileDto fileDto = fileService
                         .createFile(fileQueryParam);
@@ -181,13 +201,13 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 throw e;
             }
 
-            // 4. 打开文件通道
+            // 5. 打开文件通道
             uploadContext.openFileChannel();
 
-            // 5. 保存上下文
+            // 6. 保存上下文
             uploadContextMap.put(uploadContext.getTaskId(), uploadContext);
 
-            // 6. 发送 ACK 给客户端
+            // 7. 发送 ACK 给客户端
             sendAckFrame(socketChannelContext, uploadContext.getTaskId(), "ready", null);
 
             log.info("[ {} ] FileHeadDecodeHandler | --> 元数据处理完成，任务ID: {}, 文件路径: {}",

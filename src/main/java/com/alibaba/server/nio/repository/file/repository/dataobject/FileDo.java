@@ -7,6 +7,7 @@ import lombok.Data;
 
 /**
  * 文件 Do
+ * 
  * @author spring
  */
 @Data
@@ -14,7 +15,7 @@ public class FileDo extends BaseDO implements Identity, CloneableSupport {
 
     /**
      * 父id
-     * */
+     */
     private Long pId;
 
     /**
@@ -44,7 +45,7 @@ public class FileDo extends BaseDO implements Identity, CloneableSupport {
 
     /**
      * 是否存在
-     * */
+     */
     private String isExist;
 
     /**
@@ -54,6 +55,11 @@ public class FileDo extends BaseDO implements Identity, CloneableSupport {
 
     /**
      * 所属用户
-     * */
+     */
     private String userName;
+
+    /**
+     * 所属用户ID
+     */
+    private Long userId;
 }

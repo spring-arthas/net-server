@@ -78,6 +78,11 @@ public class FileUploadContext {
     private LocalDateTime startTime;
 
     /**
+     * 自定义存储基路径（如果设置，则使用此路径而非默认路径）
+     */
+    private String basePath;
+
+    /**
      * 上传状态
      */
     public enum UploadStatus {
@@ -115,12 +120,19 @@ public class FileUploadContext {
 
     /**
      * 构建文件存储路径
-     * 格式：/data/file-storage/yyyy/MM/dd/{taskId}_{fileName}
+     * 如果设置了 basePath，使用自定义路径
+     * 否则使用默认格式：/data/file-storage/yyyy/MM/dd/{taskId}_{fileName}
      */
     public String buildFilePath() {
-        LocalDateTime now = LocalDateTime.now();
-        String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        this.filePath = FILE_STORAGE_ROOT + datePath + "/" + taskId + "_" + fileName;
+        if (basePath != null && !basePath.isEmpty()) {
+            // 使用自定义目录路径
+            this.filePath = basePath + "/" + taskId + "_" + fileName;
+        } else {
+            // 使用默认路径
+            LocalDateTime now = LocalDateTime.now();
+            String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+            this.filePath = FILE_STORAGE_ROOT + datePath + "/" + taskId + "_" + fileName;
+        }
         return this.filePath;
     }
 

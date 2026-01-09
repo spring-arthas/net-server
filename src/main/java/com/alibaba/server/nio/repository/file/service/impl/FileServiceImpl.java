@@ -580,12 +580,124 @@ public class FileServiceImpl implements FileService {
         queryParam.setIsFile(YesOrNoEnum.N.name());
         queryParam.setDel(YesOrNoEnum.N.name());
         List<FileDo> list = this.fileRepository.getAssignFiles(queryParam);
-         if (CollectionUtils.isEmpty(list)) {
+        if (CollectionUtils.isEmpty(list)) {
             return false;
         }
         if (excludeId == null) {
             return true;
         }
         return list.stream().anyMatch(f -> !f.getId().equals(excludeId));
+    }
+
+    // ========== 文件操作实现 ==========
+
+    @Override
+    public List<FileDto> listFiles(Long dirId, int pageNum, int pageSize) {
+        if (dirId == null) {
+            throw new IllegalArgumentException("目录ID不能为空");
+        }
+        if (pageNum < 1)
+            pageNum = 1;
+        if (pageSize < 1)
+            pageSize = 10;
+
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setPId(dirId);
+        queryParam.setIsFile(YesOrNoEnum.Y.name());
+        queryParam.setDel(YesOrNoEnum.N.name());
+
+        List<FileDo> list = this.fileRepository.getAssignFiles(queryParam);
+        if (CollectionUtils.isEmpty(list)) {
+            return Collections.emptyList();
+        }
+
+        // 手动分页
+        int total = list.size();
+        int fromIndex = (pageNum - 1) * pageSize;
+        if (fromIndex >= total) {
+            return Collections.emptyList();
+        }
+        int toIndex = Math.min(fromIndex + pageSize, total);
+
+        List<FileDto> result = new ArrayList<>();
+        for (FileDo fileDo : list.subList(fromIndex, toIndex)) {
+            result.add(this.doToDto(fileDo));
+        }
+        return result;
+    }
+
+    @Override
+    public FileDto getFileDetail(Long fileId) {
+        if (fileId == null) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        FileDo fileDo = this.fileRepository.get(fileId);
+        if (fileDo == null) {
+            throw new IllegalArgumentException("文件不存在");
+        }
+        FileDto fileDto = this.doToDto(fileDo);
+        // 查询所属目录名称
+        if (fileDo.getPId() != null && fileDo.getPId() > 0) {
+            FileDo parentDir = this.fileRepository.get(fileDo.getPId());
+            if (parentDir != null) {
+                fileDto.setParentDirName(parentDir.getFileName());
+            }
+        }
+        return fileDto;
+    }
+
+    @Override
+    public boolean deleteFileWithFs(Long fileId) {
+        if (fileId == null) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        FileDo fileDo = this.fileRepository.get(fileId);
+        if (fileDo == null) {
+            throw new IllegalArgumentException("文件不存在");
+        }
+        // 只能删除文件，不能删除目录
+        if (!YesOrNoEnum.Y.name().equals(fileDo.getIsFile())) {
+            throw new IllegalArgumentException("不能使用此方法删除目录");
+        }
+
+        // 1. 删除文件系统文件
+        String filePath = fileDo.getFilePath();
+        if (filePath != null && !filePath.isEmpty()) {
+            File file = new File(filePath);
+            if (file.exists() && file.isFile()) {
+                boolean deleted = file.delete();
+                if (!deleted) {
+                    log.warn("文件系统删除失败: {}", filePath);
+                }
+            }
+        }
+
+        // 2. 删除DB记录
+        this.fileRepository.delete(fileId);
+        log.info("文件删除成功: fileId={}, fileName={}", fileId, fileDo.getFileName());
+        return true;
+    }
+
+    @Override
+    public String validateDirectory(Long dirId) {
+        if (dirId == null) {
+            return null;
+        }
+        FileDo fileDo = this.fileRepository.get(dirId);
+        if (fileDo == null) {
+            return null;
+        }
+        // 必须是目录类型
+        if (!YesOrNoEnum.N.name().equals(fileDo.getIsFile())) {
+            return null;
+        }
+        // 构建完整路径
+        String path = buildDirectoryPath(dirId);
+        // 验证文件系统目录存在
+        File dir = new File(path);
+        if (!dir.exists() || !dir.isDirectory()) {
+            return null;
+        }
+        return path;
     }
 }

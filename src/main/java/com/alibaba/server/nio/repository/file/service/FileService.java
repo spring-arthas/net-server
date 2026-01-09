@@ -140,4 +140,40 @@ public interface FileService {
      * @return true=存在重名
      */
     boolean existsSameName(Long parentId, String dirName, Long excludeId);
+
+    // ========== 文件操作接口 ==========
+
+    /**
+     * 分页查询目录下的文件列表
+     * 
+     * @param dirId    目录ID
+     * @param pageNum  页码（从1开始）
+     * @param pageSize 每页大小
+     * @return 文件列表
+     */
+    List<FileDto> listFiles(Long dirId, int pageNum, int pageSize);
+
+    /**
+     * 获取文件详情（包含所属目录名称）
+     * 
+     * @param fileId 文件ID
+     * @return 文件详情
+     */
+    FileDto getFileDetail(Long fileId);
+
+    /**
+     * 删除文件（DB + 文件系统）
+     * 
+     * @param fileId 文件ID
+     * @return true=成功
+     */
+    boolean deleteFileWithFs(Long fileId);
+
+    /**
+     * 校验目录是否存在且为目录类型
+     * 
+     * @param dirId 目录ID
+     * @return 目录的文件系统路径，若不存在则返回null
+     */
+    String validateDirectory(Long dirId);
 }

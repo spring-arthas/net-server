@@ -127,15 +127,6 @@ public class AbstractAcceptor {
         socketChannel.socket().setSoLinger(true, 20);
         // 对ServerSocket来说表示等待连接的最长空等待时间; 对Socket来说表示读数据最长空等待时间。
         socketChannel.socket().setSoTimeout(Integer.parseInt(NioServerContext.getValue(BasicConstant.SOCKET_TIMEOUT)));
-        /*
-         * socketChannel.socket().setReceiveBufferSize(
-         * Integer.parseInt(NioServerContext.getValue(BasicConstant.
-         * SOCKET_RECEIVE_BUFFER_SIZE)));
-         * socketChannel.socket()
-         * .setSendBufferSize(Integer.parseInt(NioServerContext.getValue(BasicConstant.
-         * SOCKET_SEND_BUFFER_SIZE)));
-         */
-
         // 使用 StandardSocketOptions 设置更大的 TCP 缓冲区（优化大文件传输性能）
         try {
             socketChannel.setOption(java.net.StandardSocketOptions.SO_SNDBUF, 262144); // 256KB 发送缓冲区
@@ -164,21 +155,6 @@ public class AbstractAcceptor {
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
-
-        // socketChannelContext.getChannelPipeLine().addHandler(new
-        // SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new
-        // FileReceiveHandler());
-        // socketChannelContext.getChannelPipeLine().addHandler(new
-        // SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new
-        // FileRemoteTransportHandler());
-        // 文件上传或在线传输实时流处理
-        // socketChannelContext.getChannelPipeLine().addHandler(new
-        // SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new
-        // FileUploadTransportStreamHandler());
-        // 文件下载实时流处理
-        // socketChannelContext.getChannelPipeLine().addHandler(new
-        // SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new
-        // FileDownloadTransportStreamHandler());
         return socketChannelContext;
     }
 }
