@@ -580,7 +580,7 @@ public class FileServiceImpl implements FileService {
         queryParam.setIsFile(YesOrNoEnum.N.name());
         queryParam.setDel(YesOrNoEnum.N.name());
         List<FileDo> list = this.fileRepository.getAssignFiles(queryParam);
-        if (CollectionUtils.isEmpty(list)) {
+         if (CollectionUtils.isEmpty(list)) {
             return false;
         }
         if (excludeId == null) {

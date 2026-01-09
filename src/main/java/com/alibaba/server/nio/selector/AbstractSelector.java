@@ -65,6 +65,9 @@ public class AbstractSelector {
             if (socketChannelContext.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT))) {
                 channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_DOWNLOAD);
             }
+            if (socketChannelContext.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_TEXT_PORT))) {
+                channelEventModel.setEventModelEnum(ChannelEventModelEnum.TEXT_TRANSMISSION);
+            }
         }
 
         // 服务端通道
