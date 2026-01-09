@@ -16,7 +16,7 @@ import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
-import com.alibaba.server.nio.service.file.parser.FileUploadFrameParser;
+import com.alibaba.server.nio.service.file.parser.FrameParser;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
@@ -26,7 +26,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,7 +50,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     /**
      * 帧解析器缓存：remoteAddress -> FileUploadFrameParser
      */
-    private static final ConcurrentHashMap<String, FileUploadFrameParser> parserMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
 
     /**
      * 下载状态缓存：remoteAddress -> 是否正在下载
@@ -80,7 +79,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         }
 
         // 获取或创建帧解析器
-        FileUploadFrameParser parser = getOrCreateParser(socketChannelContext);
+        FrameParser parser = getOrCreateParser(socketChannelContext);
 
         // 逐个处理待处理数据
         for (ChannelEventModel.GroupData groupData : waitHandleDataList) {
@@ -96,11 +95,11 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     /**
      * 获取或创建帧解析器
      */
-    private FileUploadFrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
+    private FrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
         String remoteAddress = socketChannelContext.getRemoteAddress();
         return parserMap.computeIfAbsent(remoteAddress, k -> {
             log.debug("为下载通道 {} 创建新的 FileUploadFrameParser", remoteAddress);
-            return new FileUploadFrameParser();
+            return new FrameParser();
         });
     }
 

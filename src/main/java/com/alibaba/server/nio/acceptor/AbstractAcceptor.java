@@ -5,8 +5,6 @@ import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.pipe.standard.DefaultChannelPipeLine;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.SocketChannelContext;
-import com.alibaba.server.nio.model.TransportProtocol;
-import com.alibaba.server.nio.model.chat.ChatMessageFrame;
 import com.alibaba.server.nio.service.file.handler.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -21,8 +19,6 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * @Auther: YSFY
@@ -158,6 +154,8 @@ public class AbstractAcceptor {
 
         // 3、注册通道数据处理器
         socketChannelContext.setChannelFlag(BasicConstant.FILE_CHANNEL_CONTEXT);
+        socketChannelContext.getChannelPipeLine().addHandler(
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new UserAuthHandler()); // 用户认证处理器
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDirectoryHandler()); // 文件夹处理器
         socketChannelContext.getChannelPipeLine().addHandler(

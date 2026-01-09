@@ -16,7 +16,7 @@ import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
-import com.alibaba.server.nio.service.file.parser.FileUploadFrameParser;
+import com.alibaba.server.nio.service.file.parser.FrameParser;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
@@ -52,7 +52,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
     /**
      * 帧解析器缓存：remoteAddress -> FileUploadFrameParser
      */
-    private static final ConcurrentHashMap<String, FileUploadFrameParser> parserMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
 
     @Override
     public void handler(Object o, ChannelContext channelContext) throws IOException {
@@ -76,7 +76,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         }
 
         // 获取或创建帧解析器
-        FileUploadFrameParser parser = getOrCreateParser(socketChannelContext);
+        FrameParser parser = getOrCreateParser(socketChannelContext);
 
         // 逐个处理待处理数据
         for (ChannelEventModel.GroupData groupData : waitHandleDataList) {
@@ -92,11 +92,11 @@ public class FileUploadHandler extends AbstractChannelHandler {
     /**
      * 获取或创建帧解析器
      */
-    private FileUploadFrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
+    private FrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
         String remoteAddress = socketChannelContext.getRemoteAddress();
         return parserMap.computeIfAbsent(remoteAddress, k -> {
             log.debug("为通道 {} 创建新的 FileUploadFrameParser", remoteAddress);
-            return new FileUploadFrameParser();
+            return new FrameParser();
         });
     }
 

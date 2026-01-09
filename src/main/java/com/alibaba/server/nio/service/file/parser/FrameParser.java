@@ -23,7 +23,7 @@ import java.util.List;
  * @author YSFY
  */
 @Slf4j
-public class FileUploadFrameParser {
+public class FrameParser {
 
     /**
      * 解析状态枚举

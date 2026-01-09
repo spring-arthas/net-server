@@ -2,9 +2,7 @@ package com.alibaba.server.nio.test;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.alibaba.server.nio.model.file.FileMessageFrame;
 import com.alibaba.server.nio.service.file.model.FileTransport;
-import com.alibaba.server.util.ByteOrderConvert;
 
 import java.io.File;
 import java.io.IOException;

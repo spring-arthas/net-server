@@ -3,7 +3,6 @@ package com.alibaba.server.nio.core.server;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.model.chat.ChatMessageFrame;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
-import com.alibaba.server.nio.model.file.FileMessageFrame;
 import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.util.PropertiesUtil;
@@ -95,12 +94,12 @@ public class BasicServer {
         map.put(BasicConstant.CHAT_MESSAGE_FRAME_TYPE, chatFrameTypeMap);
 
         // 设置文件枚举
-        FileMessageFrame.FrameType[] fileFrameTypes = FileMessageFrame.FrameType.values();
+       /* FileMessageFrame.FrameType[] fileFrameTypes = FileMessageFrame.FrameType.values();
         Map<String, FileMessageFrame.FrameType> fileFrameTypeMap = Maps.newHashMap();
         for(FileMessageFrame.FrameType frameType : fileFrameTypes) {
             fileFrameTypeMap.put(frameType.getBit(), frameType);
         }
-        map.put(BasicConstant.FILE_MESSAGE_FRAME_TYPE, fileFrameTypeMap);
+        map.put(BasicConstant.FILE_MESSAGE_FRAME_TYPE, fileFrameTypeMap);*/
 
         // 设置Nio事件枚举
         ChannelEventModelEnum[] eventModelEnums = ChannelEventModelEnum.values();
