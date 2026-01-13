@@ -46,7 +46,7 @@ public class SocketChannelContext {
     private String handlerType;
 
     /**
-     * 通道
+     * 对应客户端连接接入时的服务端SocketChannel
      */
     private SocketChannel socketChannel;
 

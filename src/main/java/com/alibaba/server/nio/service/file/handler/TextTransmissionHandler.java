@@ -20,12 +20,14 @@ import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameParser;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.binary.StringUtils;
 import org.springframework.util.CollectionUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -193,6 +195,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             String password = request.getString("password");
 
             UserDTO result = getUserService().login(userName, password);
+            if (Objects.isNull(result) || StringUtils.equals("del", result.getDel())) {
+                throw new IllegalArgumentException("不存在");
+            }
 
             // 登录成功后保存用户信息到连接上下文
             context.putAttribute("loggedInUserId", result.getId());
@@ -200,6 +205,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             JSONObject data = new JSONObject();
             data.put("userId", result.getId());
+            data.put("token", "后期引入");
             data.put("userName", result.getUserName());
 
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
