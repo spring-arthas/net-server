@@ -235,11 +235,11 @@ public class ResumableFileHandler extends AbstractChannelHandler {
             
             // 发送结束帧
             sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_END, new byte[0]);
-            context.close();
+            context.closeFileChannel();
             
         } catch (IOException e) {
             log.error("Download error", e);
-            context.close();
+            context.closeFileChannel();
         }
     }
 
