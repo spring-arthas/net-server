@@ -1,0 +1,235 @@
+package com.alibaba.server.nio.service.file.handler;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.server.common.BasicConstant;
+import com.alibaba.server.common.OSinfo;
+import com.alibaba.server.nio.core.server.NioServerContext;
+import com.alibaba.server.nio.handler.pipe.ChannelContext;
+import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
+import com.alibaba.server.nio.model.ChannelEventModel;
+import com.alibaba.server.nio.model.SocketChannelContext;
+import com.alibaba.server.nio.model.TransportDataModel;
+import com.alibaba.server.nio.model.resumable.ResumableContext;
+import com.alibaba.server.nio.model.resumable.ResumableFrame;
+import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.resumable.ResumableFrameParser;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.CollectionUtils;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Slf4j
+public class ResumableFileHandler extends AbstractChannelHandler {
+
+    private static final ConcurrentHashMap<String, ResumableContext> contextMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, ResumableFrameParser> parserMap = new ConcurrentHashMap<>();
+
+    @Override
+    public void handler(Object o, ChannelContext channelContext) throws IOException {
+        TransportDataModel transportDataModel = (TransportDataModel) o;
+        SimpleChannelContext simpleChannelContext = (SimpleChannelContext) channelContext;
+        SocketChannelContext socketChannelContext = simpleChannelContext.getSocketChannelContext();
+
+        // 允许 RESUMABLE 或者 UPLOAD (兼容 MainFileUploadAcceptor)
+        if (socketChannelContext == null) {
+            return;
+        }
+        String handlerType = socketChannelContext.getHandlerType();
+        if (!"RESUME_UPLOAD".equals(handlerType)) {
+            return;
+        }
+
+        List<ChannelEventModel.GroupData> waitHandleDataList = transportDataModel.getWaitHandleDataList();
+        if (CollectionUtils.isEmpty(waitHandleDataList)) {
+            return;
+        }
+
+        ResumableFrameParser parser = parserMap.computeIfAbsent(socketChannelContext.getRemoteAddress(), k -> new ResumableFrameParser());
+
+        Iterator<ChannelEventModel.GroupData> iterator = waitHandleDataList.iterator();
+        while (iterator.hasNext()) {
+            ChannelEventModel.GroupData groupData = iterator.next();
+            List<ResumableFrame> frames = parser.parse(groupData.getBytes());
+            
+            boolean handled = false;
+            for (ResumableFrame frame : frames) {
+                processFrame(frame, socketChannelContext);
+            }
+            
+            // 如果处理了任何断点续传帧，则认为该数据包已被消费，从列表中移除
+            // 防止后续 FileUploadHandler 再次解析并报错
+            if (handled) {
+                iterator.remove();
+            }
+        }
+    }
+    
+    private boolean isResumableFrame(ResumableFrame frame) {
+        byte type = frame.getType();
+        return (type >= 0x30 && type <= 0x40);
+    }
+
+    private void processFrame(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+        switch (frame.getType()) {
+            case ResumableFrame.TYPE_UPLOAD_CHECK:
+                handleUploadCheck(frame, ctx);
+                break;
+            case ResumableFrame.TYPE_UPLOAD_DATA:
+                handleUploadData(frame, ctx);
+                break;
+            case ResumableFrame.TYPE_UPLOAD_END:
+                handleUploadEnd(frame, ctx);
+                break;
+            case ResumableFrame.TYPE_DOWNLOAD_CHECK:
+                handleDownloadCheck(frame, ctx);
+                break;
+            default:
+                // 这里的 default 实际上不会走到，因为 isResumableFrame 已经过滤了
+                // log.warn("Unknown frame type: {}", frame.getType());
+        }
+    }
+
+    private void handleUploadCheck(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+        JSONObject json = JSON.parseObject(frame.getDataAsString());
+        String md5 = json.getString("md5");
+        String fileName = json.getString("fileName");
+        long fileSize = json.getLongValue("fileSize");
+
+        String basePath = "/Users/hljy/Downloads/西班牙的荷包蛋/2026/01/15/";
+        
+        String filePath = basePath + File.separator + "resumable" + File.separator + fileName; // 简化路径策略
+
+        File file = new File(filePath);
+        long currentSize = 0;
+        if (file.exists()) {
+            currentSize = file.length();
+        }
+
+        ResumableContext context = new ResumableContext();
+        context.setTaskId(UUID.randomUUID().toString());
+        context.setFileName(fileName);
+        context.setMd5(md5);
+        context.setFileSize(fileSize);
+        context.setFilePath(filePath);
+        context.setRemoteAddress(ctx.getRemoteAddress());
+        
+        context.openUploadChannel(); // 打开文件通道，准备写入
+        
+        contextMap.put(ctx.getRemoteAddress(), context);
+
+        // 发送 ACK
+        JSONObject response = new JSONObject();
+        response.put("status", "resume");
+        response.put("offset", currentSize);
+        response.put("taskId", context.getTaskId());
+        
+        sendFrame(ctx, ResumableFrame.TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void handleUploadData(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+        ResumableContext context = contextMap.get(ctx.getRemoteAddress());
+        if (context == null) return;
+
+        context.getFileChannel().write(ByteBuffer.wrap(frame.getData()));
+        context.setCurrentOffset(context.getCurrentOffset() + frame.getData().length);
+        
+        // 可以在这里发送进度 ACK，或者客户端自己计数
+    }
+
+    private void handleUploadEnd(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+        ResumableContext context = contextMap.remove(ctx.getRemoteAddress());
+        if (context != null) {
+            context.close();
+            
+            JSONObject response = new JSONObject();
+            response.put("status", "success");
+            sendFrame(ctx, ResumableFrame.TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+            log.info("File upload completed: {}", context.getFileName());
+        }
+    }
+
+    private void handleDownloadCheck(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+        JSONObject json = JSON.parseObject(frame.getDataAsString());
+        String fileName = json.getString("fileName"); // 简化：直接传文件名
+        long startOffset = json.getLongValue("startOffset");
+
+        String basePath = OSinfo.isWindows() ? 
+                NioServerContext.getValue(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS) :
+                NioServerContext.getValue(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC);
+        String filePath = basePath + File.separator + "resumable" + File.separator + fileName;
+
+        File file = new File(filePath);
+        if (!file.exists()) {
+             JSONObject response = new JSONObject();
+             response.put("status", "error");
+             response.put("message", "File not found");
+             sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+             return;
+        }
+
+        ResumableContext context = new ResumableContext();
+        context.setFilePath(filePath);
+        context.setStartOffset(startOffset);
+        context.openDownloadChannel();
+        
+        // 发送 ACK 确认文件大小
+        JSONObject response = new JSONObject();
+        response.put("status", "ready");
+        response.put("fileSize", file.length());
+        sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+        
+        // 开始发送数据
+        sendDownloadData(ctx, context);
+    }
+
+    private void sendDownloadData(SocketChannelContext ctx, ResumableContext context) {
+        // 在新线程或当前线程循环发送（注意：长时间占用 NIO 线程是不好的，这里为了简化演示，分块发送）
+        // 更好的做法是注册 Write 事件，或者放入 WriteQueue
+        try {
+            ByteBuffer buffer = ByteBuffer.allocate(32 * 1024); // 32KB chunks
+            while (context.getFileChannel().read(buffer) != -1) {
+                buffer.flip();
+                byte[] data = new byte[buffer.remaining()];
+                buffer.get(data);
+                
+                sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_DATA, data);
+                buffer.clear();
+                
+                // 简单的流控，避免淹没客户端
+                try { Thread.sleep(1); } catch (InterruptedException e) {}
+            }
+            
+            // 发送结束帧
+            sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_END, new byte[0]);
+            context.close();
+            
+        } catch (IOException e) {
+            log.error("Download error", e);
+            context.close();
+        }
+    }
+
+    private void sendFrame(SocketChannelContext ctx, byte type, byte[] data) throws IOException {
+        int length = (data == null) ? 0 : data.length;
+        ByteBuffer buffer = ByteBuffer.allocate(ResumableFrame.HEADER_LENGTH + length);
+        buffer.put(ResumableFrame.MAGIC);
+        buffer.put(type);
+        buffer.put((byte) 0); // flags
+        buffer.putInt(length);
+        if (data != null) {
+            buffer.put(data);
+        }
+        buffer.flip();
+        
+        // 使用 WriteQueueHelper 发送
+        com.alibaba.server.nio.handler.event.concret.WriteQueueHelper.submitWrite(ctx, buffer);
+    }
+}
