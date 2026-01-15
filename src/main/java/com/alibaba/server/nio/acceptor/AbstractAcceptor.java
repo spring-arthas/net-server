@@ -91,6 +91,12 @@ public class AbstractAcceptor {
         if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR, assign)) { // 文件下载端口
             port = NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT);
         }
+        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_UPLOAD_ACCEPTOR, assign)) { // 文件断点续传上传端口
+            port = NioServerContext.getValue(BasicConstant.NIO_FILE_RESUME_UPLOAD_PORT);
+        }
+        if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_DOWNLOAD_ACCEPTOR, assign)) { // 文件断点续传下载端口
+            port = NioServerContext.getValue(BasicConstant.NIO_FILE_RESUME_DOWNLOAD_PORT);
+        }
         if (StringUtils.equals(BasicConstant.NIO_SERVER_MAIN_CORE_WEBSOCKET_ACCEPTOR, assign)) { // WebSocket端口
             port = NioServerContext.getValue(BasicConstant.NIO_WEBSOCKET_PORT);
         }
@@ -155,6 +161,9 @@ public class AbstractAcceptor {
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
+        // 增加 ResumableFileHandler 到处理链中
+        socketChannelContext.getChannelPipeLine().addHandler(
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new ResumableFileHandler()); // 文件上传断点续传处理器
         return socketChannelContext;
     }
 }

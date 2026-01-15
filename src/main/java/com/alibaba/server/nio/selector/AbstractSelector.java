@@ -65,6 +65,13 @@ public class AbstractSelector {
             if (socketChannelContext.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT))) {
                 channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_DOWNLOAD);
             }
+            if (socketChannelContext.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_RESUME_UPLOAD_PORT))) {
+                channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_RESUME_UPLOAD);
+            }
+            // 如果可选键对应的本地地址为文件上传端口，则记录问文件上传数据
+            if (socketChannelContext.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_RESUME_DOWNLOAD_PORT))) {
+                channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_RESUME_DOWNLOAD);
+            }
             if (socketChannelContext.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_TEXT_PORT))) {
                 channelEventModel.setEventModelEnum(ChannelEventModelEnum.TEXT_TRANSMISSION);
             }
@@ -81,6 +88,12 @@ public class AbstractSelector {
             }
             if (channelEventModel.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_DOWNLOAD_PORT))) {
                 channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_DOWNLOAD);
+            }
+            if (channelEventModel.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_RESUME_UPLOAD_PORT))) {
+                channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_RESUME_UPLOAD);
+            }
+            if (channelEventModel.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_FILE_RESUME_DOWNLOAD_PORT))) {
+                channelEventModel.setEventModelEnum(ChannelEventModelEnum.FILE_RESUME_DOWNLOAD);
             }
             if (channelEventModel.getLocalAddress().contains(NioServerContext.getValue(BasicConstant.NIO_TEXT_PORT))) {
                 channelEventModel.setEventModelEnum(ChannelEventModelEnum.TEXT_TRANSMISSION);

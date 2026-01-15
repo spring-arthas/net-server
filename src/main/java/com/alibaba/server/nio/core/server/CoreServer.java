@@ -1,9 +1,7 @@
 package com.alibaba.server.nio.core.server;
 
 import com.alibaba.server.common.BasicConstant;
-import com.alibaba.server.nio.acceptor.TextTransmissionAcceptor;
-import com.alibaba.server.nio.acceptor.MainFileDownloadAcceptor;
-import com.alibaba.server.nio.acceptor.MainFileUploadAcceptor;
+import com.alibaba.server.nio.acceptor.*;
 import com.alibaba.server.nio.core.page.PaginatedListObjFactory;
 import com.alibaba.server.nio.core.page.PaginatedListWrapperFactory;
 import com.alibaba.server.nio.core.repository.*;
@@ -13,6 +11,7 @@ import com.alibaba.server.nio.handler.event.concret.ConnectEventHandler;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteEventHandler;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
+import com.alibaba.server.nio.selector.MainFileResumeSelector;
 import com.alibaba.server.nio.selector.TextTransmissionSelector;
 import com.alibaba.server.nio.selector.MainFileSelector;
 import lombok.extern.slf4j.Slf4j;
@@ -77,7 +76,11 @@ public class CoreServer {
     private static void startupSelector() throws IOException {
         create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_TEXT_SELECTOR, new TextTransmissionSelector(),
                 Boolean.TRUE);
+        // 文件普通上传和下载选择器
         create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR, new MainFileSelector(),
+                Boolean.TRUE);
+        // 文件断点续传上传和下载选择器
+        create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_SELECTOR, new MainFileResumeSelector(),
                 Boolean.TRUE);
     }
 
@@ -98,6 +101,14 @@ public class CoreServer {
         create(BasicConstant.ACCEPTOR,
                 ChannelEventModelEnum.FILE_DOWNLOAD.getName(),
                 new MainFileDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR),
+                Boolean.FALSE);
+        create(BasicConstant.ACCEPTOR,
+                ChannelEventModelEnum.FILE_RESUME_UPLOAD.getName(),
+                new MainFileResumeUploadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_UPLOAD_ACCEPTOR),
+                Boolean.FALSE);
+        create(BasicConstant.ACCEPTOR,
+                ChannelEventModelEnum.FILE_RESUME_DOWNLOAD.getName(),
+                new MainFileResumeDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_DOWNLOAD_ACCEPTOR),
                 Boolean.FALSE);
     }
 
