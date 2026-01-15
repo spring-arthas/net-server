@@ -5,15 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1617b815-b451-4fb9-a7bb-1acb12c00284" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/ResumableFileHandler.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/common/BasicConstant.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/common/BasicConstant.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/acceptor/AbstractAcceptor.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/CoreServer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/core/server/CoreServer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/constant/ChannelEventModelEnum.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/constant/ChannelEventModelEnum.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/AbstractSelector.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/selector/AbstractSelector.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/resources/server.properties" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/server.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/resumable/ResumableContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/model/resumable/ResumableContext.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/ResumableFileHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/ResumableFileHandler.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -194,7 +189,7 @@
       <workItem from="1766742915669" duration="2489000" />
       <workItem from="1767689241920" duration="8525000" />
       <workItem from="1767750836442" duration="35501000" />
-      <workItem from="1768446135989" duration="12273000" />
+      <workItem from="1768446135989" duration="14025000" />
     </task>
     <task id="LOCAL-00001" summary="提交代码">
       <option name="closed" value="true" />
@@ -484,7 +479,23 @@
       <option name="project" value="LOCAL" />
       <updated>1767945266358</updated>
     </task>
-    <option name="localTasksCounter" value="37" />
+    <task id="LOCAL-00037" summary="增加断点续传">
+      <option name="closed" value="true" />
+      <created>1768464931689</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1768464931689</updated>
+    </task>
+    <task id="LOCAL-00038" summary="增加断点续传">
+      <option name="closed" value="true" />
+      <created>1768464954397</created>
+      <option name="number" value="00038" />
+      <option name="presentableId" value="LOCAL-00038" />
+      <option name="project" value="LOCAL" />
+      <updated>1768464954397</updated>
+    </task>
+    <option name="localTasksCounter" value="39" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -501,7 +512,8 @@
     <MESSAGE value="修改WorkerThreadPool增加文件下载处理" />
     <MESSAGE value="新增文件目录功能" />
     <MESSAGE value="处理无效文件，增加用户认证功能" />
-    <option name="LAST_COMMIT_MESSAGE" value="处理无效文件，增加用户认证功能" />
+    <MESSAGE value="增加断点续传" />
+    <option name="LAST_COMMIT_MESSAGE" value="增加断点续传" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -535,11 +547,6 @@
           <url>file://$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/repository/file/service/impl/FileServiceImpl.java</url>
           <line>561</line>
           <option name="timeStamp" value="152" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="java-line">
-          <url>file://$PROJECT_DIR$/src/main/java/com/alibaba/server/nio/service/file/handler/ResumableFileHandler.java</url>
-          <line>85</line>
-          <option name="timeStamp" value="168" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

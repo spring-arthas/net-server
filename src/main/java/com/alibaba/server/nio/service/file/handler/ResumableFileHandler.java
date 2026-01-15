@@ -10,6 +10,7 @@ import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.model.TransportDataModel;
+import com.alibaba.server.nio.model.file.FileUploadContext;
 import com.alibaba.server.nio.model.resumable.ResumableContext;
 import com.alibaba.server.nio.model.resumable.ResumableFrame;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
@@ -134,20 +135,45 @@ public class ResumableFileHandler extends AbstractChannelHandler {
         sendFrame(ctx, ResumableFrame.TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
     }
 
-    private void handleUploadData(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
-        ResumableContext context = contextMap.get(ctx.getRemoteAddress());
-        if (context == null) return;
+    private ResumableContext getActiveUploadContext(SocketChannelContext socketChannelContext) {
+        String remoteAddress = socketChannelContext.getRemoteAddress();
+        // 根据远程地址精确匹配上传上下文，确保数据写入正确的文件
+        for (ResumableContext ctx : contextMap.values()) {
+            // 同时检查状态和远程地址，避免多客户端并发上传时数据写入错误文件
+            if (ctx.getStatus() == ResumableContext.UploadStatus.UPLOADING
+                    && remoteAddress != null
+                    && remoteAddress.equals(ctx.getRemoteAddress())) {
+                return ctx;
+            }
+        }
+        return null;
+    }
 
-        context.getFileChannel().write(ByteBuffer.wrap(frame.getData()));
-        context.setCurrentOffset(context.getCurrentOffset() + frame.getData().length);
-        
+    private void handleUploadData(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+        ResumableContext context = getActiveUploadContext(ctx);
+        if (context == null) {
+            return;
+        }
+
+        // 写入文件数据
+        byte[] fileData = frame.getData();
+        if (fileData != null && fileData.length > 0) {
+            context.writeData(fileData);
+
+            // 可选：每写入一定量数据后记录进度
+            if (context.getBytesWritten() % (1024 * 1024) == 0) { // 每 1MB 记录一次
+                log.debug("上传进度: taskId={}, progress={:.2f}%",
+                        context.getTaskId(), context.getProgress());
+            }
+            context.setCurrentOffset(context.getCurrentOffset() + frame.getData().length);
+        }
         // 可以在这里发送进度 ACK，或者客户端自己计数
     }
 
     private void handleUploadEnd(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
         ResumableContext context = contextMap.remove(ctx.getRemoteAddress());
         if (context != null) {
-            context.close();
+            context.closeFileChannel();
             
             JSONObject response = new JSONObject();
             response.put("status", "success");
