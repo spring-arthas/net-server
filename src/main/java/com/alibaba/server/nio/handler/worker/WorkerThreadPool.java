@@ -100,9 +100,8 @@ public class WorkerThreadPool {
             return newWorker;
         });
         // 向 ChannelWorker 的队列中添加待处理数据
-        if (!worker.offerData(transportDataModelCopy)) {
-            log.warn("WorkerThreadPool | --> 通道 {} 的任务队列已满，数据可能丢失", channelKey);
-        }
+        // offerData 使用阻塞式等待，背压会自动传递到 Socket 层
+        worker.offerData(transportDataModelCopy);
     }
 
     /**
@@ -152,18 +151,47 @@ public class WorkerThreadPool {
         public ChannelWorker(SocketChannelContext socketChannelContext, String channelKey) {
             this.socketChannelContext = socketChannelContext;
             this.channelKey = channelKey;
-            this.dataQueue = new LinkedBlockingQueue<>(1000);
+            // 根据是否为文件传输通道调整队列大小
+            // 减小到 2000 避免 OOM（约 128MB）
+            String handlerType = socketChannelContext.getHandlerType();
+            int queueSize = isFileTransferType(handlerType) ? 2000 : 1000;
+            this.dataQueue = new LinkedBlockingQueue<>(queueSize);
             this.running = new AtomicBoolean(true);
+            log.debug("创建 ChannelWorker: channelKey={}, queueSize={}", channelKey, queueSize);
+        }
+
+        /**
+         * 判断是否为文件传输类型
+         */
+        private static boolean isFileTransferType(String handlerType) {
+            return "UPLOAD".equals(handlerType)
+                || "DOWNLOAD".equals(handlerType)
+                || "RESUME_UPLOAD".equals(handlerType)
+                || "RESUME_DOWNLOAD".equals(handlerType);
         }
 
         /**
          * 向队列中添加待处理数据
-         * 
+         * 使用带超时的阻塞式 offer，队列满时等待，形成背压机制
+         * TCP 流量控制会自动通知客户端减速发送
+         *
          * @param data 待处理的数据
          * @return 是否添加成功
          */
         public boolean offerData(TransportDataModel data) {
-            return dataQueue.offer(data);
+            try {
+                // 使用阻塞式 offer，队列满时等待，形成背压
+                // 超时时间设置为30秒，防止无限阻塞
+                boolean success = dataQueue.offer(data, 30, TimeUnit.SECONDS);
+                if (!success) {
+                    log.error("ChannelWorker | --> 队列插入超时30秒，数据丢失: channelKey={}", channelKey);
+                }
+                return success;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("ChannelWorker | --> 队列插入被中断: channelKey={}", channelKey);
+                return false;
+            }
         }
 
         /**
@@ -235,15 +263,23 @@ public class WorkerThreadPool {
 
         /**
          * 处理单个数据
+         * 文件传输场景（UPLOAD/DOWNLOAD/RESUME_*）无需全局锁，每个连接独立处理
+         * 其他场景需要全局锁保证数据一致性
          */
         private void processData(TransportDataModel data) throws IOException {
-            // 尝试获取锁
-            while (!BasicServer.fileLock.tryLock()) {
-                try {
-                    TimeUnit.MILLISECONDS.sleep(500);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
+            // 文件传输场景无需全局锁，每个 FileUploadContext/DownloadContext 是独立的
+            String handlerType = socketChannelContext.getHandlerType();
+            boolean needLock = !isFileTransferType(handlerType);
+
+            if (needLock) {
+                // 尝试获取锁
+                while (!BasicServer.fileLock.tryLock()) {
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
                 }
             }
 
@@ -254,13 +290,17 @@ public class WorkerThreadPool {
             }
             try {
                 // 更新 socketChannelContext 中的待处理数据
-                this.socketChannelContext.getTransportDataModel().setWaitHandleDataList(data.getWaitHandleDataList());
+                // 使用防御性副本避免并发修改异常
+                /*this.socketChannelContext.getTransportDataModel().setWaitHandleDataList(
+                    new java.util.ArrayList<>(data.getWaitHandleDataList()));*/
                 // 执行处理管道
                 DefaultChannelPipeLine defaultChannelPipeLine = (DefaultChannelPipeLine) this.socketChannelContext.getChannelPipeLine();
-                defaultChannelPipeLine.executeHandler(this.socketChannelContext);
+                defaultChannelPipeLine.executeHandler(data, this.socketChannelContext);
             } finally {
-                // 释放锁
-                BasicServer.fileLock.unlock();
+                // 释放锁（如果获取了锁）
+                if (needLock) {
+                    BasicServer.fileLock.unlock();
+                }
                 // 清理事务同步状态（如果是我们初始化的）
                 if (!synchronizationActive && org.springframework.transaction.support.TransactionSynchronizationManager
                         .isSynchronizationActive()) {

@@ -11,9 +11,11 @@ import com.alibaba.server.nio.model.ChannelEventModel;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.model.TransportDataModel;
 import com.alibaba.server.nio.model.file.FileUploadContext;
+import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.resumable.ResumableContext;
 import com.alibaba.server.nio.model.resumable.ResumableFrame;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.file.parser.FrameParser;
 import com.alibaba.server.nio.service.resumable.ResumableFrameParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
@@ -26,6 +28,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.alibaba.server.nio.model.resumable.ResumableFrame.FrameType.*;
 
 @Slf4j
 public class ResumableFileHandler extends AbstractChannelHandler {
@@ -53,43 +57,52 @@ public class ResumableFileHandler extends AbstractChannelHandler {
             return;
         }
 
-        ResumableFrameParser parser = parserMap.computeIfAbsent(socketChannelContext.getRemoteAddress(), k -> new ResumableFrameParser());
+        ResumableFrameParser parser = getOrCreateParser(socketChannelContext);
 
-        Iterator<ChannelEventModel.GroupData> iterator = waitHandleDataList.iterator();
-        while (iterator.hasNext()) {
-            ChannelEventModel.GroupData groupData = iterator.next();
+        // 逐个处理待处理数据
+        for (ChannelEventModel.GroupData groupData : waitHandleDataList) {
             List<ResumableFrame> frames = parser.parse(groupData.getBytes());
-            
-            boolean handled = false;
+
+            // 处理解析完成的帧
             for (ResumableFrame frame : frames) {
-                processFrame(frame, socketChannelContext);
-            }
-            
-            // 如果处理了任何断点续传帧，则认为该数据包已被消费，从列表中移除
-            // 防止后续 FileUploadHandler 再次解析并报错
-            if (handled) {
-                iterator.remove();
+                processFrame(frame, socketChannelContext, simpleChannelContext);
             }
         }
     }
-    
-    private boolean isResumableFrame(ResumableFrame frame) {
-        byte type = frame.getType();
-        return (type >= 0x30 && type <= 0x40);
+
+    /**
+     * 获取或创建帧解析器
+     */
+    private ResumableFrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
+        String remoteAddress = socketChannelContext.getRemoteAddress();
+        return parserMap.computeIfAbsent(remoteAddress, k -> {
+            log.debug("为通道 {} 创建新的 ResumableFrameParser", remoteAddress);
+            return new ResumableFrameParser();
+        });
     }
 
-    private void processFrame(ResumableFrame frame, SocketChannelContext ctx) throws IOException {
+    private void processFrame(ResumableFrame frame,
+                              SocketChannelContext ctx,
+                              SimpleChannelContext simpleChannelContext) throws IOException {
+
+        if (null == frame.getType()) {
+            log.warn("帧类型为空，跳过处理");
+            return;
+        }
+
+        log.debug("处理帧: type={}, dataLength={}", frame.getType(), frame.getLength());
+
         switch (frame.getType()) {
-            case ResumableFrame.TYPE_UPLOAD_CHECK:
+            case TYPE_UPLOAD_CHECK:
                 handleUploadCheck(frame, ctx);
                 break;
-            case ResumableFrame.TYPE_UPLOAD_DATA:
+            case TYPE_UPLOAD_DATA:
                 handleUploadData(frame, ctx);
                 break;
-            case ResumableFrame.TYPE_UPLOAD_END:
+            case TYPE_UPLOAD_END:
                 handleUploadEnd(frame, ctx);
                 break;
-            case ResumableFrame.TYPE_DOWNLOAD_CHECK:
+            case TYPE_DOWNLOAD_CHECK:
                 handleDownloadCheck(frame, ctx);
                 break;
             default:
@@ -132,7 +145,7 @@ public class ResumableFileHandler extends AbstractChannelHandler {
         response.put("offset", currentSize);
         response.put("taskId", context.getTaskId());
         
-        sendFrame(ctx, ResumableFrame.TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+        sendFrame(ctx, TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
     }
 
     private ResumableContext getActiveUploadContext(SocketChannelContext socketChannelContext) {
@@ -177,7 +190,7 @@ public class ResumableFileHandler extends AbstractChannelHandler {
             
             JSONObject response = new JSONObject();
             response.put("status", "success");
-            sendFrame(ctx, ResumableFrame.TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+            sendFrame(ctx, TYPE_UPLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
             log.info("File upload completed: {}", context.getFileName());
         }
     }
@@ -197,7 +210,7 @@ public class ResumableFileHandler extends AbstractChannelHandler {
              JSONObject response = new JSONObject();
              response.put("status", "error");
              response.put("message", "File not found");
-             sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+             sendFrame(ctx, TYPE_DOWNLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
              return;
         }
 
@@ -210,7 +223,7 @@ public class ResumableFileHandler extends AbstractChannelHandler {
         JSONObject response = new JSONObject();
         response.put("status", "ready");
         response.put("fileSize", file.length());
-        sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
+        sendFrame(ctx, TYPE_DOWNLOAD_ACK, response.toJSONString().getBytes(StandardCharsets.UTF_8));
         
         // 开始发送数据
         sendDownloadData(ctx, context);
@@ -226,7 +239,7 @@ public class ResumableFileHandler extends AbstractChannelHandler {
                 byte[] data = new byte[buffer.remaining()];
                 buffer.get(data);
                 
-                sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_DATA, data);
+                sendFrame(ctx, TYPE_DOWNLOAD_DATA, data);
                 buffer.clear();
                 
                 // 简单的流控，避免淹没客户端
@@ -234,7 +247,7 @@ public class ResumableFileHandler extends AbstractChannelHandler {
             }
             
             // 发送结束帧
-            sendFrame(ctx, ResumableFrame.TYPE_DOWNLOAD_END, new byte[0]);
+            sendFrame(ctx, TYPE_DOWNLOAD_END, new byte[0]);
             context.closeFileChannel();
             
         } catch (IOException e) {
@@ -243,11 +256,11 @@ public class ResumableFileHandler extends AbstractChannelHandler {
         }
     }
 
-    private void sendFrame(SocketChannelContext ctx, byte type, byte[] data) throws IOException {
+    private void sendFrame(SocketChannelContext ctx, ResumableFrame.FrameType type, byte[] data) throws IOException {
         int length = (data == null) ? 0 : data.length;
         ByteBuffer buffer = ByteBuffer.allocate(ResumableFrame.HEADER_LENGTH + length);
         buffer.put(ResumableFrame.MAGIC);
-        buffer.put(type);
+        buffer.put((byte) type.getCode());
         buffer.put((byte) 0); // flags
         buffer.putInt(length);
         if (data != null) {

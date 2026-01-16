@@ -1,6 +1,8 @@
 package com.alibaba.server.nio.service.resumable;
 
+import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.resumable.ResumableFrame;
+import com.alibaba.server.nio.service.file.parser.FrameParser;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -136,7 +138,14 @@ public class ResumableFrameParser {
         int headerStart = position + 2; // 跳过 Magic
 
         // 解析类型
-        byte type = buf[headerStart];
+        byte typeCode = buf[headerStart];
+        ResumableFrame.FrameType frameType = ResumableFrame.FrameType.fromCode(typeCode);
+        if (frameType == null) {
+            log.warn("无效的帧类型: 0x{}", String.format("%02X", typeCode));
+            position += 2; // 跳过这个魔数，继续寻找
+            state = ResumableFrameParser.ParseState.WAIT_MAGIC;
+            return true;
+        }
         // 解析标志
         byte flags = buf[headerStart + 1];
         // 解析长度
@@ -151,7 +160,7 @@ public class ResumableFrameParser {
         }
 
         currentFrame = new ResumableFrame();
-        currentFrame.setType(type);
+        currentFrame.setType(frameType);
         currentFrame.setFlags(flags);
         currentFrame.setLength(length);
         currentDataLength = length;
@@ -168,6 +177,8 @@ public class ResumableFrameParser {
     }
 
     /**
+     *
+     *
      * 解析数据状态处理
      */
     private boolean handleParseData(byte[] buf, int available) {

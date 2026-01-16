@@ -3,6 +3,7 @@ package com.alibaba.server.nio.handler.pipe.standard;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
 import com.alibaba.server.nio.handler.pipe.ChannelPipeLine;
 import com.alibaba.server.nio.model.SocketChannelContext;
+import com.alibaba.server.nio.model.TransportDataModel;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import lombok.extern.slf4j.Slf4j;
 
@@ -77,14 +78,14 @@ public class DefaultChannelPipeLine implements ChannelPipeLine {
      * @param socketChannelContext 当前通道绑定的应用上下文
      * @throws IOException
      */
-    public void executeHandler(SocketChannelContext socketChannelContext) throws IOException {
+    public void executeHandler(TransportDataModel data, SocketChannelContext socketChannelContext) throws IOException {
         Object obj = socketChannelContext.getTransportDataModel();
         ChannelContext channelContext = this.headContext.next();
         while (null != channelContext) {
             AbstractChannelContext dc = (AbstractChannelContext) channelContext;
             // 设置 SocketChannelContext 引用
             dc.setSocketChannelContext(socketChannelContext);
-            dc.getChannelHandler().handler(obj, dc);
+            dc.getChannelHandler().handler(data, dc);
 
             // 1、判断当前ChannelContext是否为终止ChannelContext, 是则跳出
             if (dc.getNeedStop()) {
