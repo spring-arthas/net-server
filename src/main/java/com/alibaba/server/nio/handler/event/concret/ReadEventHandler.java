@@ -253,7 +253,7 @@ public class ReadEventHandler extends AbstractEventHandler {
     private void pauseRead(ChannelEventModel channelEventModel, SocketChannelContext context, com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter) {
         final java.nio.channels.SelectionKey key = channelEventModel.getSelectionKey();
         
-        // 使用同步块保护整个暂停/恢复流程
+        // 使用同步块保护整个暂停/恢复流程，即同一个socketChannelContext在Selector线程和数据处理线程以及Selector唤醒线程三个线程之间保持同步
         synchronized (context.getReadPauseLock()) {
             if (context.isReadPaused()) {
                 return;
