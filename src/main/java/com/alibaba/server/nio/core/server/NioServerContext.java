@@ -37,12 +37,17 @@ public class NioServerContext {
     /**
      * 限速恢复调度器
      * 用于在 ReadEventHandler 暂停 OP_READ 后，定时恢复事件
+     * 线程数设为4以支持多个并发连接的限速恢复任务
      */
     private static final java.util.concurrent.ScheduledExecutorService rateLimitScheduler = 
-            java.util.concurrent.Executors.newScheduledThreadPool(1, r -> {
-                Thread t = new Thread(r, "RATE-LIMIT-SCHEDULER");
-                t.setDaemon(true);
-                return t;
+            java.util.concurrent.Executors.newScheduledThreadPool(4, new java.util.concurrent.ThreadFactory() {
+                private final java.util.concurrent.atomic.AtomicInteger threadNumber = new java.util.concurrent.atomic.AtomicInteger(1);
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "RATE-LIMIT-SCHEDULER-" + threadNumber.getAndIncrement());
+                    t.setDaemon(true);
+                    return t;
+                }
             });
 
     /**

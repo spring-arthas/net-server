@@ -248,39 +248,64 @@ public class ReadEventHandler extends AbstractEventHandler {
 
     /**
      * 暂停读取（限速）
+     * 使用同步保护防止竞态条件，并保存恢复任务用于后续取消
      */
     private void pauseRead(ChannelEventModel channelEventModel, SocketChannelContext context, com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter) {
-        if (context.isReadPaused()) {
-            return;
-        }
+        final java.nio.channels.SelectionKey key = channelEventModel.getSelectionKey();
         
-        // 取消 OP_READ
-        java.nio.channels.SelectionKey key = channelEventModel.getSelectionKey();
-        if (key.isValid()) {
-            // 取消读取事件
-            key.interestOps(key.interestOps() & ~java.nio.channels.SelectionKey.OP_READ);
-            context.setReadPaused(true);
+        // 使用同步块保护整个暂停/恢复流程
+        synchronized (context.getReadPauseLock()) {
+            if (context.isReadPaused()) {
+                return;
+            }
             
-            // 计算等待时间
-            long waitMs = rateLimiter.calculateWaitTime(1024); // 至少等待能读 1KB 的时间
-            if (waitMs < 10) waitMs = 10; // 最小等待 10ms
-            if (waitMs > 1000) waitMs = 1000; // 最大等待 1s
+            if (!key.isValid()) {
+                return;
+            }
+            
+            // 取消 OP_READ
+            try {
+                key.interestOps(key.interestOps() & ~java.nio.channels.SelectionKey.OP_READ);
+                context.setReadPaused(true);
+            } catch (java.nio.channels.CancelledKeyException e) {
+                log.warn("SelectionKey 已取消，跳过限速暂停: {}", context.getRemoteAddress());
+                return;
+            }
+            
+            // 计算等待时间（有上限保护）
+            long waitMs = rateLimiter.calculateWaitTime(1024);
+            if (waitMs < 10) waitMs = 10;       // 最小等待 10ms
+            if (waitMs > 5000) waitMs = 5000;   // 最大等待 5s（超时保护）
             
             log.debug("触发限速，暂停读取 {} ms, remote={}", waitMs, context.getRemoteAddress());
             
-            // 提交恢复任务
-            NioServerContext.getRateLimitScheduler().schedule(() -> {
-                try {
-                    if (key.isValid()) {
-                        key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_READ);
-                        key.selector().wakeup();
+            // 提交恢复任务并保存引用
+            final long finalWaitMs = waitMs;
+            java.util.concurrent.ScheduledFuture<?> resumeTask = NioServerContext.getRateLimitScheduler().schedule(() -> {
+                // 恢复任务内也需要同步保护
+                synchronized (context.getReadPauseLock()) {
+                    try {
+                        if (key.isValid() && context.isReadPaused()) {
+                            key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_READ);
+                            key.selector().wakeup();
+                            context.setReadPaused(false);
+                            context.setPendingResumeTask(null);
+                            log.debug("恢复读取, remote={}, waitMs={}", context.getRemoteAddress(), finalWaitMs);
+                        }
+                    } catch (java.nio.channels.CancelledKeyException e) {
+                        log.debug("恢复读取时 SelectionKey 已取消: {}", context.getRemoteAddress());
                         context.setReadPaused(false);
-                        // log.debug("恢复读取, remote={}", context.getRemoteAddress());
+                        context.setPendingResumeTask(null);
+                    } catch (Exception e) {
+                        log.error("恢复读取失败: {}", context.getRemoteAddress(), e);
+                        context.setReadPaused(false);
+                        context.setPendingResumeTask(null);
                     }
-                } catch (Exception e) {
-                    log.error("恢复读取失败", e);
                 }
             }, waitMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            
+            // 保存任务引用，用于连接断开时取消
+            context.setPendingResumeTask(resumeTask);
         }
     }
 

@@ -85,6 +85,57 @@ public class SocketChannelContext {
     private volatile boolean isReadPaused = false;
 
     /**
+     * 待执行的限速恢复任务（用于连接断开时取消）
+     */
+    private volatile java.util.concurrent.ScheduledFuture<?> pendingResumeTask;
+
+    /**
+     * 读暂停操作的同步锁
+     */
+    private final Object readPauseLock = new Object();
+
+    /**
+     * 获取读暂停锁
+     */
+    public Object getReadPauseLock() {
+        return readPauseLock;
+    }
+
+    /**
+     * 设置待执行的恢复任务
+     */
+    public void setPendingResumeTask(java.util.concurrent.ScheduledFuture<?> task) {
+        this.pendingResumeTask = task;
+    }
+
+    /**
+     * 获取待执行的恢复任务
+     */
+    public java.util.concurrent.ScheduledFuture<?> getPendingResumeTask() {
+        return pendingResumeTask;
+    }
+
+    /**
+     * 取消待执行的恢复任务
+     */
+    public void cancelPendingResumeTask() {
+        java.util.concurrent.ScheduledFuture<?> task = this.pendingResumeTask;
+        if (task != null && !task.isDone()) {
+            task.cancel(false);
+            this.pendingResumeTask = null;
+        }
+    }
+
+    /**
+     * 清理限速相关资源
+     */
+    public void cleanupRateLimiter() {
+        cancelPendingResumeTask();
+        this.rateLimiter = null;
+        this.isReadPaused = false;
+    }
+
+    /**
      * 获取属性
      */
     public Object getAttribute(String key) {

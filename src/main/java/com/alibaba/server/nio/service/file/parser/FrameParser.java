@@ -46,6 +46,12 @@ public class FrameParser {
     private static final int HEADER_LENGTH = FileUploadFrame.HEADER_LENGTH;
 
     /**
+     * 缓冲区最大大小限制（10MB）
+     * 防止限速期间数据积压导致内存泄漏
+     */
+    private static final int MAX_BUFFER_SIZE = 10 * 1024 * 1024;
+
+    /**
      * 当前解析状态
      */
     private ParseState state = ParseState.WAIT_MAGIC;
@@ -81,6 +87,15 @@ public class FrameParser {
 
         if (data == null || data.length == 0) {
             return completeFrames;
+        }
+
+        // 检查缓冲区大小限制，防止内存泄漏
+        if (buffer.size() + data.length > MAX_BUFFER_SIZE) {
+            log.error("FrameParser 缓冲区超过限制 {}MB，当前大小：{}，待追加：{}", 
+                    MAX_BUFFER_SIZE / 1024 / 1024, buffer.size(), data.length);
+            // 重置解析器，丢弃积压数据
+            reset();
+            throw new RuntimeException("FrameParser buffer overflow: " + buffer.size() + " + " + data.length + " > " + MAX_BUFFER_SIZE);
         }
 
         // 将新数据追加到缓存
@@ -255,6 +270,7 @@ public class FrameParser {
 
     /**
      * 压缩缓存，移除已处理的字节
+     * 更积极的压缩策略，防止内存膨胀
      */
     private void compactBuffer() {
         if (position > 0) {
@@ -263,8 +279,8 @@ public class FrameParser {
                 // 全部消费完，重置缓存
                 buffer.reset();
                 position = 0;
-            } else if (position > buf.length / 2) {
-                // 已消费超过一半，进行压缩
+            } else if (position > 1024) {
+                // 只要消费超过1KB就进行压缩，更积极地释放内存
                 byte[] remaining = Arrays.copyOfRange(buf, position, buf.length);
                 buffer.reset();
                 buffer.write(remaining, 0, remaining.length);
