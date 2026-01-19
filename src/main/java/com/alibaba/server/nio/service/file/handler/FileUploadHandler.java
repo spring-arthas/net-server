@@ -17,6 +17,7 @@ import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameParser;
+import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
@@ -210,10 +211,14 @@ public class FileUploadHandler extends AbstractChannelHandler {
             // 7. 发送 ACK 给客户端
             sendAckFrame(socketChannelContext, uploadContext.getTaskId(), "ready", null);
 
-            log.info("[ {} ] FileHeadDecodeHandler | --> 元数据处理完成，任务ID: {}, 文件路径: {}",
-                    LocalTime.formatDate(LocalDateTime.now()),
+            // 8. 初始化速率限制器（例如限制为 1MB/s）
+            // 在实际生产中，这个值可以从配置读取，或者根据用户级别动态设置
+            long rateLimitBps = 1024 * 1024; // 1MB/s 即用于限制客户端上传速率
+            socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(rateLimitBps, rateLimitBps * 2));
+            log.info("文件上传通道元数据处理完成，任务ID: {}, 文件路径: {}， 已为当前通道 {} 启用上传限速: {} B/s",
                     uploadContext.getTaskId(),
-                    uploadContext.getFilePath());
+                    uploadContext.getFilePath(), 
+                    socketChannelContext.getRemoteAddress(), rateLimitBps);
 
         } catch (Exception e) {
             log.error("处理元数据帧失败", e);

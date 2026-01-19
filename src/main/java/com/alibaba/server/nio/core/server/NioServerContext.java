@@ -33,6 +33,24 @@ import java.util.Optional;
 public class NioServerContext {
 
     private static final Object lock = new Object();
+    
+    /**
+     * 限速恢复调度器
+     * 用于在 ReadEventHandler 暂停 OP_READ 后，定时恢复事件
+     */
+    private static final java.util.concurrent.ScheduledExecutorService rateLimitScheduler = 
+            java.util.concurrent.Executors.newScheduledThreadPool(1, r -> {
+                Thread t = new Thread(r, "RATE-LIMIT-SCHEDULER");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /**
+     * 获取限速调度器
+     */
+    public static java.util.concurrent.ScheduledExecutorService getRateLimitScheduler() {
+        return rateLimitScheduler;
+    }
 
     /**
      * 启动基础服务以及核心服务

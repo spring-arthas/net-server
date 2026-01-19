@@ -4,9 +4,7 @@ import com.alibaba.server.nio.handler.pipe.ChannelPipeLine;
 import lombok.Data;
 
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
-import java.util.concurrent.BlockingQueue;
 
 /**
  * @author: YSFY
@@ -74,6 +72,17 @@ public class SocketChannelContext {
             attributes.put(key, value);
         }
     }
+
+    /**
+     * 限速器（用于上传速率控制）
+     */
+    private com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter;
+
+    /**
+     * 是否处于读暂停状态
+     * true: OP_READ 已取消，正在等待限速恢复
+     */
+    private volatile boolean isReadPaused = false;
 
     /**
      * 获取属性

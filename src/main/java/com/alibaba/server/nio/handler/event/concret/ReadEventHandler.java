@@ -15,7 +15,7 @@ import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.reactor.SubReactor;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
-
+import com.alibaba.server.nio.service.ratelimit.RateLimiter;
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
@@ -175,9 +175,47 @@ public class ReadEventHandler extends AbstractEventHandler {
     private FrameReadResultEnum doReadDataHandle(ChannelEventModel channelEventModel,
             ChannelEventDataCacheModel channelCacheDataModel,
             SocketChannel socketChannel, ByteBuffer byteBuffer) throws IOException {
-        int readBytes;
+        
+        SocketChannelContext context = (SocketChannelContext) channelEventModel.getSelectionKey().attachment();
+        RateLimiter rateLimiter = context.getRateLimiter();
+
+        int readBytes = 0;
         // 循环从通道读取数据
-        while ((readBytes = socketChannel.read(byteBuffer)) > 0) {
+        // 如果有限速器，检查是否允许消费
+        while (true) {
+            // 限速检查
+            if (rateLimiter != null) {
+                // 如果剩余容量大于缓冲区，按缓冲区读；否则按剩余容量读
+                long availableTokens = rateLimiter.getAvailableTokens();
+                if (availableTokens < byteBuffer.capacity()) { // 简单策略：如果令牌不够填满缓冲区，可能需要限速
+                    // 但为了吞吐量，只要有令牌就读。这里我们采取严格模式：
+                    // 如果令牌 < 1024 且 > 0，也读。
+                    // 如果令牌 <= 0，暂停。
+                    if (availableTokens <= 0) {
+                        // 暂停读取，等待令牌桶补充完令牌并等到下次socketChannel读事件触发后再进行读取
+                        pauseRead(channelEventModel, context, rateLimiter);
+                        break; // 退出读取循环
+                    }
+                    
+                    // 限制本次读取的大小
+                    int limit = (int) Math.min(byteBuffer.capacity(), availableTokens);
+                    byteBuffer.limit(limit);
+                } else {
+                    byteBuffer.limit(byteBuffer.capacity());
+                }
+            }
+
+            readBytes = socketChannel.read(byteBuffer);
+            
+            if (readBytes <= 0) {
+                break;
+            }
+
+            // 扣除令牌
+            if (rateLimiter != null) {
+                rateLimiter.tryConsume(readBytes);
+            }
+
             // 从通道读取完并写入到byteBuffer后切换为读模式，将byteBuffer数据重新设置到bytes数组中
             byteBuffer.flip();
             if (byteBuffer.hasRemaining()) {
@@ -195,7 +233,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                         .setNewLatestIndex(channelCacheDataModel.getNewLatestIndex() >= (Integer.MAX_VALUE - 1) ? 1
                                 : groupData.getIndex() + 1);
                 channelCacheDataModel.getWaitHandleDataList().add(groupData);
-                byteBuffer.clear();
+                byteBuffer.clear(); // 清空，恢复 limit 到 capacity
             }
         }
 
@@ -206,6 +244,44 @@ public class ReadEventHandler extends AbstractEventHandler {
 
         // readBytes == 0 或正常读取完成，返回需要后续处理
         return FrameReadResultEnum.NEED_HANDLE;
+    }
+
+    /**
+     * 暂停读取（限速）
+     */
+    private void pauseRead(ChannelEventModel channelEventModel, SocketChannelContext context, com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter) {
+        if (context.isReadPaused()) {
+            return;
+        }
+        
+        // 取消 OP_READ
+        java.nio.channels.SelectionKey key = channelEventModel.getSelectionKey();
+        if (key.isValid()) {
+            // 取消读取事件
+            key.interestOps(key.interestOps() & ~java.nio.channels.SelectionKey.OP_READ);
+            context.setReadPaused(true);
+            
+            // 计算等待时间
+            long waitMs = rateLimiter.calculateWaitTime(1024); // 至少等待能读 1KB 的时间
+            if (waitMs < 10) waitMs = 10; // 最小等待 10ms
+            if (waitMs > 1000) waitMs = 1000; // 最大等待 1s
+            
+            log.debug("触发限速，暂停读取 {} ms, remote={}", waitMs, context.getRemoteAddress());
+            
+            // 提交恢复任务
+            NioServerContext.getRateLimitScheduler().schedule(() -> {
+                try {
+                    if (key.isValid()) {
+                        key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_READ);
+                        key.selector().wakeup();
+                        context.setReadPaused(false);
+                        // log.debug("恢复读取, remote={}", context.getRemoteAddress());
+                    }
+                } catch (Exception e) {
+                    log.error("恢复读取失败", e);
+                }
+            }, waitMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
     }
 
     /**
