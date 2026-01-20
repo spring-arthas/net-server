@@ -16,6 +16,7 @@ import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.file.config.FileUploadConfig;
 import com.alibaba.server.nio.service.file.parser.FrameParser;
 import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
 import com.alibaba.server.util.LocalTime;
@@ -44,6 +45,45 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @SuppressWarnings("all")
 public class FileUploadHandler extends AbstractChannelHandler {
+
+    /**
+     * 文件上传配置
+     */
+    private static FileUploadConfig config;
+
+    /**
+     * 全局速率限制器（控制服务器总上传带宽）
+     */
+    private static TokenBucketRateLimiter globalRateLimiter;
+
+    /**
+     * 并发控制信号量（限制最大同时上传数）
+     */
+    private static java.util.concurrent.Semaphore uploadSemaphore;
+
+    /**
+     * 静态初始化块：初始化全局限流器和信号量
+     */
+    static {
+        try {
+            config = BasicServer.classPathXmlApplicationContext.getBean(FileUploadConfig.class);
+            globalRateLimiter = new TokenBucketRateLimiter(
+                config.getGlobalRateBps(), 
+                config.getGlobalBucketCapacity()
+            );
+            uploadSemaphore = new java.util.concurrent.Semaphore(config.getMaxConcurrentUploads());
+            log.info("文件上传控制器初始化完成 - 全局速率: {} B/s, 单连接速率: {} B/s, 最大并发: {}",
+                config.getGlobalRateBps(), config.getPerConnectionRateBps(), config.getMaxConcurrentUploads());
+        } catch (Exception e) {
+            log.error("初始化文件上传配置失败，使用默认值", e);
+            config = new FileUploadConfig(); // 使用默认配置
+            globalRateLimiter = new TokenBucketRateLimiter(
+                config.getGlobalRateBps(),
+                config.getGlobalBucketCapacity()
+            );
+            uploadSemaphore = new java.util.concurrent.Semaphore(config.getMaxConcurrentUploads());
+        }
+    }
 
     /**
      * 上传上下文缓存：taskId -> FileUploadContext
@@ -168,12 +208,23 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 }
             }
 
-            // 3. 创建上传上下文
+            // 3. 尝试获取上传并发许可（非阻塞）
+            if (!uploadSemaphore.tryAcquire()) {
+                int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
+                log.warn("上传并发数已达上限，拒绝新上传请求: 当前并发={}/{}, fileName={}, remoteAddress={}",
+                        currentUploads, config.getMaxConcurrentUploads(), fileName, socketChannelContext.getRemoteAddress());
+                sendAckFrame(socketChannelContext, null, "error", 
+                    "服务器上传繁忙，当前并发上传数已达到上限，请稍后重试");
+                return;
+            }
+
+            // 4. 创建上传上下文
             FileUploadContext uploadContext = new FileUploadContext();
             uploadContext.setTaskId(FileUploadContext.generateTaskId());
             uploadContext.setFileName(fileName);
             uploadContext.setFileSize(fileSize);
             uploadContext.setFileType(fileType);
+            uploadContext.setSemaphoreAcquired(true); // 标记已获取许可
             // 关联远程客户端连接，用于后续精确匹配
             uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
             // 如果有目录，使用目录路径存储文件
@@ -181,7 +232,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 uploadContext.setBasePath(dirPath);
             }
 
-            // 4. 创建数据库记录（状态：上传中）
+            // 5. 创建数据库记录（状态：上传中）
             try {
                 FileQueryParam fileQueryParam = new FileQueryParam();
                 fileQueryParam.setFileName(fileName);
@@ -199,26 +250,48 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 }
             } catch (Exception e) {
                 log.warn("创建数据库记录失败（非致命）: {}", e.getMessage());
+                // 失败时释放信号量
+                uploadContext.releaseSemaphore(uploadSemaphore);
                 throw e;
             }
 
-            // 5. 打开文件通道
-            uploadContext.openFileChannel();
+            // 6. 打开文件通道
+            try {
+                uploadContext.openFileChannel();
+            } catch (Exception e) {
+                // 失败时释放信号量
+                uploadContext.releaseSemaphore(uploadSemaphore);
+                throw e;
+            }
 
-            // 6. 保存上下文
+            // 7. 保存上下文
             uploadContextMap.put(uploadContext.getTaskId(), uploadContext);
 
-            // 7. 发送 ACK 给客户端
+            // 8. 发送 ACK 给客户端
             sendAckFrame(socketChannelContext, uploadContext.getTaskId(), "ready", null);
 
-            // 8. 初始化速率限制器（例如限制为 1MB/s）
-            // 在实际生产中，这个值可以从配置读取，或者根据用户级别动态设置
-            long rateLimitBps = 1 * 1024 * 1024; // 1MB/s 即用于限制客户端上传速率
-            socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(rateLimitBps, rateLimitBps * 2));
-            log.info("文件上传通道元数据处理完成，任务ID: {}, 文件路径: {}， 已为当前通道 {} 启用上传限速: {} B/s",
+            // 9. 初始化速率限制器（从配置读取）
+            long rateLimitBps = config.getPerConnectionRateBps();
+            
+            // 如果启用动态速率调整，根据当前并发数计算
+            if (config.isEnableDynamicRateAdjustment()) {
+                int currentUploads = uploadContextMap.size();
+                rateLimitBps = config.calculateDynamicRate(currentUploads);
+            }
+            
+            socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
+                rateLimitBps, 
+                rateLimitBps * config.getBucketCapacityMultiplier()
+            ));
+            
+            int currentConcurrent = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
+            log.info("文件上传通道元数据处理完成 - 任务ID: {}, 文件: {}, 通道: {}, 单连接速率: {} B/s, 当前并发: {}/{}",
                     uploadContext.getTaskId(),
-                    uploadContext.getFilePath(), 
-                    socketChannelContext.getRemoteAddress(), rateLimitBps);
+                    uploadContext.getFileName(), 
+                    socketChannelContext.getRemoteAddress(), 
+                    rateLimitBps,
+                    currentConcurrent,
+                    config.getMaxConcurrentUploads());
 
         } catch (Exception e) {
             log.error("处理元数据帧失败", e);
@@ -308,15 +381,18 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
                             .toInstant().toEpochMilli());
 
-            // 4. 清理资源
+            // 4. 释放并发许可
+            uploadContext.releaseSemaphore(uploadSemaphore);
+
+            // 5. 清理资源
             uploadContextMap.remove(uploadContext.getTaskId());
             parserMap.remove(socketChannelContext.getRemoteAddress());
             AbstractEventHandler.channelDataMap.remove(socketChannelContext.getRemoteAddress());
 
-            // 5. 关闭通道
+            // 6. 关闭通道
             NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
 
-            // 6. 终止后续 Handler
+            // 7. 终止后续 Handler
             simpleChannelContext.setNeedStop(Boolean.TRUE);
 
         } catch (Exception e) {
@@ -403,10 +479,13 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 log.warn("清理未完成的文件上传: taskId={}, fileName={}, remoteAddress={}, bytesWritten={}/{}",
                         ctx.getTaskId(), ctx.getFileName(), remoteAddress, ctx.getBytesWritten(), ctx.getFileSize());
 
-                // 1. 标记失败（会删除临时文件）
+                // 1. 释放并发许可
+                ctx.releaseSemaphore(uploadSemaphore);
+
+                // 2. 标记失败（会删除临时文件）
                 ctx.markFailed("客户端断开连接");
 
-                // 2. 删除数据库记录
+                // 3. 删除数据库记录
                 if (ctx.getFileId() != null) {
                     try {
                         FileService fileService = NioServerContext.getFileService();

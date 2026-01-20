@@ -95,6 +95,12 @@ public class FileUploadContext {
     private UploadStatus status = UploadStatus.INITIALIZED;
 
     /**
+     * 标记是否已获取并发许可（用于释放时判断）
+     */
+    private boolean semaphoreAcquired = false;
+
+
+    /**
      * 检查上传是否完成
      */
     public boolean isComplete() {
@@ -240,6 +246,20 @@ public class FileUploadContext {
             } catch (IOException e) {
                 log.error("删除未完成文件失败: taskId={}", taskId, e);
             }
+        }
+    }
+
+    /**
+     * 安全释放信号量许可
+     * 需要在上传完成或失败后调用，避免信号量泄漏
+     * 
+     * @param semaphore 信号量实例
+     */
+    public void releaseSemaphore(java.util.concurrent.Semaphore semaphore) {
+        if (semaphoreAcquired && semaphore != null) {
+            semaphore.release();
+            semaphoreAcquired = false;
+            log.debug("释放上传并发许可: taskId={}", taskId);
         }
     }
 }
