@@ -74,7 +74,7 @@ public class SocketChannelContext {
     }
 
     /**
-     * 限速器（用于上传速率控制）
+     * 当前连接持有限速器（用于上传速率控制）
      */
     private com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter;
 

@@ -99,6 +99,21 @@ public class FileUploadContext {
      */
     private boolean semaphoreAcquired = false;
 
+    /**
+     * 上次统计时间（用于计算实时速率）
+     */
+    private long lastStatTime = 0;
+
+    /**
+     * 上次统计时的已写入字节数
+     */
+    private long lastStatBytes = 0;
+
+    /**
+     * 当前上传速率（字节/秒）
+     */
+    private volatile long currentSpeed = 0;
+
 
     /**
      * 检查上传是否完成
@@ -203,6 +218,50 @@ public class FileUploadContext {
                 taskId, totalWritten, bytesWritten, fileSize);
 
         return totalWritten;
+    }
+
+    /**
+     * 更新上传速率统计
+     * 计算当前上传速率（字节/秒）
+     */
+    public void updateSpeed() {
+        long currentTime = System.currentTimeMillis();
+        
+        if (lastStatTime == 0) {
+            lastStatTime = currentTime;
+            lastStatBytes = bytesWritten;
+            currentSpeed = 0;
+            return;
+        }
+        
+        long timeDiff = currentTime - lastStatTime;
+        if (timeDiff >= 1000) {
+            long bytesDiff = bytesWritten - lastStatBytes;
+            currentSpeed = (bytesDiff * 1000) / timeDiff;
+            
+            lastStatTime = currentTime;
+            lastStatBytes = bytesWritten;
+        }
+    }
+
+    /**
+     * 获取当前上传速率（字节/秒）
+     */
+    public long getCurrentSpeed() {
+        return currentSpeed;
+    }
+
+    /**
+     * 格式化速率显示（KB/s 或 MB/s）
+     */
+    public String getFormattedSpeed() {
+        if (currentSpeed < 1024) {
+            return currentSpeed + " B/s";
+        } else if (currentSpeed < 1024 * 1024) {
+            return String.format("%.2f KB/s", currentSpeed / 1024.0);
+        } else {
+            return String.format("%.2f MB/s", currentSpeed / 1024.0 / 1024.0);
+        }
     }
 
     /**

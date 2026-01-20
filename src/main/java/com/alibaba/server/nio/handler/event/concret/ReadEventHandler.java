@@ -177,33 +177,46 @@ public class ReadEventHandler extends AbstractEventHandler {
             SocketChannel socketChannel, ByteBuffer byteBuffer) throws IOException {
         
         SocketChannelContext context = (SocketChannelContext) channelEventModel.getSelectionKey().attachment();
-        RateLimiter rateLimiter = context.getRateLimiter();
+        RateLimiter perConnectionLimiter = context.getRateLimiter();
+        
+        // 🆕 获取全局限流器（仅对上传通道生效）
+        com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter globalLimiter = null;
+        if ("UPLOAD".equals(context.getHandlerType())) {
+            globalLimiter = com.alibaba.server.nio.service.file.handler.FileUploadHandler.getGlobalRateLimiter();
+        }
 
         int readBytes = 0;
         // 循环从通道读取数据
-        // 如果有限速器，检查是否允许消费
         while (true) {
-            // 限速检查
-            if (rateLimiter != null) {
-                // 如果剩余容量大于缓冲区，按缓冲区读；否则按剩余容量读
-                long availableTokens = rateLimiter.getAvailableTokens();
-                if (availableTokens < byteBuffer.capacity()) { // 简单策略：如果令牌不够填满缓冲区，可能需要限速
-                    // 但为了吞吐量，只要有令牌就读。这里我们采取严格模式：
-                    // 如果令牌 < 1024 且 > 0，也读。
-                    // 如果令牌 <= 0，暂停。
-                    if (availableTokens <= 0) {
-                        // 暂停读取，等待令牌桶补充完令牌并等到下次socketChannel读事件触发后再进行读取
-                        pauseRead(channelEventModel, context, rateLimiter);
-                        break; // 退出读取循环
-                    }
-                    
-                    // 限制本次读取的大小
-                    int limit = (int) Math.min(byteBuffer.capacity(), availableTokens);
-                    byteBuffer.limit(limit);
-                } else {
-                    byteBuffer.limit(byteBuffer.capacity());
+            // 计算允许读取的字节数（考虑单连接和全局两个限流器）
+            long allowedBytes = byteBuffer.capacity();
+            
+            // 🔴 检查单连接限流器
+            if (perConnectionLimiter != null) {
+                long perConnectionTokens = perConnectionLimiter.getAvailableTokens();
+                if (perConnectionTokens <= 0) {
+                    // 单连接令牌不足，暂停读取
+                    pauseRead(channelEventModel, context, perConnectionLimiter);
+                    break; // 退出读取循环
                 }
+                allowedBytes = Math.min(allowedBytes, perConnectionTokens);
             }
+            
+            // 🆕 检查全局限流器
+            if (globalLimiter != null) {
+                long globalTokens = globalLimiter.getAvailableTokens();
+                if (globalTokens <= 0) {
+                    // 全局令牌不足，暂停读取
+                    log.debug("全局带宽达到上限，暂停读取: remote={}", context.getRemoteAddress());
+                    pauseRead(channelEventModel, context, globalLimiter);
+                    break; // 退出读取循环
+                }
+                allowedBytes = Math.min(allowedBytes, globalTokens);
+            }
+            
+            // 限制本次读取的大小（不超过可用令牌）
+            int limit = (int) Math.min(byteBuffer.capacity(), allowedBytes);
+            byteBuffer.limit(limit);
 
             readBytes = socketChannel.read(byteBuffer);
             
@@ -211,9 +224,12 @@ public class ReadEventHandler extends AbstractEventHandler {
                 break;
             }
 
-            // 扣除令牌
-            if (rateLimiter != null) {
-                rateLimiter.tryConsume(readBytes);
+            // 🆕 扣除两个限流器的令牌
+            if (perConnectionLimiter != null) {
+                perConnectionLimiter.tryConsume(readBytes);
+            }
+            if (globalLimiter != null) {
+                globalLimiter.tryConsume(readBytes);
             }
 
             // 从通道读取完并写入到byteBuffer后切换为读模式，将byteBuffer数据重新设置到bytes数组中

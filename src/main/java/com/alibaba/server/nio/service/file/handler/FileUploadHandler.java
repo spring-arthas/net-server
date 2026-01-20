@@ -142,6 +142,16 @@ public class FileUploadHandler extends AbstractChannelHandler {
     }
 
     /**
+     * 获取全局速率限制器
+     * 供 ReadEventHandler 使用，用于实现全局带宽控制
+     * 
+     * @return 全局速率限制器实例
+     */
+    public static TokenBucketRateLimiter getGlobalRateLimiter() {
+        return globalRateLimiter;
+    }
+
+    /**
      * 处理单个完整的帧
      */
     private void handleFrame(FileUploadFrame frame,
@@ -278,19 +288,17 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 int currentUploads = uploadContextMap.size();
                 rateLimitBps = config.calculateDynamicRate(currentUploads);
             }
-            
             socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
                 rateLimitBps, 
                 rateLimitBps * config.getBucketCapacityMultiplier()
             ));
-            
-            int currentConcurrent = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
+
             log.info("文件上传通道元数据处理完成 - 任务ID: {}, 文件: {}, 通道: {}, 单连接速率: {} B/s, 当前并发: {}/{}",
                     uploadContext.getTaskId(),
                     uploadContext.getFileName(), 
                     socketChannelContext.getRemoteAddress(), 
                     rateLimitBps,
-                    currentConcurrent,
+                    config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits(),
                     config.getMaxConcurrentUploads());
 
         } catch (Exception e) {
@@ -319,15 +327,86 @@ public class FileUploadHandler extends AbstractChannelHandler {
             if (fileData != null && fileData.length > 0) {
                 uploadContext.writeData(fileData);
 
-                // 可选：每写入一定量数据后记录进度
-                if (uploadContext.getBytesWritten() % (1024 * 1024) == 0) { // 每 1MB 记录一次
-                    log.debug("上传进度: taskId={}, progress={:.2f}%",
-                            uploadContext.getTaskId(), uploadContext.getProgress());
+                // 更新速率统计
+                uploadContext.updateSpeed();
+
+                // 每接收到数据就输出进度（使用 \r 实现单行滚动更新）
+                // 注：在生产环境中，可以调整输出频率以减少日志量
+                long bytesWritten = uploadContext.getBytesWritten();
+                long fileSize = uploadContext.getFileSize();
+                double progress = uploadContext.getProgress();
+                String speed = uploadContext.getFormattedSpeed();
+                
+                // 使用 System.out.print 而不是 log，实现单行滚动
+                // 格式：[文件名] 进度: XX.XX% (已上传/总大小) 速率: XX.XX MB/s
+                String progressBar = generateProgressBar(progress, 30);
+                System.out.print(String.format(
+                    "\r[%s] %s %.2f%% (%s/%s) 速率: %s",
+                    uploadContext.getFileName(),
+                    progressBar,
+                    progress,
+                    formatBytes(bytesWritten),
+                    formatBytes(fileSize),
+                    speed
+                ));
+                System.out.flush();
+                
+                // 也保留一个详细日志用于调试（降低频率）
+                if (bytesWritten % (10 * 1024 * 1024) == 0 || uploadContext.isComplete()) { // 每 10MB 或完成时记录
+                    log.info("上传进度 - taskId: {}, 文件: {}, 进度: {:.2f}%, 已上传: {}, 速率: {}",
+                            uploadContext.getTaskId(),
+                            uploadContext.getFileName(),
+                            progress,
+                            formatBytes(bytesWritten),
+                            speed);
                 }
             }
 
         } catch (Exception e) {
             log.error("处理数据帧失败", e);
+        }
+    }
+
+    /**
+     * 生成进度条
+     * 
+     * @param progress 进度百分比 (0-100)
+     * @param barLength 进度条长度
+     * @return 进度条字符串，例如：[=========>     ]
+     */
+    private String generateProgressBar(double progress, int barLength) {
+        int filledLength = (int) (barLength * progress / 100.0);
+        StringBuilder bar = new StringBuilder("[");
+        
+        for (int i = 0; i < barLength; i++) {
+            if (i < filledLength - 1) {
+                bar.append("=");
+            } else if (i == filledLength - 1) {
+                bar.append(">");
+            } else {
+                bar.append(" ");
+            }
+        }
+        
+        bar.append("]");
+        return bar.toString();
+    }
+
+    /**
+     * 格式化字节大小
+     * 
+     * @param bytes 字节数
+     * @return 格式化后的字符串，例如：1.23 MB
+     */
+    private String formatBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.2f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.2f MB", bytes / 1024.0 / 1024.0);
+        } else {
+            return String.format("%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0);
         }
     }
 
