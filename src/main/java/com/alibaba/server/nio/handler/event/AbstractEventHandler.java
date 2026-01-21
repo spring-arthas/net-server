@@ -1,18 +1,12 @@
 package com.alibaba.server.nio.handler.event;
 
-import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.model.ChannelEventDataCacheModel;
 import com.alibaba.server.nio.model.ChannelEventModel;
-import com.alibaba.server.nio.model.SocketChannelContext;
-import com.alibaba.server.nio.reactor.GlobalMainReactor;
-import com.alibaba.server.nio.reactor.SubReactor;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.channels.SelectionKey;
-import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -80,28 +74,6 @@ public abstract class AbstractEventHandler<T extends ChannelEventModel> implemen
         }
 
         return channelEventDataCacheModel;
-    }
-
-    /**
-     * 注册SubReactor
-     * 
-     * @param eventModel
-     */
-    public final void registerSubReactor(ChannelEventModel eventModel, String subReactor) {
-        SubReactor reactor = GlobalMainReactor.registerStart(NioServerContext.getSelector(subReactor),
-                ((SocketChannel) eventModel.getSelectionKey().channel()), subReactor);
-        // 注册成功，直接将数据提交至SubReactor线程持有的数据处理队列
-        if (reactor.getQueue().remainingCapacity() > 0) {
-            Map<String, Object> queueMap = new HashMap<>();
-//            queueMap.put("SOCKET_CHANNEL_CONTEXT", eventModel.getSelectionKey().attachment());
-//            queueMap.put("COMPLETE_LIST", eventModel.get());
-            reactor.getQueue().offer(queueMap);
-        } else {
-            log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
-                    + " ] ReadEventHandler | --> 聊天服务通道 [{}] 对应的SubReactor线程数据处理队列已满, 队列可用空间 = [{}], address = {}, thread = {}",
-                    ((SocketChannelContext) eventModel.getSelectionKey().attachment()).getRemoteAddress(),
-                    reactor.getQueue().remainingCapacity(), Thread.currentThread().getName());
-        }
     }
 
     public AbstractEventHandler getNextEventHandler() {

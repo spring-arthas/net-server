@@ -3,16 +3,16 @@ package com.alibaba.server.nio.core.server;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.model.chat.ChatMessageFrame;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
-import com.alibaba.server.nio.reactor.GlobalMainReactor;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.util.PropertiesUtil;
 import com.google.common.collect.Maps;
-
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -52,10 +52,8 @@ public class BasicServer {
      * */
     private static void loadConfigProperties() {
         PropertiesUtil.initProperties();
-
         map.put(BasicConstant.CPU_CORE_COUNT, Runtime.getRuntime().availableProcessors());
         map.put(BasicConstant.OS_NAME, System.getProperty(BasicConstant.OS_NAME));
-        map.put(BasicConstant.GLOBAL_MAIN_REACTOR, GlobalMainReactor.init());
         map.put(BasicConstant.USER, new HashMap<String, UserDTO>());
         Iterator iterator = PropertiesUtil.getInstance().stringPropertyNames().iterator();
         while (iterator.hasNext()) {
