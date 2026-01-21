@@ -80,8 +80,8 @@ public class CoreServer {
         create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR, new MainFileSelector(),
                 Boolean.TRUE);
         // 文件断点续传上传和下载选择器
-        create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_SELECTOR, new MainFileResumeSelector(),
-                Boolean.TRUE);
+        /*create(BasicConstant.SELECTOR, BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_SELECTOR, new MainFileResumeSelector(),
+                Boolean.TRUE);*/
     }
 
     /**
@@ -102,14 +102,14 @@ public class CoreServer {
                 ChannelEventModelEnum.FILE_DOWNLOAD.getName(),
                 new MainFileDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_DOWNLOAD_ACCEPTOR),
                 Boolean.FALSE);
-        create(BasicConstant.ACCEPTOR,
+        /*create(BasicConstant.ACCEPTOR,
                 ChannelEventModelEnum.FILE_RESUME_UPLOAD.getName(),
                 new MainFileResumeUploadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_UPLOAD_ACCEPTOR),
                 Boolean.FALSE);
         create(BasicConstant.ACCEPTOR,
                 ChannelEventModelEnum.FILE_RESUME_DOWNLOAD.getName(),
                 new MainFileResumeDownloadAcceptor(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_RESUME_DOWNLOAD_ACCEPTOR),
-                Boolean.FALSE);
+                Boolean.FALSE);*/
     }
 
     /**

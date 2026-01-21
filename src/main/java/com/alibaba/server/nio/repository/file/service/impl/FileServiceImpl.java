@@ -202,9 +202,9 @@ public class FileServiceImpl implements FileService {
         if (CollectionUtils.isEmpty(fileDos)) {
             FileCreateParam fileCreateParam = new FileCreateParam();
             fileCreateParam.setPId(fileQueryParam.getPId());
-            fileCreateParam.setUserName(fileQueryParam.getUserName());
             fileCreateParam.setFileName(fileQueryParam.getFileName());
             fileCreateParam.setFileSize(fileQueryParam.getFileSize());
+            fileCreateParam.setUserName(fileQueryParam.getUserName());
             fileCreateParam.setFilePath(fileQueryParam.getFilePath());
             fileCreateParam.setFileType(fileQueryParam.getFileType());
             fileCreateParam.setIsFile(YesOrNoEnum.Y.name());

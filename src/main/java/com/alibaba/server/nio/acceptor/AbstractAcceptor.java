@@ -161,9 +161,6 @@ public class AbstractAcceptor {
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
-        // 增加 ResumableFileHandler 到处理链中
-        socketChannelContext.getChannelPipeLine().addHandler(
-                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new ResumableFileHandler()); // 文件上传断点续传处理器
         return socketChannelContext;
     }
 }

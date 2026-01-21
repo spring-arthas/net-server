@@ -1,13 +1,14 @@
 package com.alibaba.server.nio.model;
 
 import com.alibaba.server.nio.handler.pipe.ChannelPipeLine;
+import com.alibaba.server.nio.service.ratelimit.RateLimiter;
 import lombok.Data;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
 /**
- * @author: YSFY
+ * @author: duyao
  * @Date: 2020-11-21 22:58
  * @Pacage_name: com.alibaba.server.nio.model
  * @Project_Name: net-server
@@ -76,7 +77,7 @@ public class SocketChannelContext {
     /**
      * 当前连接持有限速器（用于上传速率控制）
      */
-    private com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter;
+    private RateLimiter rateLimiter;
 
     /**
      * 是否处于读暂停状态

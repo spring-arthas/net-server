@@ -24,13 +24,6 @@ public class ChatMessageFrame {
         REFRESH("REFRESH", "刷新列表帧", "00000011"),
         REGISTER("REGISTER", "注册帧", "00000100"),
         HEART("HEART", "心跳帧", "00000101"),
-
-        PERSONAL_STORE_FILE_REFRESH("PERSONAL_STORE_FILE_REFRESH", "个人网盘文件夹刷新帧", "00000110"),
-        PERSONAL_STORE_FILE_CREATE("PERSONAL_STORE_FILE_CREATE", "个人网盘文件夹创建帧", "00000111"),
-        PERSONAL_STORE_FILE_UPDATE("PERSONAL_STORE_FILE_UPDATE", "个人网盘文件夹修改帧", "00001000"),
-        PERSONAL_STORE_FILE_DELETE("PERSONAL_STORE_FILE_DELETE", "个人网盘文件夹删除帧", "00001001"),
-        PERSONAL_FILE_DOWNLOAD("PERSONAL_FILE_DOWNLOAD", "个人网盘文件下载帧", "00001010"),
-        PERSONAL_FILE_DELETE("PERSONAL_FILE_DELETE", "个人网盘文件删除帧", "00001011"),
         QUERY_USER("QUERY_USER", "查询用户帧", "00001100");
 
         private String frameType;

@@ -16,72 +16,69 @@ import java.util.UUID;
  * 文件上传上下文
  * 保存单次文件上传的状态信息，包括任务ID、文件信息、写入进度等
  * 
- * @author YSFY
+ * @author duyao
  */
 @Data
 @Slf4j
 public class FileUploadContext {
-
     /**
      * 文件存储根目录
      */
     private static final String FILE_STORAGE_ROOT = "/Users/hljy/Downloads/西班牙的荷包蛋/";
-
+    /**
+     * 生成唯一任务ID
+     */
+    public static String generateTaskId() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
     /**
      * 任务ID（唯一标识一次上传）
      */
     private String taskId;
-
     /**
      * 文件名称
      */
     private String fileName;
-
     /**
      * 文件大小（字节）
      */
     private long fileSize;
-
     /**
      * 文件类型（扩展名）
      */
     private String fileType;
-
-    /**
-     * 已写入字节数
-     */
-    private long bytesWritten = 0;
-
     /**
      * 文件通道
      */
     private FileChannel fileChannel;
-
     /**
-     * 文件存储路径
+     * 已写入字节数
      */
-    private String filePath;
-
-    /**
-     * 客户端远程地址（用于关联上传上下文与客户端连接）
-     */
-    private String remoteAddress;
-
-    /**
-     * 数据库记录 ID（用于断连时删除记录）
-     */
-    private Long fileId;
-
-    /**
-     * 上传开始时间
-     */
-    private LocalDateTime startTime;
-
+    private long bytesWritten = 0;
     /**
      * 自定义存储基路径（如果设置，则使用此路径而非默认路径）
      */
     private String basePath;
-
+    /**
+     * 文件存储路径
+     */
+    private String filePath;
+    /**
+     * 客户端远程地址（用于关联上传上下文与客户端连接）
+     */
+    private String remoteAddress;
+    /**
+     * 数据库记录 ID（用于断连时删除记录）
+     */
+    private Long fileId;
+    /**
+     * 上传开始时间
+     */
+    private LocalDateTime startTime;
+    /**
+     * 是否为断点续传模式
+     */
+    private boolean isResume = false;
     /**
      * 上传状态
      */
@@ -91,37 +88,37 @@ public class FileUploadContext {
         COMPLETED, // 已完成
         FAILED // 失败
     }
-
     private UploadStatus status = UploadStatus.INITIALIZED;
-
     /**
      * 标记是否已获取并发许可（用于释放时判断）
      */
     private boolean semaphoreAcquired = false;
-
     /**
      * 上次统计时间（用于计算实时速率）
      */
     private long lastStatTime = 0;
-
     /**
      * 上次统计时的已写入字节数
      */
     private long lastStatBytes = 0;
-
     /**
      * 当前上传速率（字节/秒）
      */
     private volatile long currentSpeed = 0;
-
-
+    /**
+     * 文件MD5值（用于断点续传唯一标识）
+     */
+    private String md5;
+    /**
+     * 起始偏移量（断点续传时非0）
+     */
+    private long startOffset = 0;
     /**
      * 检查上传是否完成
      */
     public boolean isComplete() {
         return bytesWritten >= fileSize;
     }
-
     /**
      * 获取上传进度（百分比）
      */
@@ -131,14 +128,6 @@ public class FileUploadContext {
         }
         return (bytesWritten * 100.0) / fileSize;
     }
-
-    /**
-     * 生成唯一任务ID
-     */
-    public static String generateTaskId() {
-        return UUID.randomUUID().toString().replace("-", "");
-    }
-
     /**
      * 构建文件存储路径
      * 如果设置了 basePath，使用自定义路径
@@ -159,6 +148,7 @@ public class FileUploadContext {
 
     /**
      * 打开文件通道
+     * 支持断点续传：根据 isResume 标志选择打开模式
      */
     public FileChannel openFileChannel() throws IOException {
         if (filePath == null) {
@@ -172,10 +162,28 @@ public class FileUploadContext {
             java.nio.file.Files.createDirectories(parentDir);
         }
 
-        this.fileChannel = FileChannel.open(path,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.TRUNCATE_EXISTING);
+        // 根据是否断点续传选择打开模式
+        if (isResume && java.nio.file.Files.exists(path)) {
+            // 断点续传：追加模式（APPEND）
+            this.fileChannel = FileChannel.open(path,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.APPEND);
+            
+            // 初始化已写入字节数为起始偏移量
+            this.bytesWritten = startOffset;
+            
+            log.info("断点续传模式 - taskId: {}, 文件: {}, 从 {} 字节继续上传 ({:.2f}%)",
+                    taskId, fileName, startOffset, getProgress());
+        } else {
+            // 全新上传：覆盖模式（TRUNCATE_EXISTING）
+            this.fileChannel = FileChannel.open(path,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+            
+            this.bytesWritten = 0;
+            log.info("全新上传模式 - taskId: {}, 文件: {}", taskId, fileName);
+        }
 
         this.status = UploadStatus.UPLOADING;
         this.startTime = LocalDateTime.now();
@@ -183,7 +191,6 @@ public class FileUploadContext {
         log.info("打开文件通道: taskId={}, filePath={}", taskId, filePath);
         return this.fileChannel;
     }
-
     /**
      * 写入数据
      * 注意：FileChannel.write() 可能不会一次写入所有数据，需要循环确保完整写入
@@ -219,7 +226,6 @@ public class FileUploadContext {
 
         return totalWritten;
     }
-
     /**
      * 更新上传速率统计
      * 计算当前上传速率（字节/秒）
@@ -243,14 +249,12 @@ public class FileUploadContext {
             lastStatBytes = bytesWritten;
         }
     }
-
     /**
      * 获取当前上传速率（字节/秒）
      */
     public long getCurrentSpeed() {
         return currentSpeed;
     }
-
     /**
      * 格式化速率显示（KB/s 或 MB/s）
      */
@@ -263,7 +267,6 @@ public class FileUploadContext {
             return String.format("%.2f MB/s", currentSpeed / 1024.0 / 1024.0);
         }
     }
-
     /**
      * 关闭文件通道
      */

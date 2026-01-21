@@ -13,9 +13,12 @@ import com.alibaba.server.nio.model.TransportDataModel;
 import com.alibaba.server.nio.model.file.FileUploadContext;
 import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
+import com.alibaba.server.nio.model.file.UploadCheckpoint;
 import com.alibaba.server.nio.repository.file.service.FileService;
+import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.file.checkpoint.CheckpointManager;
 import com.alibaba.server.nio.service.file.config.FileUploadConfig;
 import com.alibaba.server.nio.service.file.parser.FrameParser;
 import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
@@ -23,6 +26,7 @@ import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -129,7 +133,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
         }
     }
-
     /**
      * 获取或创建帧解析器
      */
@@ -140,17 +143,14 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return new FrameParser();
         });
     }
-
     /**
      * 获取全局速率限制器
      * 供 ReadEventHandler 使用，用于实现全局带宽控制
-     * 
      * @return 全局速率限制器实例
      */
     public static TokenBucketRateLimiter getGlobalRateLimiter() {
         return globalRateLimiter;
     }
-
     /**
      * 处理单个完整的帧
      */
@@ -166,6 +166,10 @@ public class FileUploadHandler extends AbstractChannelHandler {
         log.debug("处理帧: type={}, dataLength={}", frame.getType(), frame.getDataLength());
 
         switch (frame.getType()) {
+            case RESUME_CHECK:
+                handleResumeCheck(frame, socketChannelContext, simpleChannelContext);
+                break;
+
             case META_FRAME:
                 handleMetaFrame(frame, socketChannelContext, simpleChannelContext);
                 break;
@@ -183,7 +187,212 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 break;
         }
     }
+    /**
+     * 处理断点检查帧（RESUME_CHECK）
+     * 检查文件是否存在断点，返回已上传大小
+     */
+    private void handleResumeCheck(FileUploadFrame frame,
+                                   SocketChannelContext socketChannelContext,
+                                   SimpleChannelContext simpleChannelContext) throws IOException {
+        try {
+            // 1. 解析 JSON 元数据
+            String jsonData = frame.getDataAsString();
+            JSONObject meta = JSON.parseObject(jsonData);
 
+            String md5 = meta.getString("md5");
+            String fileName = meta.getString("fileName");
+            long fileSize = meta.getLongValue("fileSize");
+            String fileType = meta.getString("fileType");
+            Long dirId = meta.getLong("dirId");
+            Long userId = meta.getLong("userId");
+
+            log.info("[ {} ] FileUploadHandler | --> 接收到断点检查帧: md5={}, fileName={}, fileSize={}",
+                    com.alibaba.server.util.LocalTime.formatDate(java.time.LocalDateTime.now()), md5, fileName, fileSize);
+
+            // 2. 检查是否有断点记录
+            UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(md5);
+            
+            if (checkpoint != null && new File(checkpoint.getFilePath()).exists()) {
+                // ==== 断点续传模式 ====
+                long uploadedSize = checkpoint.getUploadedSize();
+                
+                // 使用通用方法创建上传上下文
+                FileUploadContext uploadContext = createAndInitializeUploadContext(
+                        meta, socketChannelContext, true, checkpoint);
+                
+                if (uploadContext == null) {
+                    sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
+                    return;
+                }
+                
+                // 发送断点应答
+                sendResumeAck(socketChannelContext, uploadContext.getTaskId(), "resume", 
+                        uploadedSize, "断点续传");
+
+                log.info("断点续传 - taskId: {}, 文件: {}, 已上传: {} / {} ({:.2f}%), 剩余: {}",
+                        uploadContext.getTaskId(),
+                        fileName,
+                        formatBytes(uploadedSize),
+                        formatBytes(fileSize),
+                        uploadContext.getProgress(),
+                        formatBytes(fileSize - uploadedSize));
+
+            } else {
+                // ==== 全新上传模式 ====
+                sendResumeAck(socketChannelContext, null, "new", 0, "全新上传，请发送META_FRAME");
+                log.info("无断点记录，指示客户端全新上传: fileName={}", fileName);
+            }
+
+        } catch (Exception e) {
+            log.error("处理断点检查帧失败", e);
+            sendResumeAck(socketChannelContext, null, "error", 0, e.getMessage());
+        }
+    }
+
+    /**
+     * 创建并初始化上传上下文（通用方法）
+     * 支持全新上传和断点续传两种模式
+     * 
+     * @param meta 元数据JSON对象
+     * @param socketChannelContext socket通道上下文
+     * @param isResume 是否为断点续传模式
+     * @param checkpoint 断点信息（续传模式时传入，全新上传时为null）
+     * @return 创建的上传上下文，如果失败返回null
+     */
+    private FileUploadContext createAndInitializeUploadContext(
+            JSONObject meta,
+            SocketChannelContext socketChannelContext,
+            boolean isResume,
+            UploadCheckpoint checkpoint) throws IOException {
+        
+        // 1. 解析元数据
+        String md5 = meta.getString("md5");
+        String fileName = meta.getString("fileName");
+        long fileSize = meta.getLongValue("fileSize");
+        String fileType = meta.getString("fileType");
+        Long dirId = meta.getLong("dirId");
+        Long userId = meta.getLong("userId");
+        
+        // 2. 校验目录（如果指定了dirId）
+        FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
+        String dirPath = null;
+        Long fileId = null;
+        
+        if (dirId != null) {
+            dirPath = fileService.validateDirectory(dirId);
+            if (dirPath == null) {
+                log.error("目录不存在或类型错误: dirId={}", dirId);
+                return null;
+            }
+        }
+        
+        // 3. 创建数据库记录（仅全新上传需要）
+        if (!isResume) {
+            FileQueryParam fileQueryParam = new FileQueryParam();
+            fileQueryParam.setPId(dirId);
+            fileQueryParam.setFileName(fileName);
+            fileQueryParam.setFileSize(fileSize);
+            fileQueryParam.setUserId(userId);
+            fileQueryParam.setFilePath(dirPath);
+            fileQueryParam.setFileType(fileType);
+            
+            try {
+                FileDto fileDto = fileService.createFile(fileQueryParam);
+                // 保存数据库记录 ID
+                if (fileDto != null && fileDto.getId() != null) {
+                    fileId = fileDto.getId();
+                }
+                log.debug("创建文件记录成功: fileId={}", fileId);
+            } catch (Exception e) {
+                log.error("创建文件记录失败", e);
+                return null;
+            }
+        }
+        
+        // 4. 创建上传上下文
+        FileUploadContext uploadContext = new FileUploadContext();
+        uploadContext.setTaskId(FileUploadContext.generateTaskId());
+        uploadContext.setMd5(md5);
+        uploadContext.setFileName(fileName);
+        uploadContext.setFileSize(fileSize);
+        uploadContext.setFileType(fileType);
+        uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
+        
+        // 5. 设置断点续传相关字段
+        if (isResume && checkpoint != null) {
+            // 断点续传模式
+            uploadContext.setStartOffset(checkpoint.getUploadedSize());
+            uploadContext.setResume(true);
+            uploadContext.setFilePath(checkpoint.getFilePath());
+            uploadContext.setFileId(checkpoint.getFileId());
+        } else {
+            // 全新上传模式
+            uploadContext.setStartOffset(0);
+            uploadContext.setResume(false);
+            uploadContext.setFileId(fileId);
+        }
+        
+        // 6. 设置目录路径
+        if (dirPath != null) {
+            uploadContext.setBasePath(dirPath);
+        }
+        
+        // 7. 获取并发许可
+        if (!uploadSemaphore.tryAcquire()) {
+            int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
+            log.warn("上传并发数已达上限: 当前并发={}/{}", currentUploads, config.getMaxConcurrentUploads());
+            
+            // 删除刚创建的数据库记录（如果有）
+            if (fileId != null) {
+                try {
+                    fileService.deleteFileById(fileId);
+                } catch (Exception e) {
+                    log.error("删除数据库记录失败", e);
+                }
+            }
+            return null;
+        }
+        uploadContext.setSemaphoreAcquired(true);
+        
+        // 8. 打开文件通道
+        try {
+            uploadContext.openFileChannel();
+        } catch (IOException e) {
+            log.error("打开文件通道失败", e);
+            uploadContext.releaseSemaphore(uploadSemaphore);
+            
+            // 删除数据库记录
+            if (uploadContext.getFileId() != null) {
+                try {
+                    fileService.deleteFileById(uploadContext.getFileId());
+                } catch (Exception ex) {
+                    log.error("删除数据库记录失败", ex);
+                }
+            }
+            throw e;
+        }
+        
+        // 9. 保存上下文到Map
+        uploadContextMap.put(uploadContext.getTaskId(), uploadContext);
+        
+        // 10. 设置限流器
+        long rateLimitBps = config.getPerConnectionRateBps();
+        if (config.isEnableDynamicRateAdjustment()) {
+            int currentUploads = uploadContextMap.size();
+            rateLimitBps = config.calculateDynamicRate(currentUploads);
+        }
+        socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
+            rateLimitBps,
+            rateLimitBps * config.getBucketCapacityMultiplier()
+        ));
+        
+        log.info("上传上下文创建成功 - taskId: {}, 文件: {}, 模式: {}, 起始偏移: {}",
+                uploadContext.getTaskId(), fileName,
+                isResume ? "断点续传" : "全新上传",
+                uploadContext.getStartOffset());
+        
+        return uploadContext;
+    }
     /**
      * 处理元数据帧（META_FRAME）
      * 解析文件信息，创建数据库记录，打开文件通道
@@ -206,98 +415,23 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     "[ {} ] FileHeadDecodeHandler | --> 接收到元数据帧: fileName={}, fileSize={}, fileType={}, dirId={}, userId={}",
                     LocalTime.formatDate(LocalDateTime.now()), fileName, fileSize, fileType, dirId, userId);
 
-            // 2. 校验目录是否存在且为目录类型
-            FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
-            String dirPath = null;
-            if (dirId != null) {
-                dirPath = fileService.validateDirectory(dirId);
-                if (dirPath == null) {
-                    log.error("目录不存在或类型错误: dirId={}", dirId);
-                    sendAckFrame(socketChannelContext, null, "error", "目录不存在或类型错误");
-                    return;
-                }
-            }
+            // 2. 使用通用方法创建上传上下文（全新上传模式，isResume=false）
+            FileUploadContext uploadContext = createAndInitializeUploadContext(
+                    meta, socketChannelContext, false, null);
 
-            // 3. 尝试获取上传并发许可（非阻塞）
-            if (!uploadSemaphore.tryAcquire()) {
-                int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
-                log.warn("上传并发数已达上限，拒绝新上传请求: 当前并发={}/{}, fileName={}, remoteAddress={}",
-                        currentUploads, config.getMaxConcurrentUploads(), fileName, socketChannelContext.getRemoteAddress());
-                sendAckFrame(socketChannelContext, null, "error", 
-                    "服务器上传繁忙，当前并发上传数已达到上限，请稍后重试");
+            if (uploadContext == null) {
+                sendAckFrame(socketChannelContext, null, "error", "服务器繁忙或目录错误");
                 return;
             }
 
-            // 4. 创建上传上下文
-            FileUploadContext uploadContext = new FileUploadContext();
-            uploadContext.setTaskId(FileUploadContext.generateTaskId());
-            uploadContext.setFileName(fileName);
-            uploadContext.setFileSize(fileSize);
-            uploadContext.setFileType(fileType);
-            uploadContext.setSemaphoreAcquired(true); // 标记已获取许可
-            // 关联远程客户端连接，用于后续精确匹配
-            uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
-            // 如果有目录，使用目录路径存储文件
-            if (dirPath != null) {
-                uploadContext.setBasePath(dirPath);
-            }
-
-            // 5. 创建数据库记录（状态：上传中）
-            try {
-                FileQueryParam fileQueryParam = new FileQueryParam();
-                fileQueryParam.setFileName(fileName);
-                fileQueryParam.setFileSize(fileSize);
-                fileQueryParam.setFileType(fileType);
-                fileQueryParam.setPId(dirId);
-                fileQueryParam.setUserId(userId);
-                fileQueryParam.setUserName(userId != null ? String.valueOf(userId) : "unknown");
-                fileQueryParam.setFilePath(uploadContext.buildFilePath());
-                com.alibaba.server.nio.repository.file.service.dto.FileDto fileDto = fileService
-                        .createFile(fileQueryParam);
-                // 保存数据库记录 ID，用于断连时删除
-                if (fileDto != null && fileDto.getId() != null) {
-                    uploadContext.setFileId(fileDto.getId());
-                }
-            } catch (Exception e) {
-                log.warn("创建数据库记录失败（非致命）: {}", e.getMessage());
-                // 失败时释放信号量
-                uploadContext.releaseSemaphore(uploadSemaphore);
-                throw e;
-            }
-
-            // 6. 打开文件通道
-            try {
-                uploadContext.openFileChannel();
-            } catch (Exception e) {
-                // 失败时释放信号量
-                uploadContext.releaseSemaphore(uploadSemaphore);
-                throw e;
-            }
-
-            // 7. 保存上下文
-            uploadContextMap.put(uploadContext.getTaskId(), uploadContext);
-
-            // 8. 发送 ACK 给客户端
+            // 3. 发送 ACK 给客户端
             sendAckFrame(socketChannelContext, uploadContext.getTaskId(), "ready", null);
-
-            // 9. 初始化速率限制器（从配置读取）
-            long rateLimitBps = config.getPerConnectionRateBps();
-            
-            // 如果启用动态速率调整，根据当前并发数计算
-            if (config.isEnableDynamicRateAdjustment()) {
-                int currentUploads = uploadContextMap.size();
-                rateLimitBps = config.calculateDynamicRate(currentUploads);
-            }
-            socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
-                rateLimitBps, 
-                rateLimitBps * config.getBucketCapacityMultiplier()
-            ));
 
             log.info("文件上传通道元数据处理完成 - 任务ID: {}, 文件: {}, 通道: {}, 单连接速率: {} B/s, 当前并发: {}/{}",
                     uploadContext.getTaskId(),
-                    uploadContext.getFileName(), 
-                    socketChannelContext.getRemoteAddress(), 
-                    rateLimitBps,
+                    uploadContext.getFileName(),
+                    socketChannelContext.getRemoteAddress(),
+                    config.getPerConnectionRateBps(),
                     config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits(),
                     config.getMaxConcurrentUploads());
 
@@ -306,7 +440,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
             sendAckFrame(socketChannelContext, null, "error", e.getMessage());
         }
     }
-
     /**
      * 处理数据帧（DATA_FRAME）
      * 将文件字节数据写入本地文件
@@ -460,6 +593,12 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
                             .toInstant().toEpochMilli());
 
+            // 3.5 删除断点记录（上传完成）
+            if (uploadContext.getMd5() != null) {
+                CheckpointManager.removeCheckpoint(uploadContext.getMd5());
+                log.debug("上传完成，删除断点记录: MD5={}", uploadContext.getMd5());
+            }
+
             // 4. 释放并发许可
             uploadContext.releaseSemaphore(uploadSemaphore);
 
@@ -495,7 +634,29 @@ public class FileUploadHandler extends AbstractChannelHandler {
         }
         return null;
     }
+    /**
+     * 发送断点应答帧（RESUME_ACK）
+     */
+    private void sendResumeAck(SocketChannelContext ctx, String taskId,
+                               String status, long uploadedSize, String message) throws IOException {
+        JSONObject ackJson = new JSONObject();
+        ackJson.put("taskId", taskId);
+        ackJson.put("status", status);
+        ackJson.put("uploadedSize", uploadedSize);
+        ackJson.put("message", message);
 
+        byte[] ackData = ackJson.toJSONString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(FileUploadFrame.HEADER_LENGTH + ackData.length);
+        buffer.put(FileUploadFrame.MAGIC);
+        buffer.put((byte) FileUploadFrame.FrameType.RESUME_ACK.getCode());
+        buffer.put((byte) 0);
+        buffer.putInt(ackData.length);
+        buffer.put(ackData);
+        buffer.flip();
+
+        com.alibaba.server.nio.handler.event.concret.WriteQueueHelper.submitWrite(ctx, buffer);
+        log.debug("发送断点应答: status={}, uploadedSize={}, taskId={}", status, uploadedSize, taskId);
+    }
     /**
      * 发送 ACK 帧给客户端（使用 NIO 事件驱动的写操作）
      */
@@ -555,17 +716,39 @@ public class FileUploadHandler extends AbstractChannelHandler {
             if (remoteAddress.equals(ctx.getRemoteAddress())
                     && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
 
-                log.warn("清理未完成的文件上传: taskId={}, fileName={}, remoteAddress={}, bytesWritten={}/{}",
+                log.warn("连接断开，保存断点信息: taskId={}, fileName={}, remoteAddress={}, uploaded={}/{}",
                         ctx.getTaskId(), ctx.getFileName(), remoteAddress, ctx.getBytesWritten(), ctx.getFileSize());
 
-                // 1. 释放并发许可
+                // 1. 保存断点而非删除文件（支持断点续传）
+                if (ctx.getMd5() != null && ctx.getBytesWritten() > 0) {
+                    UploadCheckpoint checkpoint = new UploadCheckpoint();
+                    checkpoint.setMd5(ctx.getMd5());
+                    checkpoint.setFileName(ctx.getFileName());
+                    checkpoint.setFileSize(ctx.getFileSize());
+                    checkpoint.setUploadedSize(ctx.getBytesWritten());
+                    checkpoint.setFilePath(ctx.getFilePath());
+                    checkpoint.setFileId(ctx.getFileId());
+                    checkpoint.setUserId(ctx.getFileId() != null ? ctx.getFileId() : null); // 简化处理
+                    checkpoint.setUpdateTime(java.time.LocalDateTime.now());
+                    checkpoint.setCreateTime(ctx.getStartTime());
+
+                    CheckpointManager.saveCheckpoint(checkpoint);
+                    log.info("已保存断点，支持续传: MD5={}, 已上传={} ({:.2f}%)",
+                            ctx.getMd5(), ctx.getBytesWritten(), ctx.getProgress());
+                } else {
+                    // 无 MD5 或未上传任何数据，删除文件
+                    ctx.markFailed("客户端断开连接");
+                    log.info("无断点信息，删除临时文件: fileName={}", ctx.getFileName());
+                }
+
+                // 2. 释放并发许可
                 ctx.releaseSemaphore(uploadSemaphore);
 
-                // 2. 标记失败（会删除临时文件）
-                ctx.markFailed("客户端断开连接");
+                // 3. 关闭文件通道（但不删除文件）
+                ctx.closeFileChannel();
 
-                // 3. 删除数据库记录
-                if (ctx.getFileId() != null) {
+                // 4. 删除数据库记录（仅在无断点时）
+                if (ctx.getMd5() == null && ctx.getFileId() != null) {
                     try {
                         FileService fileService = NioServerContext.getFileService();
                         if (fileService != null) {
@@ -575,6 +758,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                         log.error("删除数据库记录失败: fileId={}", ctx.getFileId(), e);
                     }
                 }
+
                 return true; // 从 Map 中移除
             }
             return false;
