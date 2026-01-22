@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 
 /**
  * 文件上传处理器
@@ -49,55 +50,65 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @SuppressWarnings("all")
 public class FileUploadHandler extends AbstractChannelHandler {
-
     /**
      * 文件上传配置
      */
     private static FileUploadConfig config;
-
     /**
      * 全局速率限制器（控制服务器总上传带宽）
      */
     private static TokenBucketRateLimiter globalRateLimiter;
-
     /**
      * 并发控制信号量（限制最大同时上传数）
      */
-    private static java.util.concurrent.Semaphore uploadSemaphore;
+    private static Semaphore uploadSemaphore;
+    /**
+     * 上传上下文缓存: 一个taskId对应一个文件上传上下文对象
+     */
+    private static final ConcurrentHashMap<String, FileUploadContext> uploadContextMap = new ConcurrentHashMap<>();
+    /**
+     * 帧解析器缓存：一个remoteAddress对应一个帧解析器
+     */
+    private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
 
     /**
      * 静态初始化块：初始化全局限流器和信号量
      */
     static {
-        try {
-            config = BasicServer.classPathXmlApplicationContext.getBean(FileUploadConfig.class);
-            globalRateLimiter = new TokenBucketRateLimiter(
-                config.getGlobalRateBps(), 
-                config.getGlobalBucketCapacity()
-            );
-            uploadSemaphore = new java.util.concurrent.Semaphore(config.getMaxConcurrentUploads());
-            log.info("文件上传控制器初始化完成 - 全局速率: {} B/s, 单连接速率: {} B/s, 最大并发: {}",
-                config.getGlobalRateBps(), config.getPerConnectionRateBps(), config.getMaxConcurrentUploads());
-        } catch (Exception e) {
-            log.error("初始化文件上传配置失败，使用默认值", e);
-            config = new FileUploadConfig(); // 使用默认配置
-            globalRateLimiter = new TokenBucketRateLimiter(
-                config.getGlobalRateBps(),
-                config.getGlobalBucketCapacity()
-            );
-            uploadSemaphore = new java.util.concurrent.Semaphore(config.getMaxConcurrentUploads());
-        }
+        // 使用默认配置
+        config = new FileUploadConfig(); 
+        // 构建全局限流器
+        globalRateLimiter = new TokenBucketRateLimiter(config.getGlobalRateBps(), config.getGlobalBucketCapacity());
+        uploadSemaphore = new Semaphore(config.getMaxConcurrentUploads());
+        log.info("文件上传控制器初始化完成 - 全局速率: {}, 单连接速率: {}, 最大并发: {}",
+                formatRate(config.getGlobalRateBps()), 
+                formatRate(config.getPerConnectionRateBps()), 
+                config.getMaxConcurrentUploads());
     }
 
     /**
-     * 上传上下文缓存：taskId -> FileUploadContext
+     * 格式化速率显示（自动选择单位：B/s, KB/s, MB/s）
+     * 
+     * @param bytesPerSecond 字节/秒
+     * @return 格式化后的速率字符串
      */
-    private static final ConcurrentHashMap<String, FileUploadContext> uploadContextMap = new ConcurrentHashMap<>();
-
+    private static String formatRate(long bytesPerSecond) {
+        if (bytesPerSecond < 1024) {
+            return bytesPerSecond + " B/s";
+        } else if (bytesPerSecond < 1024 * 1024) {
+            return Math.round(bytesPerSecond / 1024.0) + " KB/s";
+        } else {
+            return Math.round(bytesPerSecond / (1024.0 * 1024.0)) + " MB/s";
+        }
+    }
     /**
-     * 帧解析器缓存：remoteAddress -> FileUploadFrameParser
+     * 获取全局速率限制器
+     * 供 ReadEventHandler 使用，用于实现全局带宽控制
+     * @return 全局速率限制器实例
      */
-    private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
+    public static TokenBucketRateLimiter getGlobalRateLimiter() {
+        return globalRateLimiter;
+    }
 
     @Override
     public void handler(Object o, ChannelContext channelContext) throws IOException {
@@ -119,10 +130,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
         if (CollectionUtils.isEmpty(waitHandleDataList)) {
             return;
         }
-
         // 获取或创建帧解析器
         FrameParser parser = getOrCreateParser(socketChannelContext);
-
         // 逐个处理待处理数据
         for (ChannelEventModel.GroupData groupData : waitHandleDataList) {
             List<FileUploadFrame> frames = parser.parse(groupData.getBytes());
@@ -144,14 +153,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
         });
     }
     /**
-     * 获取全局速率限制器
-     * 供 ReadEventHandler 使用，用于实现全局带宽控制
-     * @return 全局速率限制器实例
-     */
-    public static TokenBucketRateLimiter getGlobalRateLimiter() {
-        return globalRateLimiter;
-    }
-    /**
      * 处理单个完整的帧
      */
     private void handleFrame(FileUploadFrame frame,
@@ -166,22 +167,18 @@ public class FileUploadHandler extends AbstractChannelHandler {
         log.debug("处理帧: type={}, dataLength={}", frame.getType(), frame.getDataLength());
 
         switch (frame.getType()) {
-            case RESUME_CHECK:
+            case RESUME_CHECK: // 如果当前文件上传时默认会发送为断点续传帧，因为不确定当前文件上传是全新上传还是断点续传
                 handleResumeCheck(frame, socketChannelContext, simpleChannelContext);
                 break;
-
-            case META_FRAME:
+            case META_FRAME: // 如果判定为文件上传为全新上传，则会以文件上传元数据帧开始
                 handleMetaFrame(frame, socketChannelContext, simpleChannelContext);
                 break;
-
-            case DATA_FRAME:
+            case DATA_FRAME: // 文件数据帧
                 handleDataFrame(frame, socketChannelContext);
                 break;
-
-            case END_FRAME:
+            case END_FRAME: // 文件结束帧
                 handleEndFrame(frame, socketChannelContext, simpleChannelContext);
                 break;
-
             default:
                 log.warn("未知帧类型: {}", frame.getType());
                 break;
@@ -198,7 +195,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
             // 1. 解析 JSON 元数据
             String jsonData = frame.getDataAsString();
             JSONObject meta = JSON.parseObject(jsonData);
-
             String md5 = meta.getString("md5");
             String fileName = meta.getString("fileName");
             long fileSize = meta.getLongValue("fileSize");
@@ -211,8 +207,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
             // 2. 检查是否有断点记录
             UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(md5);
-            
-            if (checkpoint != null && new File(checkpoint.getFilePath()).exists()) {
+            if (Objects.nonNull(checkpoint) && new File(checkpoint.getFilePath()).exists()) {
                 // ==== 断点续传模式 ====
                 long uploadedSize = checkpoint.getUploadedSize();
                 
@@ -654,7 +649,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         buffer.put(ackData);
         buffer.flip();
 
-        com.alibaba.server.nio.handler.event.concret.WriteQueueHelper.submitWrite(ctx, buffer);
+        WriteQueueHelper.submitWrite(ctx, buffer);
         log.debug("发送断点应答: status={}, uploadedSize={}, taskId={}", status, uploadedSize, taskId);
     }
     /**
