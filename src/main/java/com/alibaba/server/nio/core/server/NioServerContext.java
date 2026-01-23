@@ -5,7 +5,6 @@ import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
-import com.alibaba.server.nio.service.file.handler.FileUploadHandler;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -227,7 +226,7 @@ public class NioServerContext {
 
                 // 0、清理该客户端未完成的文件上传
                 try {
-                    FileUploadHandler.cleanupConnection(remoteAddress);
+                    com.alibaba.server.nio.service.file.handler.FileUploadHandler.cleanupConnection(remoteAddress);
                 } catch (Exception e) {
                     log.error("清理未完成上传失败: remoteAddress={}", remoteAddress, e);
                 }

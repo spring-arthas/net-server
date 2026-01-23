@@ -5,6 +5,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
+import com.alibaba.server.nio.handler.event.concret.WriteQueueHelper;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.ChannelEventModel;
@@ -33,6 +34,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
@@ -587,27 +589,21 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     uploadContext.getBytesWritten(),
                     System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
                             .toInstant().toEpochMilli());
-
             // 3.5 删除断点记录（上传完成）
             if (uploadContext.getMd5() != null) {
                 CheckpointManager.removeCheckpoint(uploadContext.getMd5());
                 log.debug("上传完成，删除断点记录: MD5={}", uploadContext.getMd5());
             }
-
             // 4. 释放并发许可
             uploadContext.releaseSemaphore(uploadSemaphore);
-
-            // 5. 清理资源
+            // 5. 清理资源（包含本次文件上传任务和解析器）
             uploadContextMap.remove(uploadContext.getTaskId());
             parserMap.remove(socketChannelContext.getRemoteAddress());
             AbstractEventHandler.channelDataMap.remove(socketChannelContext.getRemoteAddress());
-
             // 6. 关闭通道
             NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
-
             // 7. 终止后续 Handler
             simpleChannelContext.setNeedStop(Boolean.TRUE);
-
         } catch (Exception e) {
             log.error("处理结束帧失败", e);
         }
@@ -656,7 +652,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
      * 发送 ACK 帧给客户端（使用 NIO 事件驱动的写操作）
      */
     private void sendAckFrame(SocketChannelContext socketChannelContext,
-            String taskId, String status, String message) throws IOException {
+                              String taskId,
+                              String status,
+                              String message) throws IOException {
         try {
             SocketChannel socketChannel = socketChannelContext.getSocketChannel();
             if (socketChannel == null || !socketChannel.isOpen()) {
@@ -708,8 +706,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         uploadContextMap.entrySet().removeIf(entry -> {
             FileUploadContext ctx = entry.getValue();
             // 只清理属于该客户端且未完成的上传
-            if (remoteAddress.equals(ctx.getRemoteAddress())
-                    && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
+            if (remoteAddress.equals(ctx.getRemoteAddress()) && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
 
                 log.warn("连接断开，保存断点信息: taskId={}, fileName={}, remoteAddress={}, uploaded={}/{}",
                         ctx.getTaskId(), ctx.getFileName(), remoteAddress, ctx.getBytesWritten(), ctx.getFileSize());
