@@ -18,14 +18,19 @@
             <dataSource type="POOLED">
                 <!-- value属性值引用db.properties配置文件中配置的值 -->
                 <property name="driver" value="com.mysql.jdbc.Driver"/>
-                <property name="url" value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;"/>
-                <property name="username" value="jxgy"/>
-                <property name="password" value="Fbhu0359"/>
+    <!-- <property name="url" value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;"/>
+    <property name="username" value="jxgy"/>
+    <property name="password" value="Fbhu0359"/>-->
+
+                <property name="url"
+                          value="jdbc:mysql://localhost:3306/net-server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
+                <property name="username" value="root" />
+                <property name="password" value="spring" />
             </dataSource>
         </environment>
     </environments>
 
-    <!-- 注册mapper.xml -->
+<!-- 注册mapper.xml -->
     <mappers>
         <!--<mapper resource="com/fpc/Mapping/questionMapper.xml"/>-->
         <!-- <mapper class="com.fpc.Mapping.questionMapperI"/> -->

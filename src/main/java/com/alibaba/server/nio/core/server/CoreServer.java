@@ -11,7 +11,6 @@ import com.alibaba.server.nio.handler.event.concret.ConnectEventHandler;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteEventHandler;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
-import com.alibaba.server.nio.selector.MainFileResumeSelector;
 import com.alibaba.server.nio.selector.TextTransmissionSelector;
 import com.alibaba.server.nio.selector.MainFileSelector;
 import lombok.extern.slf4j.Slf4j;

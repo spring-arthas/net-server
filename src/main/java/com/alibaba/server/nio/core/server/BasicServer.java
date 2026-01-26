@@ -1,7 +1,6 @@
 package com.alibaba.server.nio.core.server;
 
 import com.alibaba.server.common.BasicConstant;
-import com.alibaba.server.nio.model.chat.ChatMessageFrame;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.util.PropertiesUtil;
@@ -83,13 +82,6 @@ public class BasicServer {
      * 设置枚举
      */
     private static void setEnumsType() {
-        // 设置聊天枚举
-        ChatMessageFrame.FrameType[] chatFrameTypes = ChatMessageFrame.FrameType.values();
-        Map<String, ChatMessageFrame.FrameType> chatFrameTypeMap = Maps.newHashMap();
-        for(ChatMessageFrame.FrameType frameType : chatFrameTypes) {
-            chatFrameTypeMap.put(frameType.getBit(), frameType);
-        }
-        map.put(BasicConstant.CHAT_MESSAGE_FRAME_TYPE, chatFrameTypeMap);
 
         // 设置文件枚举
        /* FileMessageFrame.FrameType[] fileFrameTypes = FileMessageFrame.FrameType.values();
