@@ -70,9 +70,7 @@ public class NioServerContext {
             // 3、追加额外处理
             // CoreServer.appendHandler();
         } catch (Exception e) {
-            log.error("[" + LocalTime.formatDate(LocalDateTime.now()) + "] NioServerContext | --> 服务启动失败, error = {}",
-                    e.getLocalizedMessage());
-            e.printStackTrace();
+            log.error("NioServerContext: 服务启动失败, error = {}", ExceptionUtils.getStackTrace);
         }
     }
 
@@ -211,103 +209,36 @@ public class NioServerContext {
     }
 
     /**
-     * 关闭socketChannel
-     * 
+     * 释放通道资源
      * @param socketChannel
-     * @param subReactor
      * @return Boolean 关闭结果
      */
     public static Boolean closedAndRelease(SocketChannel socketChannel) {
-        String remoteAddress = "";
+        if (!Optional.ofNullable(socketChannel).isPresent()) {
+            return;
+        }
         try {
-            if (Optional.ofNullable(socketChannel).isPresent()) {
-                remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
-                String localAddress = NioServerContext.getLocalAddress(socketChannel);
-
-                // 0、清理该客户端未完成的文件上传
-                try {
-                    com.alibaba.server.nio.service.file.handler.FileUploadHandler.cleanupConnection(remoteAddress);
-                } catch (Exception e) {
-                    log.error("清理未完成上传失败: remoteAddress={}", remoteAddress, e);
-                }
-
-                // 1、关闭socketChannel，将会发送流截至符 -1到客户端
-                Socket socket = socketChannel.socket();
-                if (!socket.isClosed()) {
-                    socketChannel.shutdownInput();
-                    socketChannel.shutdownOutput();
-                    socketChannel.close();
-                }
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
-                        + " ] NioServerContext | --> socketChannel closed local connected success, remoteAddress = {}, localAddress = {}, thread = {}",
-                        remoteAddress, localAddress, Thread.currentThread().getName());
+            String remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
+            String localAddress = NioServerContext.getLocalAddress(socketChannel);
+            // 1、清理该远程连接对应的上传任务
+            com.alibaba.server.nio.service.file.handler.FileUploadHandler.cleanupConnection(remoteAddress);
+            // 2、关闭socketChannel，将会发送流截至符 -1到客户端
+            Socket socket = socketChannel.socket();
+            if (!socket.isClosed()) {
+                socketChannel.shutdownInput();
+                socketChannel.shutdownOutput();
+                socketChannel.close();
             }
+            log.info("NioServerContext: 服务端socketChannel关闭成功, 资源已释放, 本次通道连接信息：remoteAddress = {}, localAddress = {}, thread = {}",
+                    remoteAddress, localAddress, Thread.currentThread().getName());
         } catch (Exception e) {
-            if (e instanceof ClosedChannelException) {
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
-                        + " ] NioServerContext | --> socketChannel shutdown input or output warning, channel is closed, address = {}, message = {}",
-                        NioServerContext.getLocalAddress(socketChannel), e.getMessage());
-            }
-
-            if (e instanceof NotYetConnectedException) {
-                log.warn("[ " + LocalTime.formatDate(LocalDateTime.now())
-                        + " ] NioServerContext | --> socketChannel is not connect yet, address = {}, message = {}",
-                        NioServerContext.getLocalAddress(socketChannel), e.getMessage());
-            }
-
-            e.printStackTrace();
+             log.error("NioServerContext: 服务端通道socketChannel资源释放出现异常, 通道信息 = {}, error = {}",
+                JSON.toJSONString(socketChannel), 
+                ExceptionUtils.get);
         } finally {
-            return handleSubReactor(remoteAddress, Boolean.TRUE);
+            
         }
     }
-
-    /**
-     * 下线操作
-     * 
-     * @param remoteAddress
-     * @param isCloseSubReactor 是否关闭subReactor线程
-     * @return
-     */
-    public static Boolean handleSubReactor(String remoteAddress, Boolean isCloseSubReactor) {
-        // 1、清空当前通道缓存数据
-        ReadEventHandler.channelDataMap.remove(remoteAddress);
-
-        // 2、内存移除用户,获取到用户id；
-        UserDTO userDto = (UserDTO) ((Map) BasicServer.getMap().get(BasicConstant.USER)).remove(remoteAddress);
-
-        // 3、更新数据库用户状态为登出
-        if (Optional.ofNullable(userDto).isPresent()) {
-            UserUpdateParam userUpdateParam = new UserUpdateParam();
-            userUpdateParam.setId(userDto.getId());
-            userUpdateParam.setStatus("2");
-            ((UserService) BasicServer.classPathXmlApplicationContext.getBean(UserService.class))
-                    .update(userUpdateParam);
-
-            log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
-                    + " ] NioServerContext | --> memory user cache remove success and update db user login status success, remoteAddress = {}, thread = {}",
-                    remoteAddress, Thread.currentThread().getName());
-        }
-
-        if (!isCloseSubReactor) {
-            return Boolean.TRUE;
-        }
-        // 4、移除用户对应的subReactor线程，并中断线程
-        Map<String, Object> subReactorMap = ((Map) BasicServer.getMap().get(BasicConstant.GLOBAL_MAIN_REACTOR));
-        if (!CollectionUtils.isEmpty(subReactorMap)) {
-            Map<String, Object> map = ((Map) subReactorMap.remove(remoteAddress));
-            if (!CollectionUtils.isEmpty(map)) {
-                Thread thread = (Thread) map.get(BasicConstant.THREAD);
-                // 中断线程
-                thread.interrupt();
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
-                        + " ] NioServerContext | --> subReactor user cache remove success, surplus online connections = {}, remoteAddress = {}, thread = {}",
-                        subReactorMap.size(), remoteAddress, Thread.currentThread().getName());
-            }
-        }
-
-        return Boolean.TRUE;
-    }
-
     /**
      * 获取IOC容器对象
      * 

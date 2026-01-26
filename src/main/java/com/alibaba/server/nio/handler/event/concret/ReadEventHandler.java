@@ -34,12 +34,6 @@ import java.util.Optional;
 public class ReadEventHandler extends AbstractEventHandler {
     private static Integer chatIndex = 0;
 
-    /**
-     * 帧总长度最大限制：100MB
-     * 防止恶意客户端发送超大帧长度导致OOM
-     */
-    private static final int MAX_FRAME_LENGTH = 100 * 1024 * 1024;
-
     @Override
     public ChannelEventModel eventHandler(ChannelEventModel channelEventModel) {
         // 非读事件则继续下一个事件处理器
@@ -57,10 +51,8 @@ public class ReadEventHandler extends AbstractEventHandler {
         this.readHandler(channelEventModel);
         return channelEventModel;
     }
-
     /**
      * 执行处理,提交线程池处理读事件,解决粘包半包问题后，提交数据至线程池处理
-     * 
      * @param channelEventModel
      * @return eventModel
      */
@@ -74,19 +66,16 @@ public class ReadEventHandler extends AbstractEventHandler {
         if (Objects.equals(FrameReadResultEnum.END, frameReadResultEnum)) { // 通道关闭直接返回，内部已经完成了资源的释放
             return;
         }
-        // 3. 将本次待处理的数据缓存至socketChannelContext中
+        // 3. 将本次待处理的数据缓存至socketChannelContext中后提交至WorkerThreadPool线程池处理
         SocketChannelContext socketChannelContext = (SocketChannelContext) channelEventModel.getSelectionKey().attachment();
         TransportDataModel transportDataModel = new TransportDataModel();
         transportDataModel.setDataType(channelEventModel.getEventModelEnum().getName());
         transportDataModel.setWaitHandleDataList(channelEventDataCacheModel.getWaitHandleDataList());
         socketChannelContext.setTransportDataModel(transportDataModel);
-        // 将本次读事件产生的数据传递至事件对应通道的线程内进行处理
         WorkerThreadPool.submit(socketChannelContext);
         // 4. 释放缓存数据:【修复】：清空 completeList，防止数据重复处理
         channelEventDataCacheModel.getWaitHandleDataList().clear();
-
     }
-
     /**
      * 读取数据
      * 
@@ -111,31 +100,25 @@ public class ReadEventHandler extends AbstractEventHandler {
             // 客户端关闭输入输出流或直接调用close()会读取到-1
             if (Objects.equals(FrameReadResultEnum.END, frameReadResultEnum)) {
                 // 1. 记录日志：客户端关闭连接
-                log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
-                        + " ] ReadEventHandler | --> 客户端关闭连接，准备释放资源, remoteAddress = {}, thread = {}",
-                        channelEventModel.getRemoteAddress(), Thread.currentThread().getName());
+                log.info("ReadEventHandler：客户端关闭连接，准备释放资源, remoteAddress = {}, thread = {}",
+                    channelEventModel.getRemoteAddress(), Thread.currentThread().getName());
                 // 2. 取消 SelectionKey，从 Selector 中移除该通道的事件监听
                 channelEventModel.getSelectionKey().cancel();
                 // 3. 关闭通道并释放资源
-                // closedAndRelease 内部会执行：
-                // - 关闭 SocketChannel（shutdownInput/shutdownOutput/close）
-                // - 调用 handleSubReactor 清理：channelDataMap、用户缓存、数据库状态更新、SubReactor 线程
                 NioServerContext.closedAndRelease(socketChannel);
                 // 4. 处理完成，直接返回
                 return FrameReadResultEnum.END;
             }
-
             // 需要后续处理读取到的数据
             if (Objects.equals(FrameReadResultEnum.NEED_HANDLE, frameReadResultEnum)) {
                 return FrameReadResultEnum.NEED_HANDLE;
             }
         } catch (Exception e) {
             // 处理 read 产生的异常
-            log.error("[ " + LocalTime.formatDate(LocalDateTime.now())
-                    + " ] ReadEventHandler | --> 读取数据异常，准备释放资源, remoteAddress = {}, exception = {}, thread = {}",
-                    channelEventModel.getRemoteAddress(), e.getClass().getSimpleName(),
-                    Thread.currentThread().getName());
-
+            log.error("ReadEventHandler: 通道读取数据异常，将终止数据流读取工作，准备开始释放资源, remoteAddress = {}, thread = {}, error = {}",
+                    channelEventModel.getRemoteAddress(),
+                    Thread.currentThread().getName(),
+            ExceptionUtils.getStackTrace(e));
             if (e instanceof SocketException) {
                 // Connection reset || Connection reset by peer:Socket write error || Broken
                 // pipe
@@ -175,62 +158,54 @@ public class ReadEventHandler extends AbstractEventHandler {
             SocketChannel socketChannel, ByteBuffer byteBuffer) throws IOException {
         
         SocketChannelContext context = (SocketChannelContext) channelEventModel.getSelectionKey().attachment();
-        RateLimiter perConnectionLimiter = context.getRateLimiter();
-        
+        RateLimiter perConnectionLimiter = context.getRateLimiter(); 
         // 🆕 获取全局限流器（仅对上传通道生效）
         com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter globalLimiter = null;
         if ("UPLOAD".equals(context.getHandlerType())) {
             globalLimiter = com.alibaba.server.nio.service.file.handler.FileUploadHandler.getGlobalRateLimiter();
         }
-
         int readBytes = 0;
         // 循环从通道读取数据
         while (true) {
-            // 计算允许读取的字节数（考虑单连接和全局两个限流器）
+            // 1. 计算允许读取的字节数（考虑单连接和全局两个限流器）
             long allowedBytes = byteBuffer.capacity();
-            
-            // 🔴 检查单连接限流器
-            if (perConnectionLimiter != null) {
+            // 2. 检查单连接限流器
+            if (Objects.nonNull(perConnectionLimiter)) {
                 long perConnectionTokens = perConnectionLimiter.getAvailableTokens();
                 if (perConnectionTokens <= 0) {
-                    // 单连接令牌不足，暂停读取
+                    // 2.1 单连接令牌不足，暂停读取
+                    log.warn("ReadEventHandler: 单连接上传带宽速率已达到上限，将暂停读取: 涉及到的远程地址: remote={}", context.getRemoteAddress());
                     pauseRead(channelEventModel, context, perConnectionLimiter);
                     break; // 退出读取循环
                 }
                 allowedBytes = Math.min(allowedBytes, perConnectionTokens);
             }
-            
-            // 🆕 检查全局限流器
-            if (globalLimiter != null) {
+            // 3. 检查全局限流器
+            if (Objects.nonNull(globalLimiter) {
                 long globalTokens = globalLimiter.getAvailableTokens();
                 if (globalTokens <= 0) {
                     // 全局令牌不足，暂停读取
-                    log.debug("全局带宽达到上限，暂停读取: remote={}", context.getRemoteAddress());
+                    log.warn("ReadEventHandler: 全局上传带宽速率已达到上限，将暂停读取: 涉及到的远程地址: remote={}", context.getRemoteAddress());
                     pauseRead(channelEventModel, context, globalLimiter);
                     break; // 退出读取循环
                 }
                 allowedBytes = Math.min(allowedBytes, globalTokens);
             }
-            
-            // 限制本次读取的大小（不超过可用令牌）
-            int limit = (int) Math.min(byteBuffer.capacity(), allowedBytes);
-            byteBuffer.limit(limit);
-
+            // 4. 限制本次读取的大小（不超过可用令牌）
+            int shouldLimit = (int) Math.min(byteBuffer.capacity(), allowedBytes);
+            byteBuffer.limit(shouldLimit);
             readBytes = socketChannel.read(byteBuffer);
-            
             if (readBytes <= 0) {
                 break;
             }
-
-            // 🆕 扣除两个限流器的令牌
-            if (perConnectionLimiter != null) {
+            // 5. 扣除两个限流器的令牌
+            if (Objects.nonNull(perConnectionLimiter)) {
                 perConnectionLimiter.tryConsume(readBytes);
             }
-            if (globalLimiter != null) {
+            if (Objects.nonNull(globalLimiter)) {
                 globalLimiter.tryConsume(readBytes);
             }
-
-            // 从通道读取完并写入到byteBuffer后切换为读模式，将byteBuffer数据重新设置到bytes数组中
+            // 6. 从通道读取完并写入到byteBuffer后切换为读模式，将byteBuffer数据重新设置到bytes数组中
             byteBuffer.flip();
             if (byteBuffer.hasRemaining()) {
                 // 读取原始数据
@@ -243,19 +218,15 @@ public class ReadEventHandler extends AbstractEventHandler {
                 groupData.setBytes(bytes);
                 groupData.setStatus("UN_HANDLE");
                 // 处理当前通道对应缓存数据模型内的数据序号【修复】：索引溢出保护，防止long连接场景下index溢出变为负数
-                channelCacheDataModel
-                        .setNewLatestIndex(channelCacheDataModel.getNewLatestIndex() >= (Integer.MAX_VALUE - 1) ? 1
-                                : groupData.getIndex() + 1);
+                channelCacheDataModel.setNewLatestIndex(channelCacheDataModel.getNewLatestIndex() >= (Integer.MAX_VALUE - 1) ? 1 : groupData.getIndex() + 1);
                 channelCacheDataModel.getWaitHandleDataList().add(groupData);
                 byteBuffer.clear(); // 清空，恢复 limit 到 capacity
             }
         }
-
         // 判断读取结果：-1 表示流末尾（客户端关闭连接），需要关闭通道
         if (readBytes == -1) {
             return FrameReadResultEnum.END;
         }
-
         // readBytes == 0 或正常读取完成，返回需要后续处理
         return FrameReadResultEnum.NEED_HANDLE;
     }
@@ -265,8 +236,7 @@ public class ReadEventHandler extends AbstractEventHandler {
      * 使用同步保护防止竞态条件，并保存恢复任务用于后续取消
      */
     private void pauseRead(ChannelEventModel channelEventModel, SocketChannelContext context, com.alibaba.server.nio.service.ratelimit.RateLimiter rateLimiter) {
-        final java.nio.channels.SelectionKey key = channelEventModel.getSelectionKey();
-        
+        SelectionKey key = channelEventModel.getSelectionKey();
         // 使用同步块保护整个暂停/恢复流程，即同一个socketChannelContext在Selector线程和数据处理线程以及Selector唤醒线程三个线程之间保持同步
         synchronized (context.getReadPauseLock()) {
             if (context.isReadPaused()) {
