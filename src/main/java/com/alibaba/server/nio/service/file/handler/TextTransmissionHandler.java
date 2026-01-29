@@ -36,6 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 支持功能：
  * 1. 用户认证：注册/登录/修改密码/退出登录
  * 2. 目录操作：创建/删除/更新/移动
+ * 3. 文件操作：上传/下载/删除/移动
  * 
  * 协议复用 FileUploadFrame 格式，错误通过响应帧返回（不断开连接）
  * 
@@ -45,7 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TextTransmissionHandler extends AbstractChannelHandler {
 
     /**
-     * 帧解析器缓存
+     * 帧解析器缓存(即每个socketChannelContext均匹配一个解析器)
      */
     private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
 

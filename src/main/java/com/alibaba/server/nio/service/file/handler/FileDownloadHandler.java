@@ -122,12 +122,10 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 // 客户端发送的下载请求
                 handleDownloadRequest(frame, socketChannelContext, simpleChannelContext);
                 break;
-
             case ACK_FRAME:
                 // 客户端确认，可以开始传输
                 handleClientAck(frame, socketChannelContext, simpleChannelContext);
                 break;
-
             default:
                 log.warn("下载处理器收到未知帧类型: {}", frame.getType());
                 break;
@@ -142,29 +140,24 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             SocketChannelContext socketChannelContext,
             SimpleChannelContext simpleChannelContext) throws IOException {
         try {
-            // 1. 解析请求 JSON
+            // 1. 解析请求 JSON, 提取要下载的文件Id
             String jsonData = frame.getDataAsString();
             JSONObject request = JSON.parseObject(jsonData);
-
             Long fileId = request.getLong("fileId");
             String filePath = request.getString("filePath");
-
             log.info("[ {} ] FileDownloadHandler | --> 接收到下载请求: fileId={}, filePath={}",
                     LocalTime.formatDate(LocalDateTime.now()), fileId, filePath);
-
             // 2. 从 DB 校验文件记录
             FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
             FileQueryParam queryParam = new FileQueryParam();
             queryParam.setId(fileId);
             FileDto fileDto = fileService.getFileById(queryParam);
-
             if (fileDto == null || fileDto.getId() == null) {
                 log.warn("文件记录不存在: fileId={}", fileId);
                 sendErrorFrame(socketChannelContext, "文件不存在");
                 closeConnection(socketChannelContext, simpleChannelContext);
                 return;
             }
-
             // 3. 校验文件系统中文件是否存在
             File file = new File(fileDto.getFilePath());
             if (!file.exists() || !file.isFile()) {
@@ -173,7 +166,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 closeConnection(socketChannelContext, simpleChannelContext);
                 return;
             }
-
             // 4. 发送文件信息给客户端
             JSONObject fileInfo = new JSONObject();
             fileInfo.put("fileId", fileDto.getId());
@@ -181,12 +173,10 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             fileInfo.put("fileSize", file.length());
             fileInfo.put("fileType", fileDto.getFileType());
             fileInfo.put("filePath", fileDto.getFilePath());
-
             sendFrame(socketChannelContext, FrameType.META_FRAME, fileInfo.toJSONString());
 
             log.info("[ {} ] FileDownloadHandler | --> 已发送文件信息，等待客户端确认: fileName={}, size={}",
                     LocalTime.formatDate(LocalDateTime.now()), fileDto.getFileName(), file.length());
-
         } catch (Exception e) {
             log.error("处理下载请求失败", e);
             sendErrorFrame(socketChannelContext, "处理请求失败: " + e.getMessage());
@@ -203,7 +193,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         try {
             String jsonData = frame.getDataAsString();
             JSONObject ack = JSON.parseObject(jsonData);
-
             String status = ack.getString("status");
             String filePath = ack.getString("filePath");
 
@@ -215,7 +204,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
 
             log.info("[ {} ] FileDownloadHandler | --> 客户端已准备好，开始传输文件: path={}",
                     LocalTime.formatDate(LocalDateTime.now()), filePath);
-
             // 开始传输文件
             transferFile(socketChannelContext, simpleChannelContext, filePath);
 
