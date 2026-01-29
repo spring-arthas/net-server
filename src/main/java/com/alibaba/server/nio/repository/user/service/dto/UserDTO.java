@@ -22,9 +22,9 @@ public class UserDTO extends BaseDTO {
 
     private Date registerDate;
 
-    private String register;
+    private String phone;
 
-    private String status;
+    private String mail;
 
     /**
      * 上传的文件信息

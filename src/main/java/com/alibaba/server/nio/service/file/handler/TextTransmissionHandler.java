@@ -105,16 +105,16 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         try {
             switch (type) {
                 // ========== 用户认证帧 ==========
-                case USER_REGISTER_REQ:
+                case USER_REGISTER_REQ: // 用户注册请求
                     handleRegister(frame, context);
                     break;
-                case USER_LOGIN_REQ:
+                case USER_LOGIN_REQ: // 用户登录请求
                     handleLogin(frame, context);
                     break;
-                case USER_CHANGE_PWD_REQ:
+                case USER_CHANGE_PWD_REQ:  // 用户修改密码请求
                     handleChangePassword(frame, context);
                     break;
-                case USER_LOGOUT_REQ:
+                case USER_LOGOUT_REQ: // 用户退出登录请求
                     handleLogout(frame, context);
                     break;
 
@@ -199,7 +199,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 throw new IllegalArgumentException("不存在");
             }
 
-            // 登录成功后保存用户信息到连接上下文
+            // 登录成功后保存用户信息到连接上下文, 即将当前用户信息与服务端对应的SocketChannel进行绑定
             context.putAttribute("loggedInUserId", result.getId());
             context.putAttribute("loggedInUserName", result.getUserName());
 
@@ -207,6 +207,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             data.put("userId", result.getId());
             data.put("token", "后期引入");
             data.put("userName", result.getUserName());
+            data.put("phone", result.getPhone());
+            data.put("mail", result.getMail());
 
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
             log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
