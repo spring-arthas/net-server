@@ -21,6 +21,7 @@ import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameParser;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.StringUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.util.CollectionUtils;
 
 import java.io.IOException;
@@ -432,9 +433,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             buffer.put(jsonBytes);
             buffer.flip();
 
+            log.info("=> 成功向客户端发送内容: 远程地址: {}, 总字节数: {}, 数据内容: {}, 帧类型: {}, ",
+                context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
             WriteQueueHelper.submitWrite(context, buffer);
         } catch (Exception e) {
-            log.error("发送帧失败: type={}", type, e);
+            log.error("发送帧失败: type={}, error={}", type, ExceptionUtils.getStackTrace(e));
         }
     }
 }
