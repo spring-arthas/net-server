@@ -115,13 +115,16 @@ public class UserServiceImpl implements UserService {
     private static final int MAX_USERNAME_LENGTH = 64;
 
     @Override
-    public UserDTO register(String userName, String password) {
+    public UserDTO register(String userName, String password, String mail) {
         // 1. 校验参数
         if (userName == null || userName.trim().isEmpty()) {
             throw new IllegalArgumentException("用户名不能为空");
         }
         if (password == null || password.trim().isEmpty()) {
             throw new IllegalArgumentException("密码不能为空");
+        }
+        if (mail == null || mail.trim().isEmpty()) {
+            throw new IllegalArgumentException("邮箱不能为空");
         }
         userName = userName.trim();
         if (userName.length() > MAX_USERNAME_LENGTH) {
@@ -140,6 +143,7 @@ public class UserServiceImpl implements UserService {
         UserCreateParam createParam = new UserCreateParam();
         createParam.setUserName(userName);
         createParam.setPassword(password);
+        createParam.setMail(mail);
         createParam.setRegisterDate(new Date());
         createParam.setStatus("ACTIVE");
 

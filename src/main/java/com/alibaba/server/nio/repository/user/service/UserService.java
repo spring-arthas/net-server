@@ -54,7 +54,7 @@ public interface UserService {
      * @return 注册成功的用户信息
      * @throws IllegalArgumentException 用户名过长或已存在
      */
-    UserDTO register(String userName, String password);
+    UserDTO register(String userName, String password, String mail);
 
     /**
      * 用户登录

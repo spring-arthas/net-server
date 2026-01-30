@@ -102,7 +102,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
      */
     private void processFrame(FileUploadFrame frame, SocketChannelContext context) {
         FrameType type = frame.getType();
-        log.debug("收到帧: type={}", type);
+        log.debug("收到帧: type={}，数据内容={}", type, JSON.toJSONString(frame.getDataAsString()));
 
         try {
             switch (type) {
@@ -171,6 +171,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             String userName = request.getString("userName");
             String password = request.getString("password");
+            String mail = request.getString("mail");
 
             UserDTO result = getUserService().register(userName, password);
 
