@@ -112,7 +112,7 @@ public class UserServiceImpl implements UserService {
     /**
      * 用户名最大长度
      */
-    private static final int MAX_USERNAME_LENGTH = 5;
+    private static final int MAX_USERNAME_LENGTH = 64;
 
     @Override
     public UserDTO register(String userName, String password) {
