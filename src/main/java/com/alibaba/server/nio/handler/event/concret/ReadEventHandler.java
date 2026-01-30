@@ -12,11 +12,13 @@ import com.alibaba.server.nio.model.TransportDataModel;
 import com.alibaba.server.nio.service.ratelimit.RateLimiter;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -181,7 +183,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 allowedBytes = Math.min(allowedBytes, perConnectionTokens);
             }
             // 3. 检查全局限流器
-            if (Objects.nonNull(globalLimiter) {
+            if (Objects.nonNull(globalLimiter)) {
                 long globalTokens = globalLimiter.getAvailableTokens();
                 if (globalTokens <= 0) {
                     // 全局令牌不足，暂停读取
