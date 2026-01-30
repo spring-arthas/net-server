@@ -433,7 +433,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             buffer.put(jsonBytes);
             buffer.flip();
 
-            log.info("=> 成功向客户端发送内容: 远程地址: {}, 总字节数: {}, 数据内容: {}, 帧类型: {}, ",
+            log.info("=> 成功向客户端发送内容: 远程地址: {}, 数据内容: {}, 帧类型: {}, ",
                 context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
             WriteQueueHelper.submitWrite(context, buffer);
         } catch (Exception e) {
