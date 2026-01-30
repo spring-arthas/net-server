@@ -78,8 +78,6 @@ public class UserServiceImpl implements UserService {
         userDo.setMail(param.getMail());
         userDo.setLastLoginDate(param.getLastLoginDate());
         userDo.setRegisterDate(param.getRegisterDate());
-        userDo.setRegister(param.getRegister());
-        userDo.setStatus(param.getStatus());
         userDo.setGmtCreated(param.getRegisterDate());
         userDo.setGmtModified(param.getRegisterDate());
         userDo.setDelTime(param.getRegisterDate());
@@ -95,8 +93,6 @@ public class UserServiceImpl implements UserService {
         userDo.setMail(param.getMail());
         userDo.setLastLoginDate(param.getLastLoginDate());
         userDo.setRegisterDate(param.getRegisterDate());
-        userDo.setRegister(param.getRegister());
-        userDo.setStatus(param.getStatus());
         userDo.setGmtModified(param.getLastLoginDate() == null ? new Date() : param.getLastLoginDate());
         return userDo;
     }
