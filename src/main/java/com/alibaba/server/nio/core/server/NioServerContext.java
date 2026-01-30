@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.core.server;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.repository.user.service.UserService;
@@ -7,6 +8,7 @@ import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.util.CollectionUtils;
 
@@ -70,7 +72,7 @@ public class NioServerContext {
             // 3、追加额外处理
             // CoreServer.appendHandler();
         } catch (Exception e) {
-            log.error("NioServerContext: 服务启动失败, error = {}", ExceptionUtils.getStackTrace);
+            log.error("NioServerContext: 服务启动失败, error = {}", ExceptionUtils.getStackTrace(e));
         }
     }
 
@@ -215,7 +217,7 @@ public class NioServerContext {
      */
     public static Boolean closedAndRelease(SocketChannel socketChannel) {
         if (!Optional.ofNullable(socketChannel).isPresent()) {
-            return;
+            return false;
         }
         try {
             String remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
@@ -231,13 +233,16 @@ public class NioServerContext {
             }
             log.info("NioServerContext: 服务端socketChannel关闭成功, 资源已释放, 本次通道连接信息：remoteAddress = {}, localAddress = {}, thread = {}",
                     remoteAddress, localAddress, Thread.currentThread().getName());
+            return true;
         } catch (Exception e) {
              log.error("NioServerContext: 服务端通道socketChannel资源释放出现异常, 通道信息 = {}, error = {}",
-                JSON.toJSONString(socketChannel), 
-                ExceptionUtils.get);
+                JSON.toJSONString(socketChannel),
+                ExceptionUtils.getStackTrace(e));
         } finally {
             
         }
+
+        return false;
     }
     /**
      * 获取IOC容器对象

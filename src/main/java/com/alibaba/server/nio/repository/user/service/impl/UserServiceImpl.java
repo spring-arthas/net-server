@@ -108,8 +108,6 @@ public class UserServiceImpl implements UserService {
         userDto.setPassword(userDo.getPassword());
         userDto.setLastLoginDate(userDo.getLastLoginDate());
         userDto.setRegisterDate(userDo.getRegisterDate());
-        userDto.setRegister(userDo.getStatus());
-        userDto.setStatus(userDo.getStatus());
         return userDto;
     }
 
