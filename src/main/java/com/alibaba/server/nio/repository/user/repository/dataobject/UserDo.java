@@ -25,8 +25,4 @@ public class UserDo extends BaseDO implements Identity, CloneableSupport {
 
     private Date registerDate;
 
-    private String register;
-
-    private String status;
-
 }

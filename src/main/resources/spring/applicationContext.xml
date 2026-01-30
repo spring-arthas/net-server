@@ -16,14 +16,14 @@
     <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init"
         destroy-method="close">
         <property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
-       <!-- <property name="url"
+        <property name="url"
             value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
         <property name="username" value="jxgy" />
-        <property name="password" value="Fbhu0359" />-->
-        <property name="url"
+        <property name="password" value="Fbhu0359" />
+        <!--<property name="url"
                   value="jdbc:mysql://localhost:3306/net-server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
         <property name="username" value="root" />
-        <property name="password" value="spring" />
+        <property name="password" value="spring" />-->
         <!-- 配置初始化大小、最小、最大 -->
         <property name="initialSize" value="1" />
         <property name="minIdle" value="1" />
