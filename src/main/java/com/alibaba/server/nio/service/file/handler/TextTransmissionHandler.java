@@ -173,7 +173,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             String password = request.getString("password");
             String mail = request.getString("mail");
 
-            UserDTO result = getUserService().register(userName, password);
+            UserDTO result = getUserService().register(userName, password, mail);
 
             JSONObject data = new JSONObject();
             data.put("userId", result.getId());
