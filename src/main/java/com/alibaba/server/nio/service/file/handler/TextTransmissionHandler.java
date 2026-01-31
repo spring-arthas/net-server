@@ -121,6 +121,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     break;
 
                 // ========== 目录操作帧 ==========
+                case DIR_USER_GET_TWO_LEVEL_REQ:
+                    handleUserTwoLevelDirectory(frame, context);
+                    break;
                 case DIR_CREATE_REQ:
                     handleCreateDirectory(frame, context);
                     break;
@@ -201,8 +204,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 throw new IllegalArgumentException("不存在");
             }
             // 登录成功后保存用户信息到连接上下文, 即将当前用户信息与服务端对应的SocketChannel进行绑定
-            context.putAttribute("loggedInUserId", userDTO.getId());
-            context.putAttribute("loggedInUserName", userDTO.getUserName());
+            context.setUserDTO(userDTO);
 
             // 3、为当前用户创建网盘目录
             try {
@@ -271,13 +273,27 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
     // ========== 目录操作处理 ==========
 
+    private void handleUserTwoLevelDirectory(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            FileDto result = getFileService().handleUserTwoLevelDirectory(context.getUserDTO());
+            sendSuccessResponse(context, FrameType.DIR_RESPONSE, "目录创建成功", result);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(),
+                    DirectoryFrame.ErrorCode.DIR_ROOT_NOT_EXIST);
+        } catch (RuntimeException e) {
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);
+        } catch (Exception e) {
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
     private void handleCreateDirectory(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             Long parentId = request.getLong("parentId");
             String dirName = request.getString("dirName");
 
-            FileDto result = getFileService().createDirectory(parentId, dirName);
+            FileDto result = getFileService().createDirectory(parentId, dirName, context.getUserDTO());
             sendSuccessResponse(context, FrameType.DIR_RESPONSE, "目录创建成功", result);
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(),
@@ -349,15 +365,17 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleFileList(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Long dirId = request.getLong("dirId");
+            Integer userId = request.getInteger("userId");
             int pageNum = request.getIntValue("pageNum");
             int pageSize = request.getIntValue("pageSize");
-            if (pageNum < 1)
+            if (pageNum < 1) {
                 pageNum = 1;
-            if (pageSize < 1)
+            }
+            if (pageSize < 1) {
                 pageSize = 10;
+            }
 
-            List<FileDto> list = getFileService().listFiles(dirId, pageNum, pageSize);
+            List<FileDto> list = getFileService().listFiles(userId, pageNum, pageSize);
 
             JSONObject data = new JSONObject();
             data.put("list", list);

@@ -52,7 +52,7 @@ public class DirectoryInitializer {
             ensureDirectoryExists(baseDirectoryPath);
 
             // 3. 确保数据库记录存在
-            ensureDatabaseRecordExists(baseDirectoryPath);
+            ensureDatabaseRecordExists(baseDirectoryPath, userDTO);
 
             log.info("[ {} ] DirectoryInitializer | --> 目录初始化完成", 
                     LocalTime.formatDate(LocalDateTime.now()));
@@ -119,7 +119,7 @@ public class DirectoryInitializer {
      * 
      * @param directoryPath 目录路径
      */
-    private static void ensureDatabaseRecordExists(String directoryPath) {
+    private static void ensureDatabaseRecordExists(String directoryPath, UserDTO userDTO) {
         try {
             // 获取 FileService 实例
             FileService fileService = NioServerContext.getFileService();
@@ -148,7 +148,7 @@ public class DirectoryInitializer {
 
             // 创建数据库记录
             try {
-                FileDto fileDto = fileService.createDirectory(ROOT_PARENT_ID, dirName);
+                FileDto fileDto = fileService.createDirectory(ROOT_PARENT_ID, dirName, userDTO);
                 log.info("DirectoryInitializer: 成功创建数据库记录，目录ID = {}, 目录名 = {}, 路径 = {}", 
                         fileDto.getId(), dirName, directoryPath);
             } catch (IllegalArgumentException e) {

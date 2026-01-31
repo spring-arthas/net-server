@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.model;
 
 import com.alibaba.server.nio.handler.pipe.ChannelPipeLine;
+import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.ratelimit.RateLimiter;
 import lombok.Data;
 
@@ -37,7 +38,10 @@ public class SocketChannelContext {
      * 通道附件标识(标识当前通道附件SocketChannelContext属于文件通道还是聊天服务通道)
      */
     private String channelFlag;
-
+    /**
+     * 当前通道绑定的用户信息
+     * */
+    private UserDTO userDTO;
     /**
      * Handler 类型标识（用于区分上传/下载）
      * 值为 "UPLOAD" 或 "DOWNLOAD" 或 "TEXT"

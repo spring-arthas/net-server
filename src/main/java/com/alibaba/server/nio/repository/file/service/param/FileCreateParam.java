@@ -54,4 +54,9 @@ public class FileCreateParam {
      * 所属用户
      * */
     private String userName;
+
+    /**
+     * 所属用户ID
+     */
+    private Long userId;
 }

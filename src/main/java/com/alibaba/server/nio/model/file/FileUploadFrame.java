@@ -76,6 +76,10 @@ public class FileUploadFrame {
          * 目录操作响应
          */
         DIR_RESPONSE(0x14, "目录操作响应"),
+        /**
+         * 获取当前用户顶层和第二层所有目录数据
+         */
+        DIR_USER_GET_TWO_LEVEL_REQ(0x15, "获取当前用户顶层和第二层目录数据"),
 
         // ========== 目录文件上传帧 (0x20-0x2F) ==========
         /**

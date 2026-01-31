@@ -61,6 +61,7 @@ public class DirectoryFrame {
      */
     public static class ErrorCode {
         public static final String DIR_NAME_TOO_LONG = "DIR_NAME_TOO_LONG";
+        public static final String DIR_ROOT_NOT_EXIST = "DIR_ROOT_NOT_EXIST";
         public static final String DIR_NAME_DUPLICATE = "DIR_NAME_DUPLICATE";
         public static final String DIR_HAS_CHILDREN = "DIR_HAS_CHILDREN";
         public static final String DIR_NOT_FOUND = "DIR_NOT_FOUND";

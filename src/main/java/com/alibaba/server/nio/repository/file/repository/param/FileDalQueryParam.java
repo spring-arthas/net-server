@@ -54,4 +54,6 @@ public class FileDalQueryParam extends DalPageQueryParam {
      * 所属用户
      * */
     private String userName;
+
+    private Integer userId;
 }
