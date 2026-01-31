@@ -398,7 +398,7 @@ public class FileServiceImpl implements FileService {
                     ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS 
                     : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC
             );
-            newDirPath = basePath != null ? basePath.trim() : "";
+            newDirPath = basePath != null ? basePath.trim() + File.separator + dirName : "";
         } else {
             // 非根目录：拼接父路径
             String parentPath = buildDirectoryPath(parentId);

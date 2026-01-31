@@ -196,23 +196,27 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             String userName = request.getString("userName");
             String password = request.getString("password");
-
-            UserDTO result = getUserService().login(userName, password);
-            if (Objects.isNull(result) || StringUtils.equals("del", result.getDel())) {
+            UserDTO userDTO = getUserService().login(userName, password);
+            if (Objects.isNull(userDTO) || StringUtils.equals("del", userDTO.getDel())) {
                 throw new IllegalArgumentException("不存在");
             }
-
             // 登录成功后保存用户信息到连接上下文, 即将当前用户信息与服务端对应的SocketChannel进行绑定
-            context.putAttribute("loggedInUserId", result.getId());
-            context.putAttribute("loggedInUserName", result.getUserName());
+            context.putAttribute("loggedInUserId", userDTO.getId());
+            context.putAttribute("loggedInUserName", userDTO.getUserName());
 
+            // 3、为当前用户创建网盘目录
+            try {
+                com.alibaba.server.nio.core.initializer.DirectoryInitializer.initialize(userDTO);
+            } catch (Exception e) {
+                log.error("NioServerContext: 目录初始化失败，但服务将继续启动, error = {}",
+                        org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            }
             JSONObject data = new JSONObject();
-            data.put("userId", result.getId());
+            data.put("userId", userDTO.getId());
             data.put("token", "后期引入");
-            data.put("userName", result.getUserName());
-            data.put("phone", result.getPhone());
-            data.put("mail", result.getMail());
-
+            data.put("userName", userDTO.getUserName());
+            data.put("phone", userDTO.getPhone());
+            data.put("mail", userDTO.getMail());
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
             log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
         } catch (IllegalArgumentException e) {

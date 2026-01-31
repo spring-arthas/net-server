@@ -102,6 +102,7 @@ public class UserServiceImpl implements UserService {
         userDto.setId(userDo.getId());
         userDto.setUserName(userDo.getUserName());
         userDto.setPassword(userDo.getPassword());
+        userDto.setMail(userDo.getMail());
         userDto.setLastLoginDate(userDo.getLastLoginDate());
         userDto.setRegisterDate(userDo.getRegisterDate());
         return userDto;
@@ -168,7 +169,7 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("用户不存在");
         }
 
-        UserDo userDo = users.get(0);
+        UserDo userDo = users.iterator().next();
 
         // 3. 验证密码
         if (!password.equals(userDo.getPassword())) {

@@ -8,6 +8,7 @@ import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
+import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,18 +35,17 @@ public class DirectoryInitializer {
      * 
      * @throws Exception 初始化失败时抛出异常
      */
-    public static void initialize() throws Exception {
+    public static void initialize(UserDTO userDTO) throws Exception {
         log.info("[ {} ] DirectoryInitializer | --> 开始执行目录初始化...", 
                 LocalTime.formatDate(LocalDateTime.now()));
 
         try {
             // 1. 获取基础目录路径
-            String baseDirectoryPath = getBaseDirectoryPath();
+            String baseDirectoryPath = getBaseDirectoryPath() + File.separator + userDTO.getUserName();
             if (baseDirectoryPath == null || baseDirectoryPath.trim().isEmpty()) {
                 log.warn("DirectoryInitializer: 未配置基础目录路径，跳过初始化");
                 return;
             }
-
             log.info("DirectoryInitializer: 基础目录路径 = {}", baseDirectoryPath);
 
             // 2. 确保文件系统目录存在
