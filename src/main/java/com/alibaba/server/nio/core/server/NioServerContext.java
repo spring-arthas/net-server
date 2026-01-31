@@ -65,14 +65,28 @@ public class NioServerContext {
      */
     public static void startupServerContext() {
         try {
+            // 1、启动基础服务（加载配置文件）
             BasicServer.startupBasicServer();
 
+            // 2、启动 IOC 容器
+            startupIocContainer();
+
+            // 3、执行目录初始化
+            try {
+                com.alibaba.server.nio.core.initializer.DirectoryInitializer.initialize();
+            } catch (Exception e) {
+                log.error("NioServerContext: 目录初始化失败，但服务将继续启动, error = {}", 
+                        org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            }
+
+            // 4、启动核心服务
             CoreServer.startupCoreServer();
 
-            // 3、追加额外处理
+            // 5、追加额外处理
             // CoreServer.appendHandler();
         } catch (Exception e) {
-            log.error("NioServerContext: 服务启动失败, error = {}", ExceptionUtils.getStackTrace(e));
+            log.error("NioServerContext: 服务启动失败, error = {}", 
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
         }
     }
 

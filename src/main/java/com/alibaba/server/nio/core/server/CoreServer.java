@@ -59,8 +59,7 @@ public class CoreServer {
      * @throws IOException
      */
     private static void startup() throws IOException {
-        // 启动Spring IOC容器
-        NioServerContext.startupIocContainer();
+        // 注意：IOC容器已在 NioServerContext.startupServerContext() 中启动
         // 启动文本和文件操作多路复用选择器
         startupSelector();
         // 创建聊天、文件上传和下载的Acceptor线程，即用于监听客户端连接

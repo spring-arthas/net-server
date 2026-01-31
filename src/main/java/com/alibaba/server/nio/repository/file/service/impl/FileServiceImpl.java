@@ -4,6 +4,7 @@ import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.YesOrNoEnum;
 import com.alibaba.server.nio.core.result.PageResult;
+import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam;
@@ -371,12 +372,15 @@ public class FileServiceImpl implements FileService {
             throw new IllegalArgumentException("参数无效");
         }
         dirName = dirName.trim();
-        if (dirName.length() > MAX_DIR_NAME_LENGTH) {
+        
+        // 特殊处理：如果是根目录（parentId = -1），允许较长的目录名
+        boolean isRootDirectory = (parentId == -1L);
+        if (!isRootDirectory && dirName.length() > MAX_DIR_NAME_LENGTH) {
             throw new IllegalArgumentException("目录名称超过" + MAX_DIR_NAME_LENGTH + "个字符");
         }
 
-        // 2. 校验父目录是否存在且为目录
-        if (!isDirectory(parentId)) {
+        // 2. 校验父目录是否存在且为目录（根目录除外）
+        if (!isRootDirectory && !isDirectory(parentId)) {
             throw new IllegalArgumentException("父目录不存在或不是目录类型");
         }
 
@@ -386,8 +390,21 @@ public class FileServiceImpl implements FileService {
         }
 
         // 4. 构建文件系统路径并创建目录
-        String parentPath = buildDirectoryPath(parentId);
-        String newDirPath = parentPath + File.separator + dirName;
+        String newDirPath;
+        if (isRootDirectory) {
+            // 根目录：使用配置文件中的完整路径
+            String basePath = NioServerContext.getValue(
+                com.alibaba.server.common.OSinfo.isWindows() 
+                    ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS 
+                    : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC
+            );
+            newDirPath = basePath != null ? basePath.trim() : "";
+        } else {
+            // 非根目录：拼接父路径
+            String parentPath = buildDirectoryPath(parentId);
+            newDirPath = parentPath + File.separator + dirName;
+        }
+        
         File newDir = new File(newDirPath);
         if (!newDir.exists()) {
             if (!newDir.mkdirs()) {
@@ -408,13 +425,16 @@ public class FileServiceImpl implements FileService {
         FileDo fileDo = this.createParamToDo(createParam);
         this.fileRepository.insertSelective(fileDo);
 
-        // 6. 更新父目录的hasChild状态
-        FileDo parentUpdate = new FileDo();
-        parentUpdate.setId(parentId);
-        parentUpdate.setHasChild(YesOrNoEnum.Y.name());
-        this.fileRepository.updateSelective(parentUpdate);
+        // 6. 更新父目录的hasChild状态（根目录除外）
+        if (!isRootDirectory) {
+            FileDo parentUpdate = new FileDo();
+            parentUpdate.setId(parentId);
+            parentUpdate.setHasChild(YesOrNoEnum.Y.name());
+            this.fileRepository.updateSelective(parentUpdate);
+        }
 
-        log.info("创建目录成功: id={}, name={}, path={}", fileDo.getId(), dirName, newDirPath);
+        log.info("创建目录成功: id={}, name={}, path={}, isRoot={}", 
+                fileDo.getId(), dirName, newDirPath, isRootDirectory);
         return this.doToDto(fileDo);
     }
 
