@@ -268,7 +268,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         long fileSize = meta.getLongValue("fileSize");
         String fileType = meta.getString("fileType");
         Long dirId = meta.getLong("dirId");
-        Long userId = meta.getLong("userId");
+        Integer userId = meta.getInteger("userId");
         
         // 2. 校验目录（如果指定了dirId）
         FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);

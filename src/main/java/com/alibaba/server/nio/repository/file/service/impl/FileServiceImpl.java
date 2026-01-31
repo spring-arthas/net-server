@@ -309,6 +309,7 @@ public class FileServiceImpl implements FileService {
     private FileDalQueryParam createDalParam(FileQueryParam fileQueryParam) {
         FileDalQueryParam fileDalQueryParam = new FileDalQueryParam();
         fileDalQueryParam.setPId(fileQueryParam.getPId());
+        fileDalQueryParam.setUserId(fileQueryParam.getUserId());
         fileDalQueryParam.setUserName(fileQueryParam.getUserName());
         fileDalQueryParam.setFileName(fileQueryParam.getFileName());
         fileDalQueryParam.setFilePath(fileQueryParam.getFilePath());
@@ -365,7 +366,79 @@ public class FileServiceImpl implements FileService {
     /**
      * 目录名最大长度
      */
-    private static final int MAX_DIR_NAME_LENGTH = 5;
+    private static final int MAX_DIR_NAME_LENGTH = 10;
+
+    /**
+     * 查询用户的两层目录结构
+     *
+     * @param userDTO 用户信息
+     * @return 根目录节点（包含子目录列表）
+     */
+    @Override
+    public FileDto handleUserTwoLevelDirectory(UserDTO userDTO) throws Exception {
+        if (userDTO == null || userDTO.getId() == null) {
+            log.warn("handleUserTwoLevelDirectory: 用户信息为空");
+            return null;
+        }
+
+        try {
+            // 1. 查询顶层目录（p_id = -1）
+            FileQueryParam rootQueryParam = new FileQueryParam();
+            rootQueryParam.setPId(-1L);
+            // 使用 userName 查询更直观，且 FileDalQueryParam 支持
+            //rootQueryParam.setUserName(userDTO.getUserName());
+            rootQueryParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
+            rootQueryParam.setFileType("NOT_FILE");
+            rootQueryParam.setIsFile(YesOrNoEnum.N.name());
+            rootQueryParam.setIsExist(YesOrNoEnum.Y.name());
+
+            List<FileDo> rootDirs = this.getAssignFiles(rootQueryParam);
+
+            if (CollectionUtils.isEmpty(rootDirs)) {
+                log.warn("handleUserTwoLevelDirectory: 用户 {} 没有根目录 (userName={})", userDTO.getId(), userDTO.getUserName());
+                throw new IllegalArgumentException("用户顶层目录不存在");
+            }
+
+            // 取第一个根目录（通常每个用户只有一个根目录）
+            FileDo rootDir = rootDirs.get(0);
+            FileDto rootDto = this.doToDto(rootDir);
+            rootDto.setChildFileList(Lists.newArrayList());
+
+            // 2. 查询第二层目录（p_id = 根目录的id）
+            FileQueryParam childQueryParam = new FileQueryParam();
+            childQueryParam.setPId(rootDir.getId());
+            // 子目录查询也加上 userName，确保数据一致性，但不使用 userId 以避免潜在类型/映射问题
+            //childQueryParam.setUserName(userDTO.getUserName());
+            childQueryParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
+            childQueryParam.setFileType("NOT_FILE");
+            childQueryParam.setIsFile(YesOrNoEnum.N.name());
+            childQueryParam.setIsExist(YesOrNoEnum.Y.name());
+
+            List<FileDo> childDirs = this.getAssignFiles(childQueryParam);
+
+            // 3. 构建树形结构
+            if (!CollectionUtils.isEmpty(childDirs)) {
+                List<FileDto> childDtoList = Lists.newArrayList();
+                for (FileDo childDir : childDirs) {
+                    FileDto childDto = this.doToDto(childDir);
+                    childDtoList.add(childDto);
+                }
+                rootDto.setChildFileList(childDtoList);
+
+                log.info("handleUserTwoLevelDirectory: 用户 {} 的目录树查询成功，根目录ID={}, 子目录数量={}",
+                        userDTO.getUserName(), rootDir.getId(), childDtoList.size());
+            } else {
+                log.info("handleUserTwoLevelDirectory: 用户 {} 的根目录下没有子目录", userDTO.getUserName());
+            }
+
+            return rootDto;
+
+        } catch (Exception e) {
+            log.error("handleUserTwoLevelDirectory: 查询用户目录树失败, userName={}", userDTO.getUserName(), e);
+            // 将异常向外抛出，以便上层捕获
+            throw e;
+        }
+    }
 
     @Override
     public FileDto createDirectory(Long parentId, String dirName, UserDTO userDTO) {
@@ -424,7 +497,7 @@ public class FileServiceImpl implements FileService {
         createParam.setIsExist(YesOrNoEnum.Y.name());
         createParam.setHasChild(YesOrNoEnum.N.name());
         createParam.setUserName(userDTO.getUserName());
-        createParam.setUserId(userDTO.getId());
+        createParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
         FileDo fileDo = this.createParamToDo(createParam);
         this.fileRepository.insertSelective(fileDo);
 
@@ -724,71 +797,5 @@ public class FileServiceImpl implements FileService {
             return null;
         }
         return path;
-    }
-
-    /**
-     * 查询用户的两层目录结构
-     * 
-     * @param userDTO 用户信息
-     * @return 根目录节点（包含子目录列表）
-     */
-    @Override
-    public FileDto handleUserTwoLevelDirectory(UserDTO userDTO) throws Exception {
-        if (userDTO == null || userDTO.getId() == null) {
-            log.warn("handleUserTwoLevelDirectory: 用户信息为空");
-            return null;
-        }
-
-        try {
-            // 1. 查询顶层目录（p_id = -1）
-            FileQueryParam rootQueryParam = new FileQueryParam();
-            rootQueryParam.setPId(-1L);
-            rootQueryParam.setUserName(userDTO.getUserName());
-            rootQueryParam.setFileType("NOT_FILE");
-            rootQueryParam.setIsFile(YesOrNoEnum.N.name());
-            rootQueryParam.setIsExist(YesOrNoEnum.Y.name());
-            
-            List<FileDo> rootDirs = this.getAssignFiles(rootQueryParam);
-            
-            if (CollectionUtils.isEmpty(rootDirs)) {
-                log.warn("handleUserTwoLevelDirectory: 用户 {} 没有根目录", userDTO.getUserName());
-                throw new IllegalArgumentException("顶层目录不存在");
-            }
-
-            // 取第一个根目录（通常每个用户只有一个根目录）
-            FileDo rootDir = rootDirs.get(0);
-            FileDto rootDto = this.doToDto(rootDir);
-
-            // 2. 查询第二层目录（p_id = 根目录的id）
-            FileQueryParam childQueryParam = new FileQueryParam();
-            childQueryParam.setPId(rootDir.getId());
-            childQueryParam.setUserName(userDTO.getUserName());
-            childQueryParam.setFileType("NOT_FILE");
-            childQueryParam.setIsFile(YesOrNoEnum.N.name());
-            childQueryParam.setIsExist(YesOrNoEnum.Y.name());
-            
-            List<FileDo> childDirs = this.getAssignFiles(childQueryParam);
-
-            // 3. 构建树形结构
-            if (!CollectionUtils.isEmpty(childDirs)) {
-                List<FileDto> childDtoList = Lists.newArrayList();
-                for (FileDo childDir : childDirs) {
-                    FileDto childDto = this.doToDto(childDir);
-                    childDtoList.add(childDto);
-                }
-                rootDto.setChildFileList(childDtoList);
-                
-                log.info("handleUserTwoLevelDirectory: 用户 {} 的目录树查询成功，根目录ID={}, 子目录数量={}", 
-                        userDTO.getUserName(), rootDir.getId(), childDtoList.size());
-            } else {
-                log.info("handleUserTwoLevelDirectory: 用户 {} 的根目录下没有子目录", userDTO.getUserName());
-            }
-
-            return rootDto;
-
-        } catch (Exception e) {
-            log.error("handleUserTwoLevelDirectory: 查询用户目录树失败, userName={}，error={}", userDTO.getUserName(), ExceptionUtils.getStackTrace(e));
-            throw new Exception("查询用户目录树失败");
-        }
     }
 }

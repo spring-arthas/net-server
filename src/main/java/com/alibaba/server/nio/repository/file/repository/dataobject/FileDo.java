@@ -61,5 +61,5 @@ public class FileDo extends BaseDO implements Identity, CloneableSupport {
     /**
      * 所属用户ID
      */
-    private Long userId;
+    private Integer userId;
 }

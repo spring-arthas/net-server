@@ -290,7 +290,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleCreateDirectory(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Long parentId = request.getLong("parentId");
+            Long parentId = request.getLong("pId");
             String dirName = request.getString("dirName");
 
             FileDto result = getFileService().createDirectory(parentId, dirName, context.getUserDTO());
