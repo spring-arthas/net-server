@@ -374,7 +374,7 @@ public class FileServiceImpl implements FileService {
     /**
      * 目录名最大长度
      */
-    private static final int MAX_DIR_NAME_LENGTH = 10;
+    private static final int MAX_DIR_NAME_LENGTH = 20;
 
     /**
      * 查询用户的完整目录树结构（递归）
