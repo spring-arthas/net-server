@@ -429,6 +429,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         JSONObject response = new JSONObject();
         response.put("success", true);
         response.put("message", message);
+        response.put("data", null);
         if (data != null) {
             response.put("data", data);
         }

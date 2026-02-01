@@ -550,7 +550,7 @@ public class FileServiceImpl implements FileService {
         queryParam.setDel(YesOrNoEnum.N.name());
         List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
         if (!CollectionUtils.isEmpty(children)) {
-            throw new IllegalStateException("目录下存在子项，无法删除");
+            throw new IllegalStateException("请先删除当前目录下的其他目录");
         }
 
         // 3. 删除文件系统目录
@@ -563,7 +563,12 @@ public class FileServiceImpl implements FileService {
         }
 
         // 4. 删除DB记录
-        this.fileRepository.delete(dirId);
+        FileDo updateDo = new FileDo();
+        updateDo.setId(dirId);
+        updateDo.setDel(YesOrNoEnum.Y.name());
+        updateDo.setDelTime(new Date());
+        updateDo.setGmtModified(updateDo.getDelTime());
+        this.fileRepository.updateSelective(updateDo);
 
         log.info("删除目录成功: id={}, path={}", dirId, dirPath);
         return true;
