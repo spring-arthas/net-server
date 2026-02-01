@@ -51,7 +51,7 @@ public interface FileService {
      * @param fileQueryParam
      * @return
      */
-    FileDto createFile(FileQueryParam fileQueryParam);
+    FileDto createFile(FileQueryParam fileQueryParam, UserDTO userDTO);
 
     /**
      * 更新当前文件为删除状态

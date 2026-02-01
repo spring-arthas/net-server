@@ -293,7 +293,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileQueryParam.setFileType(fileType);
             
             try {
-                FileDto fileDto = fileService.createFile(fileQueryParam);
+                FileDto fileDto = fileService.createFile(fileQueryParam, socketChannelContext.getUserDTO());
                 // 保存数据库记录 ID
                 if (fileDto != null && fileDto.getId() != null) {
                     fileId = fileDto.getId();

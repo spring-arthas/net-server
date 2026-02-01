@@ -201,7 +201,7 @@ public class FileServiceImpl implements FileService {
 
     @Override
     @org.springframework.transaction.annotation.Transactional
-    public FileDto createFile(FileQueryParam fileQueryParam) {
+    public FileDto createFile(FileQueryParam fileQueryParam, UserDTO userDTO) {
         List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
         if (CollectionUtils.isEmpty(fileDos)) {
             FileCreateParam fileCreateParam = new FileCreateParam();
@@ -213,6 +213,8 @@ public class FileServiceImpl implements FileService {
             fileCreateParam.setFileType(fileQueryParam.getFileType());
             fileCreateParam.setIsFile(YesOrNoEnum.Y.name());
             fileCreateParam.setIsExist(YesOrNoEnum.Y.name());
+            fileCreateParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
+            fileCreateParam.setUserName(userDTO.getUserName());
             fileCreateParam.setHasChild(YesOrNoEnum.N.name());
             FileDo fileDo = this.createParamToDo(fileCreateParam);
             this.fileRepository.insert(fileDo);
