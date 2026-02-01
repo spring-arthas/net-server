@@ -10,7 +10,7 @@
         FROM file f
         WHERE
             1 = 1
-            AND f.del = 'N'
+            AND f.del = #{del}
             <if test="pId != null">
                 AND f.p_id = #{pId}
             </if>

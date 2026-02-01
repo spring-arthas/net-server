@@ -322,7 +322,7 @@ public class FileServiceImpl implements FileService {
         fileDalQueryParam.setHasChild(fileQueryParam.getHasChild());
         fileDalQueryParam.setCurrentPage(fileQueryParam.getCurrentPage());
         fileDalQueryParam.setPageSize(fileQueryParam.getPageSize());
-        fileDalQueryParam.setDel(YesOrNoEnum.N.name());
+        fileDalQueryParam.setDel(fileQueryParam.getDel() == null ? YesOrNoEnum.N.name() : fileQueryParam.getDel());
         fileDalQueryParam.setOrderBy(fileQueryParam.getOrderBy());
         return fileDalQueryParam;
     }
@@ -393,6 +393,7 @@ public class FileServiceImpl implements FileService {
             queryParam.setFileType("NOT_FILE");
             queryParam.setIsFile(YesOrNoEnum.N.name());
             queryParam.setIsExist(YesOrNoEnum.Y.name());
+            queryParam.setDel(YesOrNoEnum.N.name());
 
             // 获取所有目录列表
             List<FileDo> allDirs = this.getAssignFiles(queryParam);

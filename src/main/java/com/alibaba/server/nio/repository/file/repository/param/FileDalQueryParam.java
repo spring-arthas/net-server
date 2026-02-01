@@ -56,4 +56,6 @@ public class FileDalQueryParam extends DalPageQueryParam {
     private String userName;
 
     private Integer userId;
+
+    private String del;
 }
