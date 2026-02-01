@@ -41,9 +41,17 @@
     <!--查询当前文件夹下的文件-->
     <select id="queryFilesBelongCurrentFolder"
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
-        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo"> SELECT f.*
-        FROM file f WHERE 0 = 0 AND f.p_id = #{pId} AND f.del = #{del} AND f.is_file = #{isFile} AND
-        f.is_exist = #{isExist} AND ORDER BY f.gmt_create DESC LIMIT #{currentPage}, #{pageSize} </select>
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
+        SELECT f.*
+        FROM file f
+        WHERE
+            0 = 0
+            AND f.p_id = #{pId}
+            AND f.del = #{del}
+            AND f.is_file = #{isFile}
+            AND f.is_exist = #{isExist}
+        ORDER BY f.gmt_create DESC LIMIT #{currentPage}, #{pageSize}
+    </select>
 
     <!-- 批量更新 -->
     <!--<update

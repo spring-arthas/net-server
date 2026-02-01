@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.repository.file.service;
 
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
+import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
@@ -147,12 +148,10 @@ public interface FileService {
     /**
      * 分页查询目录下的文件列表
      * 
-     * @param userId    用户ID
-     * @param pageNum  页码（从1开始）
-     * @param pageSize 每页大小
+     * @param fileQueryParam    文件查询对象
      * @return 文件列表
      */
-    List<FileDto> listFiles(Integer userId, int pageNum, int pageSize);
+    FilePageDto listFiles(FileQueryParam fileQueryParam);
 
     /**
      * 获取文件详情（包含所属目录名称）

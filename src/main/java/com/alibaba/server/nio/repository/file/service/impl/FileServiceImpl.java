@@ -3,6 +3,7 @@ package com.alibaba.server.nio.repository.file.service.impl;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.YesOrNoEnum;
+import com.alibaba.server.nio.core.param.PageQueryParam;
 import com.alibaba.server.nio.core.result.PageResult;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
@@ -10,6 +11,7 @@ import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
+import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
 import com.alibaba.server.nio.repository.file.service.param.FileCreateParam;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
@@ -718,40 +720,36 @@ public class FileServiceImpl implements FileService {
     // ========== 文件操作实现 ==========
 
     @Override
-    public List<FileDto> listFiles(Integer userId, int pageNum, int pageSize) {
-        if (userId == null) {
+    public FilePageDto listFiles(FileQueryParam fileQueryParam) {
+        if (Objects.isNull(fileQueryParam.getUserId())) {
             throw new IllegalArgumentException("用户ID不能为空");
         }
-        if (pageNum < 1) {
-            pageNum = 1;
+        // 默认分页参数
+        if (fileQueryParam.getCurrentPage() < 1) {
+            fileQueryParam.setCurrentPage(1);
         }
-        if (pageSize < 1) {
-            pageSize = 10;
+        if (fileQueryParam.getPageSize() < 1) {
+            fileQueryParam.setPageSize(10);
         }
-
-        FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setUserId(userId);
-        queryParam.setIsFile(YesOrNoEnum.Y.name());
-        queryParam.setIsExist(YesOrNoEnum.Y.name());
-        queryParam.setDel(YesOrNoEnum.N.name());
-        List<FileDo> list = this.fileRepository.getAssignFiles(queryParam);
-        if (CollectionUtils.isEmpty(list)) {
-            return Collections.emptyList();
+        // 设置查询条件, 执行分页查询
+        fileQueryParam.setIsFile(YesOrNoEnum.Y.name());
+        fileQueryParam.setIsExist(YesOrNoEnum.Y.name());
+        fileQueryParam.setDel(YesOrNoEnum.N.name());
+        PageQueryParam.OrderBy orderBy = new PageQueryParam.OrderBy();
+        orderBy.setProperty("gmtCreated");
+        orderBy.setDirection(PageQueryParam.Direction.DESC);
+        fileQueryParam.setOrderBy(Lists.newArrayList(orderBy));
+        PageResult<FileDo> pageResult = this.fileRepository.queryPage(this.createDalParam(fileQueryParam));
+        // 转换结果
+        List<FileDto> fileDtoList = Collections.emptyList();
+        if (pageResult.getModelList() != null) {
+            fileDtoList = pageResult.getModelList().stream()
+                .map(this::doToDto)
+                .collect(Collectors.toList());
         }
-
-        // 手动分页
-        int total = list.size();
-        int fromIndex = (pageNum - 1) * pageSize;
-        if (fromIndex >= total) {
-            return Collections.emptyList();
-        }
-        int toIndex = Math.min(fromIndex + pageSize, total);
-
-        List<FileDto> result = new ArrayList<>();
-        for (FileDo fileDo : list.subList(fromIndex, toIndex)) {
-            result.add(this.doToDto(fileDo));
-        }
-        return result;
+        
+        return FilePageDto.of(fileDtoList, pageResult.getTotalCount(), 
+            pageResult.getCurrentPage(), pageResult.getPageSize());
     }
 
     @Override

@@ -15,6 +15,8 @@ import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.model.user.UserAuthFrame;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
+import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
+import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
@@ -365,25 +367,27 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleFileList(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Integer userId = request.getInteger("userId");
+            Integer userId = Integer.valueOf(String.valueOf(context.getUserDTO().getId()));
+            Long dirId = request.getLong("dirId"); // 所选择的目录id(目录树上点击的目录Id、目录下拉树中选择目录Id)
+            String fileName = request.getString("fileName"); //
             int pageNum = request.getIntValue("pageNum");
             int pageSize = request.getIntValue("pageSize");
-            if (pageNum < 1) {
-                pageNum = 1;
+            if (pageNum < 1) { pageNum = 1; }
+            if (pageSize < 1) { pageSize = 10; }
+
+            FileQueryParam fileQueryParam = new FileQueryParam();
+            fileQueryParam.setUserId(userId);
+            if(Objects.nonNull(dirId) && 0L != dirId) {
+                fileQueryParam.setPId(dirId);
             }
-            if (pageSize < 1) {
-                pageSize = 10;
+            if(org.apache.commons.lang.StringUtils.isNotBlank(fileName)) {
+                fileQueryParam.setPId(null);
             }
-
-            List<FileDto> list = getFileService().listFiles(userId, pageNum, pageSize);
-
-            JSONObject data = new JSONObject();
-            data.put("list", list);
-            data.put("pageNum", pageNum);
-            data.put("pageSize", pageSize);
-            data.put("total", list.size());
-
-            sendSuccessResponse(context, FrameType.FILE_RESPONSE, "查询成功", data);
+            fileQueryParam.setFileName(fileName);
+            fileQueryParam.setCurrentPage(pageNum);
+            fileQueryParam.setPageSize(pageSize);
+            FilePageDto pageDto = getFileService().listFiles(fileQueryParam);
+            sendSuccessResponse(context, FrameType.FILE_RESPONSE, "查询成功", pageDto);
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "INVALID_REQUEST");
         } catch (Exception e) {

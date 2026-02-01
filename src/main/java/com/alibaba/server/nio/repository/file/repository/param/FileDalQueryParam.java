@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.repository.file.repository.param;
 
+import com.alibaba.server.nio.core.annotation.QueryOperator;
 import com.alibaba.server.nio.core.param.DalPageQueryParam;
 import lombok.Data;
 
@@ -18,6 +19,7 @@ public class FileDalQueryParam extends DalPageQueryParam {
     /**
      * 文件名
      */
+    @QueryOperator("LIKE")
     private String fileName;
 
     /**

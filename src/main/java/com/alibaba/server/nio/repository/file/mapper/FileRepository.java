@@ -6,6 +6,9 @@ import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import org.apache.ibatis.annotations.Mapper;
 
+import com.alibaba.server.nio.core.annotation.MapMethod;
+import com.alibaba.server.nio.core.annotation.PageQuery;
+import com.alibaba.server.nio.core.result.PageResult;
 import java.util.List;
 
 /**
