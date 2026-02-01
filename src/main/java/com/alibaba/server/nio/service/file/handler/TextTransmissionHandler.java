@@ -308,7 +308,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleDeleteDirectory(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Long dirId = request.getLong("dirId");
+            Long dirId = request.getLong("id");
 
             getFileService().deleteDirectory(dirId);
             sendSuccessResponse(context, FrameType.DIR_RESPONSE, "目录删除成功", null);
@@ -327,8 +327,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleUpdateDirectory(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Long dirId = request.getLong("dirId");
-            String newName = request.getString("newName");
+            Long dirId = request.getLong("id");
+            String newName = request.getString("dirName");
 
             FileDto result = getFileService().updateDirectory(dirId, newName);
             sendSuccessResponse(context, FrameType.DIR_RESPONSE, "目录更新成功", result);

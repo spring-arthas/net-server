@@ -56,7 +56,7 @@ public class FileDto extends BaseDTO {
     /**
      * 所属用户ID
      */
-    private Long userId;
+    private Integer userId;
 
 
     /**

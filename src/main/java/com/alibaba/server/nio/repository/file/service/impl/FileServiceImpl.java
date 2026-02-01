@@ -25,6 +25,7 @@ import org.springframework.util.CollectionUtils;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 文件服务
@@ -273,6 +274,7 @@ public class FileServiceImpl implements FileService {
         fileDo.setId(SnowflakeIdWorkerUtil.generateId());
         fileDo.setPId(param.getPId());
         fileDo.setUserName(param.getUserName());
+        fileDo.setUserId(param.getUserId());
         fileDo.setFileName(param.getFileName());
         fileDo.setFilePath(param.getFilePath());
         fileDo.setFileSize(param.getFileSize());
@@ -336,11 +338,13 @@ public class FileServiceImpl implements FileService {
         fileDto.setFileType(fileDo.getFileType());
         fileDto.setIsFile(fileDo.getIsFile());
         fileDto.setIsExist(fileDo.getIsExist());
+        fileDto.setUserId(fileDo.getUserId());
         fileDto.setHasChild(fileDo.getHasChild());
         fileDto.setDel(fileDo.getDel());
         fileDto.setDelTime(fileDo.getDelTime());
         fileDto.setGmtCreated(fileDo.getGmtCreated());
         fileDto.setGmtModified(fileDo.getGmtModified());
+        fileDto.setChildFileList(Lists.newArrayList());
         return fileDto;
     }
 
@@ -369,10 +373,10 @@ public class FileServiceImpl implements FileService {
     private static final int MAX_DIR_NAME_LENGTH = 10;
 
     /**
-     * 查询用户的两层目录结构
+     * 查询用户的完整目录树结构（递归）
      *
      * @param userDTO 用户信息
-     * @return 根目录节点（包含子目录列表）
+     * @return 根目录节点（包含完整递归子目录）
      */
     @Override
     public FileDto handleUserTwoLevelDirectory(UserDTO userDTO) throws Exception {
@@ -382,61 +386,79 @@ public class FileServiceImpl implements FileService {
         }
 
         try {
-            // 1. 查询顶层目录（p_id = -1）
-            FileQueryParam rootQueryParam = new FileQueryParam();
-            rootQueryParam.setPId(-1L);
-            // 使用 userName 查询更直观，且 FileDalQueryParam 支持
-            //rootQueryParam.setUserName(userDTO.getUserName());
-            rootQueryParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
-            rootQueryParam.setFileType("NOT_FILE");
-            rootQueryParam.setIsFile(YesOrNoEnum.N.name());
-            rootQueryParam.setIsExist(YesOrNoEnum.Y.name());
+            // 1. 查询该用户下所有的目录数据（一次性查询，避免递归查库）
+            FileQueryParam queryParam = new FileQueryParam();
+            // 使用 userId 查询
+            queryParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
+            queryParam.setFileType("NOT_FILE");
+            queryParam.setIsFile(YesOrNoEnum.N.name());
+            queryParam.setIsExist(YesOrNoEnum.Y.name());
 
-            List<FileDo> rootDirs = this.getAssignFiles(rootQueryParam);
+            // 获取所有目录列表
+            List<FileDo> allDirs = this.getAssignFiles(queryParam);
+            
+            if (CollectionUtils.isEmpty(allDirs)) {
+                log.warn("handleUserTwoLevelDirectory: 用户 {} 未查询到任何目录", userDTO.getUserName());
+                throw new IllegalArgumentException("用户目录数据为空");
+            }
 
-            if (CollectionUtils.isEmpty(rootDirs)) {
-                log.warn("handleUserTwoLevelDirectory: 用户 {} 没有根目录 (userName={})", userDTO.getId(), userDTO.getUserName());
+            // 2. 找到根目录 (pId = -1)
+            FileDo rootDirDo = allDirs.stream()
+                .filter(file -> file.getPId() == -1L)
+                .findFirst()
+                .orElse(null);
+
+            if (rootDirDo == null) {
+                log.warn("handleUserTwoLevelDirectory: 用户 {} 根目录不存在", userDTO.getUserName());
                 throw new IllegalArgumentException("用户顶层目录不存在");
             }
+            
+            // 3. 将所有目录转为 Map<ParentId, List<FileDto>> 以便快速构建树
+            // 排除根目录，只处理子节点
+            Map<Long, List<FileDto>> parentIdToChildrenMap = allDirs.stream()
+                .filter(file -> file.getPId() != -1L)
+                .map(this::doToDto)
+                .collect(Collectors.groupingBy(FileDto::getPId));
 
-            // 取第一个根目录（通常每个用户只有一个根目录）
-            FileDo rootDir = rootDirs.get(0);
-            FileDto rootDto = this.doToDto(rootDir);
-            rootDto.setChildFileList(Lists.newArrayList());
+            // 4. 构建树形结构
+            FileDto rootDto = this.doToDto(rootDirDo);
+            buildDirectoryTree(rootDto, parentIdToChildrenMap);
 
-            // 2. 查询第二层目录（p_id = 根目录的id）
-            FileQueryParam childQueryParam = new FileQueryParam();
-            childQueryParam.setPId(rootDir.getId());
-            // 子目录查询也加上 userName，确保数据一致性，但不使用 userId 以避免潜在类型/映射问题
-            //childQueryParam.setUserName(userDTO.getUserName());
-            childQueryParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
-            childQueryParam.setFileType("NOT_FILE");
-            childQueryParam.setIsFile(YesOrNoEnum.N.name());
-            childQueryParam.setIsExist(YesOrNoEnum.Y.name());
-
-            List<FileDo> childDirs = this.getAssignFiles(childQueryParam);
-
-            // 3. 构建树形结构
-            if (!CollectionUtils.isEmpty(childDirs)) {
-                List<FileDto> childDtoList = Lists.newArrayList();
-                for (FileDo childDir : childDirs) {
-                    FileDto childDto = this.doToDto(childDir);
-                    childDtoList.add(childDto);
-                }
-                rootDto.setChildFileList(childDtoList);
-
-                log.info("handleUserTwoLevelDirectory: 用户 {} 的目录树查询成功，根目录ID={}, 子目录数量={}",
-                        userDTO.getUserName(), rootDir.getId(), childDtoList.size());
-            } else {
-                log.info("handleUserTwoLevelDirectory: 用户 {} 的根目录下没有子目录", userDTO.getUserName());
-            }
+            log.info("handleUserTwoLevelDirectory: 用户 {} 完整目录树查询成功，根目录ID={}", 
+                    userDTO.getUserName(), rootDto.getId());
 
             return rootDto;
 
         } catch (Exception e) {
             log.error("handleUserTwoLevelDirectory: 查询用户目录树失败, userName={}", userDTO.getUserName(), e);
-            // 将异常向外抛出，以便上层捕获
             throw e;
+        }
+    }
+
+    /**
+     * 递归构建目录树
+     * @param currentDir 当前目录节点
+     * @param parentIdToChildrenMap 父ID与子节点列表的映射
+     */
+    private void buildDirectoryTree(FileDto currentDir, Map<Long, List<FileDto>> parentIdToChildrenMap) {
+        // 获取当前目录的子节点列表
+        List<FileDto> children = parentIdToChildrenMap.get(currentDir.getId());
+        
+        if (CollectionUtils.isEmpty(children)) {
+            // 没有子节点，设置为空列表
+            currentDir.setChildFileList(Lists.newArrayList());
+            // 确保 hasChild 状态正确 (虽然数据库可能有值，但在内存树中最终确认一下也无妨，或者保持数据库原值)
+            // currentDir.setHasChild(YesOrNoEnum.N.name()); 
+            return;
+        }
+
+        // 设置子节点
+        currentDir.setChildFileList(children);
+        // currentDir.setHasChild(YesOrNoEnum.Y.name());
+
+        // 对每个子节点递归构建
+        for (FileDto child : children) {
+            buildDirectoryTree(child, parentIdToChildrenMap);
         }
     }
 
