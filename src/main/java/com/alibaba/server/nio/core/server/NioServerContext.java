@@ -225,6 +225,10 @@ public class NioServerContext {
         if (!Optional.ofNullable(socketChannel).isPresent()) {
             return false;
         }
+        if (!socketChannel.isOpen()) {
+            log.info("NioServerContext: SocketChannel已关闭, 忽略本次资源释放请求");
+            return true;
+        }
         try {
             String remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
             String localAddress = NioServerContext.getLocalAddress(socketChannel);

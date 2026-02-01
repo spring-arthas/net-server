@@ -18,6 +18,7 @@ import com.alibaba.server.nio.model.file.UploadCheckpoint;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
+import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.checkpoint.CheckpointManager;
 import com.alibaba.server.nio.service.file.config.FileUploadConfig;
@@ -293,6 +294,10 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileQueryParam.setFileType(fileType);
             
             try {
+                UserDTO userDTO = new UserDTO();
+                userDTO.setId(1L);
+                userDTO.setUserName("18806504525");
+                socketChannelContext.setUserDTO(userDTO);
                 FileDto fileDto = fileService.createFile(fileQueryParam, socketChannelContext.getUserDTO());
                 // 保存数据库记录 ID
                 if (fileDto != null && fileDto.getId() != null) {
