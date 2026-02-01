@@ -274,7 +274,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
         FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
         String dirPath = null;
         Long fileId = null;
-        
         if (dirId != null) {
             dirPath = fileService.validateDirectory(dirId);
             if (dirPath == null) {
