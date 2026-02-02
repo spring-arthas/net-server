@@ -747,7 +747,6 @@ public class FileServiceImpl implements FileService {
                 .map(this::doToDto)
                 .collect(Collectors.toList());
         }
-        
         return FilePageDto.of(fileDtoList, pageResult.getTotalCount(), 
             pageResult.getCurrentPage(), pageResult.getPageSize());
     }

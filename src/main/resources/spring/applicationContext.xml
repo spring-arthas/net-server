@@ -71,8 +71,7 @@
         <property name="mapUnderscoreToCamelCase" value="true" />
         <property name="objectFactory" ref="paginatedListObjFactory" />
         <property name="objectWrapperFactory" ref="paginatedListWrapperFactory" />
-        <!--<property
-        name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl"/>-->
+        <property name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl"/>
     </bean>
     <bean id="paginatedListObjFactory"
         class="com.alibaba.server.nio.core.page.PaginatedListObjFactory" />

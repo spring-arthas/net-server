@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 类DynamicSQLProvider.java的实现描述：简单sql自动生成，若xml里配置了同名sql，则会优先使用xml
  * 需要满足以下约定：
  * 1. DO类名与数据库表名对应 （或使用@Table注解加在Mapper接口上）
- * 2. DO的属性与数据库字段对应  （或使用@Column）
+ * 2. DO的属性与数据库字段对应 （或使用@Column）
  * 3. DO需要继承BaseDO
  *
  * @author liubei
@@ -99,25 +99,25 @@ public class DynamicSQLProvider {
     public String logicDelete(Long id, MappedStatement ms) {
         String tableName = MybatisUtils.getTableNameByMs(ms);
         return "UPDATE "
-            + tableName
-            + " SET gmt_modified = now(), del = '" + YesOrNoEnum.Y.name() + "', del_time = now() "
-            + " WHERE id = "
-            + id + getDeleteFilterSql(ms);
+                + tableName
+                + " SET gmt_modified = now(), del = '" + YesOrNoEnum.Y.name() + "', del_time = now() "
+                + " WHERE id = "
+                + id + getDeleteFilterSql(ms);
     }
 
     public String batchLogicDelete(Map map, MappedStatement ms) {
         // mybatis 会默认转换成map，其默认key值为list
-        List<Long> ids = (List<Long>)map.get(BatchSqlSource.LIST);
+        List<Long> ids = (List<Long>) map.get(BatchSqlSource.LIST);
         if (ids == null || ids.isEmpty()) {
             return null;
         }
         String tableName = MybatisUtils.getTableNameByMs(ms);
         return "UPDATE "
-            + tableName
-            + " SET gmt_modified = now(), del = '" + YesOrNoEnum.Y.name() + "', del_time = now() "
-            + " WHERE id IN('"
-            + StringUtils.join(ids, "','")
-            + "')" + getDeleteFilterSql(ms);
+                + tableName
+                + " SET gmt_modified = now(), del = '" + YesOrNoEnum.Y.name() + "', del_time = now() "
+                + " WHERE id IN('"
+                + StringUtils.join(ids, "','")
+                + "')" + getDeleteFilterSql(ms);
     }
 
     public String delete(Long id, MappedStatement ms) {
@@ -130,10 +130,10 @@ public class DynamicSQLProvider {
         return sql.toString();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     public String batchDelete(Map map, MappedStatement ms) {
         // mybatis 会默认转换成map，其默认key值为list
-        List<Long> ids = (List<Long>)map.get(BatchSqlSource.LIST);
+        List<Long> ids = (List<Long>) map.get(BatchSqlSource.LIST);
         if (ids == null || ids.isEmpty()) {
             return null;
         }
@@ -192,10 +192,10 @@ public class DynamicSQLProvider {
             sql.append(deleteFilterSql);
         }
 
-        //if (StringUtils.isNotEmpty(queryParam.getGroupBy())) {
-        //    // 设置了group by字段
-        //    sql.append(" GROUP BY " + queryParam.getGroupBy());
-        //}
+        // if (StringUtils.isNotEmpty(queryParam.getGroupBy())) {
+        // // 设置了group by字段
+        // sql.append(" GROUP BY " + queryParam.getGroupBy());
+        // }
         String orderBySql = MybatisUtils.getOrderBySql(queryParam);
         sql.append(orderBySql);
 
@@ -203,7 +203,7 @@ public class DynamicSQLProvider {
         sql.append(limitSql);
 
         // 对于普通query，自动加上 LIMIT 10000 以防OOM
-        //sql.append(" LIMIT 10000");
+        // sql.append(" LIMIT 10000");
         return sql.toString();
     }
 
@@ -213,10 +213,9 @@ public class DynamicSQLProvider {
     static {
         try {
             EXCLUDE_QUERY_METHOD = Arrays.asList(
-                DalPageQueryParam.class.getMethod("getCurrentPage"),
-                DalPageQueryParam.class.getMethod("getPageSize"),
-                DalPageQueryParam.class.getMethod("getOrderBy")
-            );
+                    DalPageQueryParam.class.getMethod("getCurrentPage"),
+                    DalPageQueryParam.class.getMethod("getPageSize"),
+                    DalPageQueryParam.class.getMethod("getOrderBy"));
             DEL_QUERY_METHOD = DalPageQueryParam.class.getMethod("getDel");
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
@@ -225,7 +224,7 @@ public class DynamicSQLProvider {
 
     @SuppressWarnings("rawtypes")
     private String getQueryColumns(DalPageQueryParam queryParam, Class<? extends DalPageQueryParam> paramClass,
-        boolean autoFilterLogicDelete) {
+            boolean autoFilterLogicDelete) {
         StringBuilder result = new StringBuilder();
         try {
             List<Method> getters = ClassUtils.getGetters(paramClass);
@@ -239,6 +238,9 @@ public class DynamicSQLProvider {
             for (Method method : getters) {
                 Object value = method.invoke(queryParam);
                 if (value == null) {
+                    continue;
+                }
+                if (value instanceof String && StringUtils.isEmpty((String) value)) {
                     continue;
                 }
                 String columnUpperCamel = method.getName().substring(3);
@@ -263,18 +265,18 @@ public class DynamicSQLProvider {
                 }
 
                 if (value instanceof Collection) {
-                    Collection valueList = (Collection)value;
+                    Collection valueList = (Collection) value;
                     if (valueList.size() > 0) {
                         result.append(" AND ");
                         if (findInSet != null) {
                             result.append("(");
                             result.append(
-                                "find_in_set(#{" + columnLowerCamel + "[0]}," + columnUnderScore + ")");
+                                    "find_in_set(#{" + columnLowerCamel + "[0]}," + columnUnderScore + ")");
                             for (int i = 1; i < valueList.size(); i++) {
                                 result.append(" or ");
                                 result.append(
-                                    "find_in_set(#{" + columnLowerCamel + "[" + i + "]}," + columnUnderScore
-                                        + ")");
+                                        "find_in_set(#{" + columnLowerCamel + "[" + i + "]}," + columnUnderScore
+                                                + ")");
                             }
                             result.append(")");
                         } else {
@@ -292,7 +294,7 @@ public class DynamicSQLProvider {
                         }
                     }
                 } else if (isNullQuery != null && value instanceof Boolean) {
-                    Boolean isNull = (Boolean)value;
+                    Boolean isNull = (Boolean) value;
                     result.append(" AND ");
                     result.append(columnUnderScore);
                     result.append(" is");
@@ -321,7 +323,7 @@ public class DynamicSQLProvider {
                         result.append("=");
                     }
                     if (operator != null && operator.value() != null && StringUtils.equalsIgnoreCase(
-                        operator.value().trim(), "like")) {
+                            operator.value().trim(), "like")) {
                         result.append(" CONCAT('%',");
                         if (isIgnore) {
                             result.append("LOWER(");
@@ -357,11 +359,11 @@ public class DynamicSQLProvider {
     static {
         try {
             EXCLUDE_UPDATE_METHOD = Arrays.asList(
-                BaseDO.class.getMethod("getId"),
-                BaseDO.class.getMethod("getGmtCreated"),
-                BaseDO.class.getMethod("getGmtModified")
-                // TODO @ShardingKey
-                //TenantBaseDO.class.getMethod("getTenantId")
+                    BaseDO.class.getMethod("getId"),
+                    BaseDO.class.getMethod("getGmtCreated"),
+                    BaseDO.class.getMethod("getGmtModified")
+            // TODO @ShardingKey
+            // TenantBaseDO.class.getMethod("getTenantId")
             );
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
@@ -393,11 +395,10 @@ public class DynamicSQLProvider {
     static {
         try {
             EXCLUDE_INSERT_METHOD = Arrays.asList(
-                BaseDO.class.getMethod("getId"),
-                BaseDO.class.getMethod("getGmtCreated"),
-                BaseDO.class.getMethod("getGmtModified"),
-                BaseDO.class.getMethod("getDelTime")
-            );
+                    BaseDO.class.getMethod("getId"),
+                    BaseDO.class.getMethod("getGmtCreated"),
+                    BaseDO.class.getMethod("getGmtModified"),
+                    BaseDO.class.getMethod("getDelTime"));
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
@@ -460,8 +461,8 @@ public class DynamicSQLProvider {
         String className = id.substring(0, id.lastIndexOf("."));
         Class<?> s = MybatisUtils.getClass(className, ms);
         Type[] genType = s.getGenericInterfaces();
-        Type[] params = ((ParameterizedType)genType[0]).getActualTypeArguments();
-        Class<?> dataObjectClass = (Class<?>)params[1];
+        Type[] params = ((ParameterizedType) genType[0]).getActualTypeArguments();
+        Class<?> dataObjectClass = (Class<?>) params[1];
         List<String> rawColumns = getColumns(dataObjectClass);
         List<String> resultColumns = getMappedColumnName(dataObjectClass, rawColumns);
         columnNameCache.put(ms, resultColumns);
@@ -469,7 +470,7 @@ public class DynamicSQLProvider {
     }
 
     private List<String> getMappedColumnName(Class<?> clazz, List<String> oldUnderScoreName) {
-        Map<String/*attr name*/, String/*db column*/> map = new HashMap<String, String>();
+        Map<String/* attr name */, String/* db column */> map = new HashMap<String, String>();
         List<Field> fields = ClassUtils.getFieldsByAnnotation(clazz, Column.class);
         for (Field field : fields) {
             Column c = field.getAnnotation(Column.class);
