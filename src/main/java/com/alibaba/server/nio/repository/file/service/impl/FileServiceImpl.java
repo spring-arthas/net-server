@@ -19,6 +19,7 @@ import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.util.LocalTime;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -317,7 +318,9 @@ public class FileServiceImpl implements FileService {
         fileDalQueryParam.setPId(fileQueryParam.getPId());
         fileDalQueryParam.setUserId(fileQueryParam.getUserId());
         fileDalQueryParam.setUserName(fileQueryParam.getUserName());
-        fileDalQueryParam.setFileName(fileQueryParam.getFileName());
+        if (StringUtils.isNotBlank(fileQueryParam.getFileName())) {
+            fileDalQueryParam.setFileName(fileQueryParam.getFileName());
+        }
         fileDalQueryParam.setFilePath(fileQueryParam.getFilePath());
         fileDalQueryParam.setFileSize(fileQueryParam.getFileSize());
         fileDalQueryParam.setFileType(fileQueryParam.getFileType());
@@ -401,7 +404,7 @@ public class FileServiceImpl implements FileService {
 
             // 获取所有目录列表
             List<FileDo> allDirs = this.getAssignFiles(queryParam);
-            
+
             if (CollectionUtils.isEmpty(allDirs)) {
                 log.warn("handleUserTwoLevelDirectory: 用户 {} 未查询到任何目录", userDTO.getUserName());
                 throw new IllegalArgumentException("用户目录数据为空");
@@ -409,27 +412,27 @@ public class FileServiceImpl implements FileService {
 
             // 2. 找到根目录 (pId = -1)
             FileDo rootDirDo = allDirs.stream()
-                .filter(file -> file.getPId() == -1L)
-                .findFirst()
-                .orElse(null);
+                    .filter(file -> file.getPId() == -1L)
+                    .findFirst()
+                    .orElse(null);
 
             if (rootDirDo == null) {
                 log.warn("handleUserTwoLevelDirectory: 用户 {} 根目录不存在", userDTO.getUserName());
                 throw new IllegalArgumentException("用户顶层目录不存在");
             }
-            
+
             // 3. 将所有目录转为 Map<ParentId, List<FileDto>> 以便快速构建树
             // 排除根目录，只处理子节点
             Map<Long, List<FileDto>> parentIdToChildrenMap = allDirs.stream()
-                .filter(file -> file.getPId() != -1L)
-                .map(this::doToDto)
-                .collect(Collectors.groupingBy(FileDto::getPId));
+                    .filter(file -> file.getPId() != -1L)
+                    .map(this::doToDto)
+                    .collect(Collectors.groupingBy(FileDto::getPId));
 
             // 4. 构建树形结构
             FileDto rootDto = this.doToDto(rootDirDo);
             buildDirectoryTree(rootDto, parentIdToChildrenMap);
 
-            log.info("handleUserTwoLevelDirectory: 用户 {} 完整目录树查询成功，根目录ID={}", 
+            log.info("handleUserTwoLevelDirectory: 用户 {} 完整目录树查询成功，根目录ID={}",
                     userDTO.getUserName(), rootDto.getId());
 
             return rootDto;
@@ -442,18 +445,19 @@ public class FileServiceImpl implements FileService {
 
     /**
      * 递归构建目录树
-     * @param currentDir 当前目录节点
+     * 
+     * @param currentDir            当前目录节点
      * @param parentIdToChildrenMap 父ID与子节点列表的映射
      */
     private void buildDirectoryTree(FileDto currentDir, Map<Long, List<FileDto>> parentIdToChildrenMap) {
         // 获取当前目录的子节点列表
         List<FileDto> children = parentIdToChildrenMap.get(currentDir.getId());
-        
+
         if (CollectionUtils.isEmpty(children)) {
             // 没有子节点，设置为空列表
             currentDir.setChildFileList(Lists.newArrayList());
             // 确保 hasChild 状态正确 (虽然数据库可能有值，但在内存树中最终确认一下也无妨，或者保持数据库原值)
-            // currentDir.setHasChild(YesOrNoEnum.N.name()); 
+            // currentDir.setHasChild(YesOrNoEnum.N.name());
             return;
         }
 
@@ -474,7 +478,7 @@ public class FileServiceImpl implements FileService {
             throw new IllegalArgumentException("参数无效");
         }
         dirName = dirName.trim();
-        
+
         // 特殊处理：如果是根目录（parentId = -1），允许较长的目录名
         boolean isRootDirectory = (parentId == -1L);
         if (!isRootDirectory && dirName.length() > MAX_DIR_NAME_LENGTH) {
@@ -496,17 +500,16 @@ public class FileServiceImpl implements FileService {
         if (isRootDirectory) {
             // 根目录：使用配置文件中的完整路径
             String basePath = NioServerContext.getValue(
-                com.alibaba.server.common.OSinfo.isWindows() 
-                    ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS 
-                    : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC
-            );
+                    com.alibaba.server.common.OSinfo.isWindows()
+                            ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS
+                            : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC);
             newDirPath = basePath != null ? basePath.trim() + File.separator + dirName : "";
         } else {
             // 非根目录：拼接父路径
             String parentPath = buildDirectoryPath(parentId);
             newDirPath = parentPath + File.separator + dirName;
         }
-        
+
         File newDir = new File(newDirPath);
         if (!newDir.exists()) {
             if (!newDir.mkdirs()) {
@@ -536,7 +539,7 @@ public class FileServiceImpl implements FileService {
             this.fileRepository.updateSelective(parentUpdate);
         }
 
-        log.info("创建目录成功: id={}, name={}, path={}, isRoot={}", 
+        log.info("创建目录成功: id={}, name={}, path={}, isRoot={}",
                 fileDo.getId(), dirName, newDirPath, isRootDirectory);
         return this.doToDto(fileDo);
     }
@@ -744,11 +747,11 @@ public class FileServiceImpl implements FileService {
         List<FileDto> fileDtoList = Collections.emptyList();
         if (pageResult.getModelList() != null) {
             fileDtoList = pageResult.getModelList().stream()
-                .map(this::doToDto)
-                .collect(Collectors.toList());
+                    .map(this::doToDto)
+                    .collect(Collectors.toList());
         }
-        return FilePageDto.of(fileDtoList, pageResult.getTotalCount(), 
-            pageResult.getCurrentPage(), pageResult.getPageSize());
+        return FilePageDto.of(fileDtoList, pageResult.getTotalCount(),
+                pageResult.getCurrentPage(), pageResult.getPageSize());
     }
 
     @Override
