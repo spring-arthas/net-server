@@ -270,6 +270,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         String fileType = meta.getString("fileType");
         Long dirId = meta.getLong("dirId");
         Integer userId = meta.getInteger("userId");
+        String taskId = meta.getString("taskId");
         
         // 2. 校验目录（如果指定了dirId）
         FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
@@ -295,8 +296,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             
             try {
                 UserDTO userDTO = new UserDTO();
-                userDTO.setId(1L);
-                userDTO.setUserName("18806504525");
+                userDTO.setId(Long.valueOf(String.valueOf(userId)));
+                userDTO.setUserName("default");
                 socketChannelContext.setUserDTO(userDTO);
                 FileDto fileDto = fileService.createFile(fileQueryParam, socketChannelContext.getUserDTO());
                 // 保存数据库记录 ID
@@ -312,7 +313,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         
         // 4. 创建上传上下文
         FileUploadContext uploadContext = new FileUploadContext();
-        uploadContext.setTaskId(FileUploadContext.generateTaskId());
+        uploadContext.setTaskId(taskId);
         uploadContext.setMd5(md5);
         uploadContext.setFileName(fileName);
         uploadContext.setFileSize(fileSize);
@@ -411,6 +412,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             String fileType = meta.getString("fileType");
             Long dirId = meta.getLong("dirId");
             Long userId = meta.getLong("userId");
+            String taskId = meta.getString("taskId");
 
             log.info(
                     "[ {} ] FileHeadDecodeHandler | --> 接收到元数据帧: fileName={}, fileSize={}, fileType={}, dirId={}, userId={}",
