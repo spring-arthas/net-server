@@ -380,10 +380,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             if(Objects.nonNull(dirId) && 0L != dirId) {
                 fileQueryParam.setPId(dirId);
             }
+            fileQueryParam.setFileName(null);
             if(org.apache.commons.lang.StringUtils.isNotBlank(fileName)) {
                 fileQueryParam.setPId(null);
+                fileQueryParam.setFileName(fileName);
             }
-            fileQueryParam.setFileName(fileName);
             fileQueryParam.setCurrentPage(pageNum);
             fileQueryParam.setPageSize(pageSize);
             FilePageDto pageDto = getFileService().listFiles(fileQueryParam);
