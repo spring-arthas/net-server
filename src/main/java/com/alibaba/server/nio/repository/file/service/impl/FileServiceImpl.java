@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.repository.file.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.YesOrNoEnum;
@@ -742,7 +743,10 @@ public class FileServiceImpl implements FileService {
         orderBy.setProperty("gmtCreated");
         orderBy.setDirection(PageQueryParam.Direction.DESC);
         fileQueryParam.setOrderBy(Lists.newArrayList(orderBy));
-        PageResult<FileDo> pageResult = this.fileRepository.queryPage(this.createDalParam(fileQueryParam));
+        FileDalQueryParam fileDalQueryParam = this.createDalParam(fileQueryParam);
+        log.info("=>【文件分页列表查询】入参={}", JSON.toJSONString(fileDalQueryParam));
+        PageResult<FileDo> pageResult = this.fileRepository.queryPage(fileDalQueryParam);
+        log.info("=>【文件分页列表查询】查询结果={}, 入参={}", JSON.toJSONString(pageResult), JSON.toJSONString(fileDalQueryParam));
         // 转换结果
         List<FileDto> fileDtoList = Collections.emptyList();
         if (pageResult.getModelList() != null) {
