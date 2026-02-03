@@ -47,6 +47,7 @@ public class WorkerThreadPool {
      */
     private static final ConcurrentHashMap<String, ChannelWorker> channelWorkerMap = new ConcurrentHashMap<>();
 
+    private static final ExecutorService textExecutor = Executors.newSingleThreadExecutor();
     private static final ExecutorService executorService = new ThreadPoolExecutor(
         Runtime.getRuntime().availableProcessors(), Runtime.getRuntime().availableProcessors(), 3000,
         TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1000),
@@ -91,17 +92,33 @@ public class WorkerThreadPool {
         TransportDataModel transportDataModelCopy = new TransportDataModel();
         transportDataModelCopy.setDataType(socketChannelContext.getTransportDataModel().getDataType());
         transportDataModelCopy.setWaitHandleDataList(Lists.newArrayList(socketChannelContext.getTransportDataModel().getWaitHandleDataList()));
-        // 获取或创建 ChannelWorker
-        ChannelWorker worker = channelWorkerMap.computeIfAbsent(channelKey, key -> {
-            ChannelWorker newWorker = new ChannelWorker(socketChannelContext, channelKey);
-            // 首次创建时提交到线程池
-            executorService.submit(newWorker);
-            log.info("WorkerThreadPool为通道 {} 创建新的 ChannelWorker 并提交到线程池", channelKey);
-            return newWorker;
-        });
+
+        // 区分文本传输和文字传输线程池
+        ChannelWorker worker = null;
+        if(ChannelEventModelEnum.TEXT_TRANSMISSION.equals(socketChannelContext.getTransportDataModel())) {
+            worker = channelWorkerMap.computeIfAbsent(channelKey, key -> {
+                ChannelWorker newWorker = new ChannelWorker(socketChannelContext, channelKey);
+                // 首次创建时提交到线程池
+                textExecutor.submit(newWorker);
+                log.info("WorkerThreadPool为通道 {} 创建新的 text-ChannelWorker 并提交到线程池", channelKey);
+                return newWorker;
+            });
+        } else {
+            // 获取或创建 ChannelWorker
+             worker = channelWorkerMap.computeIfAbsent(channelKey, key -> {
+                ChannelWorker newWorker = new ChannelWorker(socketChannelContext, channelKey);
+                // 首次创建时提交到线程池
+                executorService.submit(newWorker);
+                log.info("WorkerThreadPool为通道 {} 创建新的 file-transport-ChannelWorker 并提交到线程池", channelKey);
+                return newWorker;
+            });
+        }
+
         // 向 ChannelWorker 的队列中添加待处理数据
         // offerData 使用阻塞式等待，背压会自动传递到 Socket 层
-        worker.offerData(transportDataModelCopy);
+        if(Objects.nonNull(worker)) {
+            worker.offerData(transportDataModelCopy);
+        }
     }
 
     /**
