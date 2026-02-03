@@ -47,7 +47,7 @@
                 </if>&ndash;&gt;
             </set>
             where f.id = #{item.id}
-        </foreach>
+        </foreach>k
     </update>-->
     <!-- 手动分页查询 -->
     <select id="page"
