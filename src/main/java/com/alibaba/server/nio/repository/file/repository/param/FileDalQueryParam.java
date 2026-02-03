@@ -3,6 +3,7 @@ package com.alibaba.server.nio.repository.file.repository.param;
 import com.alibaba.server.nio.core.annotation.QueryOperator;
 import com.alibaba.server.nio.core.param.DalPageQueryParam;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 文件查询dal param
@@ -10,6 +11,7 @@ import lombok.Data;
  * @author spring
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 public class FileDalQueryParam extends DalPageQueryParam {
 
     /**

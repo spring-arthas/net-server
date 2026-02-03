@@ -411,7 +411,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             long fileSize = meta.getLongValue("fileSize");
             String fileType = meta.getString("fileType");
             Long dirId = meta.getLong("dirId");
-            Long userId = meta.getLong("userId");
+            Integer userId = meta.getInteger("userId");
             String taskId = meta.getString("taskId");
 
             log.info(

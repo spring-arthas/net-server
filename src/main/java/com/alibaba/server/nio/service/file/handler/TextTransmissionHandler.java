@@ -216,7 +216,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                         org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
             }
             JSONObject data = new JSONObject();
-            data.put("userId", userDTO.getId());
+            data.put("userId", Integer.valueOf(String.valueOf(userDTO.getId())));
             data.put("token", "后期引入");
             data.put("userName", userDTO.getUserName());
             data.put("phone", userDTO.getPhone());
