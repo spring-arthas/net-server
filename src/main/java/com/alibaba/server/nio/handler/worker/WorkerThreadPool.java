@@ -90,12 +90,12 @@ public class WorkerThreadPool {
         }
         // 深拷贝 TransportDataModel，避免原始数据被清空后影响处理
         TransportDataModel transportDataModelCopy = new TransportDataModel();
-        transportDataModelCopy.setDataType(socketChannelContext.getTransportDataModel().getDataType());
+        transportDataModelCopy.setDataType(dataType);
         transportDataModelCopy.setWaitHandleDataList(Lists.newArrayList(socketChannelContext.getTransportDataModel().getWaitHandleDataList()));
 
         // 区分文本传输和文字传输线程池
         ChannelWorker worker = null;
-        if(ChannelEventModelEnum.TEXT_TRANSMISSION.equals(socketChannelContext.getTransportDataModel())) {
+        if(ChannelEventModelEnum.TEXT_TRANSMISSION.getName().equals(dataType)) {
             worker = channelWorkerMap.computeIfAbsent(channelKey, key -> {
                 ChannelWorker newWorker = new ChannelWorker(socketChannelContext, channelKey);
                 // 首次创建时提交到线程池
