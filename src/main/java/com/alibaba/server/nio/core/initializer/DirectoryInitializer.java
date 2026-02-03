@@ -177,7 +177,7 @@ public class DirectoryInitializer {
         try {
             // 通过查询父ID为-1的所有记录来检查
             FileQueryParam queryParam = new FileQueryParam();
-            queryParam.setPId(ROOT_PARENT_ID);
+            queryParam.setParentId(ROOT_PARENT_ID);
             queryParam.setIsFile(YesOrNoEnum.N.name());
             queryParam.setIsExist(YesOrNoEnum.Y.name());
             
