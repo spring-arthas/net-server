@@ -18,8 +18,8 @@ public class FileDalQueryParam extends DalPageQueryParam {
     /**
      * 父id
      */
-    @Column(value = "p_id")
-    private Long pId;
+    @Column(value = "parent_id")
+    private Long parentId;
 
     /**
      * 文件名

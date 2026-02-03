@@ -287,7 +287,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         // 3. 创建数据库记录（仅全新上传需要）
         if (!isResume) {
             FileQueryParam fileQueryParam = new FileQueryParam();
-            fileQueryParam.setPId(dirId);
+            fileQueryParam.setParentId(dirId);
             fileQueryParam.setFileName(fileName);
             fileQueryParam.setFileSize(fileSize);
             fileQueryParam.setUserId(userId);

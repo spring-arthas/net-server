@@ -74,7 +74,7 @@ public class FileServiceImpl implements FileService {
 
             // 查询当前节点下一节点信息
             FileQueryParam childFileQueryParam = new FileQueryParam();
-            childFileQueryParam.setPId(rootFileDto.getId());
+            childFileQueryParam.setParentId(rootFileDto.getId());
             List<FileDo> childFileDos = this.getAssignFiles(childFileQueryParam);
             if (!CollectionUtils.isEmpty(childFileDos)) {
                 List<FileDto> childFileList = Lists.newArrayList();
@@ -96,7 +96,7 @@ public class FileServiceImpl implements FileService {
             }
 
             FileCreateParam fileCreateParam = new FileCreateParam();
-            fileCreateParam.setPId(-1L);
+            fileCreateParam.setParentId(-1L);
             fileCreateParam.setFileName(fileQueryParam.getFileName());
             fileCreateParam.setUserName(fileQueryParam.getUserName());
             // 保存相对路径
@@ -122,7 +122,7 @@ public class FileServiceImpl implements FileService {
      */
     private PageResult<FileDo> queryFilesBelongCurrentFolder(Long id, Integer currentPage, Integer pageSize) {
         FileDalQueryParam fileDalQueryParam = new FileDalQueryParam();
-        fileDalQueryParam.setPId(id);
+        fileDalQueryParam.setParentId(id);
         fileDalQueryParam.setIsExist(YesOrNoEnum.Y.name());
         fileDalQueryParam.setIsFile(YesOrNoEnum.Y.name());
         fileDalQueryParam.setDel(YesOrNoEnum.N.name());
@@ -144,7 +144,7 @@ public class FileServiceImpl implements FileService {
 
         // 2、判断当前文件夹是否含有文件，含有则不能在当前文件夹路径下创建子文件夹
         FileQueryParam newFileQueryParam = new FileQueryParam();
-        newFileQueryParam.setPId(fileQueryParam.getPId());
+        newFileQueryParam.setParentId(fileQueryParam.getParentId());
         newFileQueryParam.setFileType("FILE");
         newFileQueryParam.setIsFile(YesOrNoEnum.Y.name());
         newFileQueryParam.setIsExist(YesOrNoEnum.Y.name());
@@ -153,7 +153,7 @@ public class FileServiceImpl implements FileService {
         PageResult<FileDo> pageResult = this.fileRepository.queryPage(this.createDalParam(newFileQueryParam));
         if (null != pageResult && pageResult.getTotalCount() > 0) {
             FileDto fileDto = new FileDto();
-            fileDto.setId(fileQueryParam.getPId());
+            fileDto.setId(fileQueryParam.getParentId());
             fileDto.setFileName(fileQueryParam.getFilePath());
             fileDto.setFileCount(pageResult.getTotalCount());
             return fileDto;
@@ -168,7 +168,7 @@ public class FileServiceImpl implements FileService {
 
         // 创建新的文件夹节点
         FileCreateParam fileCreateParam = new FileCreateParam();
-        fileCreateParam.setPId(fileQueryParam.getPId());
+        fileCreateParam.setParentId(fileQueryParam.getParentId());
         fileCreateParam.setUserName(fileQueryParam.getUserName());
         fileCreateParam.setFileName(fileQueryParam.getFileName());
         fileCreateParam.setFilePath(fileQueryParam.getFilePath());
@@ -182,7 +182,7 @@ public class FileServiceImpl implements FileService {
 
         // 更新父节点的hasChild状态为true
         fileDo = new FileDo();
-        fileDo.setId(fileQueryParam.getPId());
+        fileDo.setId(fileQueryParam.getParentId());
         fileDo.setHasChild(YesOrNoEnum.Y.name());
         this.fileRepository.updateSelective(fileDo);
         FileDto fileDto = this.doToDto(fileDo);
@@ -209,7 +209,7 @@ public class FileServiceImpl implements FileService {
         List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
         if (CollectionUtils.isEmpty(fileDos)) {
             FileCreateParam fileCreateParam = new FileCreateParam();
-            fileCreateParam.setPId(fileQueryParam.getPId());
+            fileCreateParam.setParentId(fileQueryParam.getParentId());
             fileCreateParam.setFileName(fileQueryParam.getFileName());
             fileCreateParam.setFileSize(fileQueryParam.getFileSize());
             fileCreateParam.setUserName(fileQueryParam.getUserName());
@@ -278,7 +278,7 @@ public class FileServiceImpl implements FileService {
     private FileDo createParamToDo(FileCreateParam param) {
         FileDo fileDo = new FileDo();
         fileDo.setId(SnowflakeIdWorkerUtil.generateId());
-        fileDo.setPId(param.getPId());
+        fileDo.setParentId(param.getParentId());
         fileDo.setUserName(param.getUserName());
         fileDo.setUserId(param.getUserId());
         fileDo.setFileName(param.getFileName());
@@ -299,7 +299,7 @@ public class FileServiceImpl implements FileService {
     private FileDo updateParamToDo(FileUpdateParam param) {
         FileDo fileDo = new FileDo();
         fileDo.setId(param.getId());
-        fileDo.setPId(param.getPId());
+        fileDo.setParentId(param.getParentId());
         fileDo.setUserName(param.getUserName());
         fileDo.setFileName(param.getFileName());
         fileDo.setFilePath(param.getFilePath());
@@ -316,7 +316,7 @@ public class FileServiceImpl implements FileService {
 
     private FileDalQueryParam createDalParam(FileQueryParam fileQueryParam) {
         FileDalQueryParam fileDalQueryParam = new FileDalQueryParam();
-        fileDalQueryParam.setPId(fileQueryParam.getPId());
+        fileDalQueryParam.setParentId(fileQueryParam.getParentId());
         fileDalQueryParam.setUserId(fileQueryParam.getUserId());
         fileDalQueryParam.setUserName(fileQueryParam.getUserName());
         if (StringUtils.isNotBlank(fileQueryParam.getFileName())) {
@@ -338,7 +338,7 @@ public class FileServiceImpl implements FileService {
     private FileDto doToDto(FileDo fileDo) {
         FileDto fileDto = new FileDto();
         fileDto.setId(fileDo.getId());
-        fileDto.setPId(fileDo.getPId());
+        fileDto.setParentId(fileDo.getParentId());
         fileDto.setUserName(fileDo.getUserName());
         fileDto.setFileName(fileDo.getFileName());
         fileDto.setFilePath(fileDo.getFilePath());
@@ -413,7 +413,7 @@ public class FileServiceImpl implements FileService {
 
             // 2. 找到根目录 (pId = -1)
             FileDo rootDirDo = allDirs.stream()
-                    .filter(file -> file.getPId() == -1L)
+                    .filter(file -> file.getParentId() == -1L)
                     .findFirst()
                     .orElse(null);
 
@@ -425,9 +425,9 @@ public class FileServiceImpl implements FileService {
             // 3. 将所有目录转为 Map<ParentId, List<FileDto>> 以便快速构建树
             // 排除根目录，只处理子节点
             Map<Long, List<FileDto>> parentIdToChildrenMap = allDirs.stream()
-                    .filter(file -> file.getPId() != -1L)
+                    .filter(file -> file.getParentId() != -1L)
                     .map(this::doToDto)
-                    .collect(Collectors.groupingBy(FileDto::getPId));
+                    .collect(Collectors.groupingBy(FileDto::getParentId));
 
             // 4. 构建树形结构
             FileDto rootDto = this.doToDto(rootDirDo);
@@ -520,7 +520,7 @@ public class FileServiceImpl implements FileService {
 
         // 5. 创建DB记录
         FileCreateParam createParam = new FileCreateParam();
-        createParam.setPId(parentId);
+        createParam.setParentId(parentId);
         createParam.setFileName(dirName);
         createParam.setFilePath(newDirPath);
         createParam.setFileType("NOT_FILE");
@@ -555,7 +555,7 @@ public class FileServiceImpl implements FileService {
 
         // 2. 检查是否有子项
         FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setPId(dirId);
+        queryParam.setParentId(dirId);
         queryParam.setDel(YesOrNoEnum.N.name());
         List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
         if (!CollectionUtils.isEmpty(children)) {
@@ -601,7 +601,7 @@ public class FileServiceImpl implements FileService {
         }
 
         // 3. 检查同级重名（排除自身）
-        if (existsSameName(dirDo.getPId(), newName, dirId)) {
+        if (existsSameName(dirDo.getParentId(), newName, dirId)) {
             throw new IllegalArgumentException("同级目录已存在同名目录");
         }
 
@@ -662,7 +662,7 @@ public class FileServiceImpl implements FileService {
         // 5. 更新DB记录
         FileDo updateDo = new FileDo();
         updateDo.setId(dirId);
-        updateDo.setPId(targetParentId);
+        updateDo.setParentId(targetParentId);
         updateDo.setFilePath(newPath);
         updateDo.setGmtModified(new Date());
         this.fileRepository.updateSelective(updateDo);
@@ -696,18 +696,18 @@ public class FileServiceImpl implements FileService {
             return "";
         }
         // 如果是顶层目录，直接返回其路径
-        if (fileDo.getPId() == null || fileDo.getPId() == -1L) {
+        if (fileDo.getParentId() == null || fileDo.getParentId() == -1L) {
             return fileDo.getFilePath();
         }
         // 递归构建路径
-        String parentPath = buildDirectoryPath(fileDo.getPId());
+        String parentPath = buildDirectoryPath(fileDo.getParentId());
         return parentPath + File.separator + fileDo.getFileName();
     }
 
     @Override
     public boolean existsSameName(Long parentId, String dirName, Long excludeId) {
         FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setPId(parentId);
+        queryParam.setParentId(parentId);
         queryParam.setFileName(dirName);
         queryParam.setIsFile(YesOrNoEnum.N.name());
         queryParam.setDel(YesOrNoEnum.N.name());
@@ -778,8 +778,8 @@ public class FileServiceImpl implements FileService {
         }
         FileDto fileDto = this.doToDto(fileDo);
         // 查询所属目录名称
-        if (fileDo.getPId() != null && fileDo.getPId() > 0) {
-            FileDo parentDir = this.fileRepository.get(fileDo.getPId());
+        if (fileDo.getParentId() != null && fileDo.getParentId() > 0) {
+            FileDo parentDir = this.fileRepository.get(fileDo.getParentId());
             if (parentDir != null) {
                 fileDto.setParentDirName(parentDir.getFileName());
             }

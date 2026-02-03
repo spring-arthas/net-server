@@ -21,7 +21,7 @@ public class FileUpdateParam {
     /**
      * 父id
      */
-    private Long pId;
+    private Long parentId;
 
     /**
      * 文件名

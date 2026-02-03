@@ -134,7 +134,7 @@ public class DirectoryInitializer {
 
             // 查询数据库中是否已存在该根目录记录
             FileQueryParam queryParam = new FileQueryParam();
-            queryParam.setPId(ROOT_PARENT_ID);
+            queryParam.setParentId(ROOT_PARENT_ID);
             queryParam.setFileName(dirName);
             queryParam.setFilePath(directoryPath);
             queryParam.setIsFile(YesOrNoEnum.N.name());
