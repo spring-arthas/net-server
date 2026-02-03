@@ -6,6 +6,7 @@ import lombok.Data;
 
 /**
  * 文件查询dal param
+ * 
  * @author spring
  */
 @Data
@@ -13,7 +14,7 @@ public class FileDalQueryParam extends DalPageQueryParam {
 
     /**
      * 父id
-     * */
+     */
     private Long pId;
 
     /**
@@ -39,7 +40,7 @@ public class FileDalQueryParam extends DalPageQueryParam {
 
     /**
      * 是否存在
-     * */
+     */
     private String isExist;
 
     /**
@@ -54,10 +55,8 @@ public class FileDalQueryParam extends DalPageQueryParam {
 
     /**
      * 所属用户
-     * */
+     */
     private String userName;
 
     private Integer userId;
-
-    private String del;
 }
