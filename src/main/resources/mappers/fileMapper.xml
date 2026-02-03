@@ -6,7 +6,7 @@
     <select id="getAssignFiles"
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
         resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo"> SELECT f.*
-        FROM file f WHERE 1 = 1 AND f.del = #{del} <if test="parentId != null"> AND f.parent_id = #{pId} </if>
+        FROM file f WHERE 1 = 1 AND f.del = #{del} <if test="parentId != null"> AND f.parent_id = #{parentId} </if>
             <if
             test="fileName != null and fileName != ''"> AND f.file_name = #{fileName} </if>
             <if
