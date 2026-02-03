@@ -13,13 +13,15 @@ import java.util.List;
 
 /**
  * 文件dao
+ * 
  * @author spring
- * */
+ */
 @Mapper
 public interface FileRepository extends BaseMapperRepository<FileDalQueryParam, FileDo> {
 
     /**
      * 查询指定文件信息
+     * 
      * @param fileDalQueryParam
      * @return
      */
@@ -27,8 +29,18 @@ public interface FileRepository extends BaseMapperRepository<FileDalQueryParam, 
 
     /**
      * 查询当前文件夹下的文件
+     * 
      * @param fileDalQueryParam
      * @return
      */
     List<FileDo> queryFilesBelongCurrentFolder(FileDalQueryParam fileDalQueryParam);
+
+    /**
+     * 手动分页查询
+     * 
+     * @param fileDalQueryParam
+     * @return
+     */
+    @PageQuery
+    PageResult<FileDo> page(FileDalQueryParam fileDalQueryParam);
 }

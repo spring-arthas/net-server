@@ -5,53 +5,30 @@
     <!--查询当前文件夹-->
     <select id="getAssignFiles"
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
-        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
-        SELECT f.*
-        FROM file f
-        WHERE
-            1 = 1
-            AND f.del = #{del}
-            <if test="pId != null">
-                AND f.p_id = #{pId}
-            </if>
-            <if test="fileName != null and fileName != ''">
-                AND f.file_name = #{fileName}
-            </if>
-            <if test="filePath != null and filePath != ''">
-                AND f.file_path = #{filePath}
-            </if>
-            <if test="fileType != null and fileType != ''">
-                AND f.file_type = #{fileType}
-            </if>
-            <if test="isFile != null and isFile != ''">
-                AND f.is_file = #{isFile}
-            </if>
-            <if test="isExist != null and isExist != ''">
-                AND f.is_exist = #{isExist}
-            </if>
-            <if test="hasChild != null and hasChild != ''">
-                AND f.has_child = #{hasChild}
-            </if>
-            <if test="userId != null and userId != ''">
-                AND f.user_id = #{userId}
-            </if>
-        ORDER BY f.id DESC
-    </select>
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo"> SELECT f.*
+        FROM file f WHERE 1 = 1 AND f.del = #{del} <if test="pId != null"> AND f.p_id = #{pId} </if>
+            <if
+            test="fileName != null and fileName != ''"> AND f.file_name = #{fileName} </if>
+            <if
+            test="filePath != null and filePath != ''"> AND f.file_path = #{filePath} </if>
+            <if
+            test="fileType != null and fileType != ''"> AND f.file_type = #{fileType} </if>
+            <if
+            test="isFile != null and isFile != ''"> AND f.is_file = #{isFile} </if>
+            <if
+            test="isExist != null and isExist != ''"> AND f.is_exist = #{isExist} </if>
+            <if
+            test="hasChild != null and hasChild != ''"> AND f.has_child = #{hasChild} </if>
+            <if
+            test="userId != null and userId != ''"> AND f.user_id = #{userId} </if> ORDER BY f.id
+        DESC </select>
 
     <!--查询当前文件夹下的文件-->
     <select id="queryFilesBelongCurrentFolder"
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
-        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
-        SELECT f.*
-        FROM file f
-        WHERE
-            0 = 0
-            AND f.p_id = #{pId}
-            AND f.del = #{del}
-            AND f.is_file = #{isFile}
-            AND f.is_exist = #{isExist}
-        ORDER BY f.gmt_create DESC LIMIT #{currentPage}, #{pageSize}
-    </select>
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo"> SELECT f.*
+        FROM file f WHERE 0 = 0 AND f.p_id = #{pId} AND f.del = #{del} AND f.is_file = #{isFile} AND
+        f.is_exist = #{isExist} ORDER BY f.gmt_create DESC LIMIT #{currentPage}, #{pageSize} </select>
 
     <!-- 批量更新 -->
     <!--<update
@@ -72,4 +49,41 @@
             where f.id = #{item.id}
         </foreach>
     </update>-->
+    <!-- 手动分页查询 -->
+    <select id="page"
+        parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
+        SELECT f.*
+        FROM file f
+        WHERE 1 = 1
+            <if test="del != null and del != ''">
+                AND f.del = #{del}
+            </if>
+            <if test="pId != null">
+                AND f.p_id = #{pId}
+            </if>
+            <if test="fileName != null and fileName != ''">
+                AND f.file_name LIKE CONCAT('%', #{fileName}, '%')
+            </if>
+            <if test="filePath != null and filePath != ''">
+                AND f.file_path =  #{filePath}
+            </if>
+            <if test="fileType != null and fileType != ''">
+                AND f.file_type =c#{fileType}
+            </if>
+            <if test="isFile != null and isFile != ''">
+                AND f.is_file = #{isFile}
+            </if>
+            <if test="isExist != null and isExist != ''">
+                AND f.is_exist = #{isExist}
+            </if>
+            <if test="hasChild != null and hasChild != ''">
+                AND f.has_child = #{hasChild}
+            </if>
+            <if test="userId != null">
+                AND f.user_id = #{userId}
+            </if>
+        ORDER BY f.gmt_created DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
 </mapper>

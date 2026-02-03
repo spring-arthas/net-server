@@ -745,7 +745,7 @@ public class FileServiceImpl implements FileService {
         fileQueryParam.setOrderBy(Lists.newArrayList(orderBy));
         FileDalQueryParam fileDalQueryParam = this.createDalParam(fileQueryParam);
         log.info("=>【文件分页列表查询】入参={}", JSON.toJSONString(fileDalQueryParam));
-        PageResult<FileDo> pageResult = this.fileRepository.queryPage(fileDalQueryParam);
+        PageResult<FileDo> pageResult = this.fileRepository.page(fileDalQueryParam);
         log.info("=>【文件分页列表查询】查询结果={}, 入参={}", JSON.toJSONString(pageResult), JSON.toJSONString(fileDalQueryParam));
         // 转换结果
         List<FileDto> fileDtoList = Collections.emptyList();
