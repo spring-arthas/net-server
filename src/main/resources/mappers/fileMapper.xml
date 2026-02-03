@@ -47,43 +47,50 @@
                 </if>&ndash;&gt;
             </set>
             where f.id = #{item.id}
-        </foreach>k
+        </foreach>
     </update>-->
     <!-- 手动分页查询 -->
     <select id="page"
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
-        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo">
-        SELECT f.*
-        FROM file f
-        WHERE 1 = 1
-            <if test="del != null and del != ''">
-                AND f.del = #{del}
-            </if>
-            <if test="pId != null">
-                AND f.p_id = #{pId}
-            </if>
-            <if test="fileName != null and fileName != ''">
-                AND f.file_name LIKE CONCAT('%', #{fileName}, '%')
-            </if>
-            <if test="filePath != null and filePath != ''">
-                AND f.file_path =  #{filePath}
-            </if>
-            <if test="fileType != null and fileType != ''">
-                AND f.file_type =c#{fileType}
-            </if>
-            <if test="isFile != null and isFile != ''">
-                AND f.is_file = #{isFile}
-            </if>
-            <if test="isExist != null and isExist != ''">
-                AND f.is_exist = #{isExist}
-            </if>
-            <if test="hasChild != null and hasChild != ''">
-                AND f.has_child = #{hasChild}
-            </if>
-            <if test="userId != null">
-                AND f.user_id = #{userId}
-            </if>
-        ORDER BY f.gmt_created DESC
-        LIMIT #{offset}, #{pageSize}
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileDo"> SELECT f.*
+        FROM file f WHERE 1 = 1 <if test="del != null and del != ''"> AND f.del = #{del} </if>
+            <if
+            test="pId != null"> AND f.p_id = #{pId} </if>
+            <if
+            test="fileName != null and fileName != ''"> AND f.file_name LIKE CONCAT('%',
+        #{fileName}, '%') </if>
+            <if test="filePath != null and filePath != ''"> AND f.file_path =
+        #{filePath} </if>
+            <if test="fileType != null and fileType != ''"> AND f.file_type =
+        #{fileType} </if>
+            <if test="isFile != null and isFile != ''"> AND f.is_file = #{isFile} </if>
+            <if
+            test="isExist != null and isExist != ''"> AND f.is_exist = #{isExist} </if>
+            <if
+            test="hasChild != null and hasChild != ''"> AND f.has_child = #{hasChild} </if>
+            <if
+            test="userId != null"> AND f.user_id = #{userId} </if> ORDER BY f.gmt_created DESC LIMIT
+        #{offset}, #{pageSize} </select>
+
+    <!-- 手动查询总数 -->
+    <select id="count"
+        parameterType="com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam"
+        resultType="java.lang.Long"> SELECT count(*) FROM file f WHERE 1 = 1 <if
+            test="del != null and del != ''"> AND f.del = #{del} </if>
+        <if test="pId != null"> AND
+        f.p_id = #{pId} </if>
+        <if test="fileName != null and fileName != ''"> AND f.file_name LIKE
+        CONCAT('%', #{fileName}, '%') </if>
+        <if test="filePath != null and filePath != ''"> AND
+        f.file_path = #{filePath} </if>
+        <if test="fileType != null and fileType != ''"> AND
+        f.file_type = #{fileType} </if>
+        <if test="isFile != null and isFile != ''"> AND f.is_file =
+        #{isFile} </if>
+        <if test="isExist != null and isExist != ''"> AND f.is_exist = #{isExist} </if>
+        <if
+            test="hasChild != null and hasChild != ''"> AND f.has_child = #{hasChild} </if>
+        <if
+            test="userId != null"> AND f.user_id = #{userId} </if>
     </select>
 </mapper>

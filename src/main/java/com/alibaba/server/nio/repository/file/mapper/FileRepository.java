@@ -3,12 +3,7 @@ package com.alibaba.server.nio.repository.file.mapper;
 import com.alibaba.server.nio.core.repository.BaseMapperRepository;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam;
-import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import org.apache.ibatis.annotations.Mapper;
-
-import com.alibaba.server.nio.core.annotation.MapMethod;
-import com.alibaba.server.nio.core.annotation.PageQuery;
-import com.alibaba.server.nio.core.result.PageResult;
 import java.util.List;
 
 /**
@@ -41,6 +36,19 @@ public interface FileRepository extends BaseMapperRepository<FileDalQueryParam, 
      * @param fileDalQueryParam
      * @return
      */
-    @PageQuery
-    PageResult<FileDo> page(FileDalQueryParam fileDalQueryParam);
+    /**
+     * 手动分页查询
+     * 
+     * @param fileDalQueryParam
+     * @return
+     */
+    List<FileDo> page(FileDalQueryParam fileDalQueryParam);
+
+    /**
+     * 手动查询总数
+     * 
+     * @param fileDalQueryParam
+     * @return
+     */
+    long count(FileDalQueryParam fileDalQueryParam);
 }
