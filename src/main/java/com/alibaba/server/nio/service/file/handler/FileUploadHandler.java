@@ -79,13 +79,13 @@ public class FileUploadHandler extends AbstractChannelHandler {
      */
     static {
         // 使用默认配置
-        config = new FileUploadConfig(); 
+        config = new FileUploadConfig();
         // 构建全局限流器
         globalRateLimiter = new TokenBucketRateLimiter(config.getGlobalRateBps(), config.getGlobalBucketCapacity());
         uploadSemaphore = new Semaphore(config.getMaxConcurrentUploads());
         log.info("文件上传控制器初始化完成 - 全局速率: {}, 单连接速率: {}, 最大并发: {}",
-                formatRate(config.getGlobalRateBps()), 
-                formatRate(config.getPerConnectionRateBps()), 
+                formatRate(config.getGlobalRateBps()),
+                formatRate(config.getPerConnectionRateBps()),
                 config.getMaxConcurrentUploads());
     }
 
@@ -104,9 +104,11 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return Math.round(bytesPerSecond / (1024.0 * 1024.0)) + " MB/s";
         }
     }
+
     /**
      * 获取全局速率限制器
      * 供 ReadEventHandler 使用，用于实现全局带宽控制
+     * 
      * @return 全局速率限制器实例
      */
     public static TokenBucketRateLimiter getGlobalRateLimiter() {
@@ -145,6 +147,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
         }
     }
+
     /**
      * 获取或创建帧解析器
      */
@@ -155,6 +158,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return new FrameParser();
         });
     }
+
     /**
      * 处理单个完整的帧
      */
@@ -167,7 +171,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return;
         }
 
-        //log.debug("处理帧: type={}, dataLength={}", frame.getType(), frame.getDataLength());
+        // log.debug("处理帧: type={}, dataLength={}", frame.getType(),
+        // frame.getDataLength());
 
         switch (frame.getType()) {
             case RESUME_CHECK: // 如果当前文件上传时默认会发送为断点续传帧，因为不确定当前文件上传是全新上传还是断点续传
@@ -187,13 +192,14 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 break;
         }
     }
+
     /**
      * 处理断点检查帧（RESUME_CHECK）
      * 检查文件是否存在断点，返回已上传大小
      */
     private void handleResumeCheck(FileUploadFrame frame,
-                                   SocketChannelContext socketChannelContext,
-                                   SimpleChannelContext simpleChannelContext) throws IOException {
+            SocketChannelContext socketChannelContext,
+            SimpleChannelContext simpleChannelContext) throws IOException {
         try {
             // 1. 解析 JSON 元数据
             String jsonData = frame.getDataAsString();
@@ -206,25 +212,26 @@ public class FileUploadHandler extends AbstractChannelHandler {
             Long userId = meta.getLong("userId");
 
             log.info("[ {} ] FileUploadHandler | --> 接收到断点检查帧: md5={}, fileName={}, fileSize={}",
-                    com.alibaba.server.util.LocalTime.formatDate(java.time.LocalDateTime.now()), md5, fileName, fileSize);
+                    com.alibaba.server.util.LocalTime.formatDate(java.time.LocalDateTime.now()), md5, fileName,
+                    fileSize);
 
             // 2. 检查是否有断点记录
             UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(md5);
             if (Objects.nonNull(checkpoint) && new File(checkpoint.getFilePath()).exists()) {
                 // ==== 断点续传模式 ====
                 long uploadedSize = checkpoint.getUploadedSize();
-                
+
                 // 使用通用方法创建上传上下文
                 FileUploadContext uploadContext = createAndInitializeUploadContext(
                         meta, socketChannelContext, true, checkpoint);
-                
+
                 if (uploadContext == null) {
                     sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
                     return;
                 }
-                
+
                 // 发送断点应答
-                sendResumeAck(socketChannelContext, uploadContext.getTaskId(), "resume", 
+                sendResumeAck(socketChannelContext, uploadContext.getTaskId(), "resume",
                         uploadedSize, "断点续传");
 
                 log.info("断点续传 - taskId: {}, 文件: {}, 已上传: {} / {} ({:.2f}%), 剩余: {}",
@@ -251,10 +258,10 @@ public class FileUploadHandler extends AbstractChannelHandler {
      * 创建并初始化上传上下文（通用方法）
      * 支持全新上传和断点续传两种模式
      * 
-     * @param meta 元数据JSON对象
+     * @param meta                 元数据JSON对象
      * @param socketChannelContext socket通道上下文
-     * @param isResume 是否为断点续传模式
-     * @param checkpoint 断点信息（续传模式时传入，全新上传时为null）
+     * @param isResume             是否为断点续传模式
+     * @param checkpoint           断点信息（续传模式时传入，全新上传时为null）
      * @return 创建的上传上下文，如果失败返回null
      */
     private FileUploadContext createAndInitializeUploadContext(
@@ -262,7 +269,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             SocketChannelContext socketChannelContext,
             boolean isResume,
             UploadCheckpoint checkpoint) throws IOException {
-        
+
         // 1. 解析元数据
         String md5 = meta.getString("md5");
         String fileName = meta.getString("fileName");
@@ -271,7 +278,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         Long dirId = meta.getLong("dirId");
         Integer userId = meta.getInteger("userId");
         String taskId = meta.getString("taskId");
-        
+
         // 2. 校验目录（如果指定了dirId）
         FileService fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
         String dirPath = null;
@@ -283,7 +290,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 return null;
             }
         }
-        
+
         // 3. 创建数据库记录（仅全新上传需要）
         if (!isResume) {
             FileQueryParam fileQueryParam = new FileQueryParam();
@@ -293,7 +300,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileQueryParam.setUserId(userId);
             fileQueryParam.setFilePath(dirPath);
             fileQueryParam.setFileType(fileType);
-            
+
             try {
                 UserDTO userDTO = new UserDTO();
                 userDTO.setId(Long.valueOf(String.valueOf(userId)));
@@ -310,7 +317,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 return null;
             }
         }
-        
+
         // 4. 创建上传上下文
         FileUploadContext uploadContext = new FileUploadContext();
         uploadContext.setTaskId(taskId);
@@ -319,7 +326,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         uploadContext.setFileSize(fileSize);
         uploadContext.setFileType(fileType);
         uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
-        
+
         // 5. 设置断点续传相关字段
         if (isResume && checkpoint != null) {
             // 断点续传模式
@@ -333,17 +340,17 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setResume(false);
             uploadContext.setFileId(fileId);
         }
-        
+
         // 6. 设置目录路径
         if (dirPath != null) {
             uploadContext.setBasePath(dirPath);
         }
-        
+
         // 7. 获取并发许可
         if (!uploadSemaphore.tryAcquire()) {
             int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
             log.warn("上传并发数已达上限: 当前并发={}/{}", currentUploads, config.getMaxConcurrentUploads());
-            
+
             // 删除刚创建的数据库记录（如果有）
             if (fileId != null) {
                 try {
@@ -355,14 +362,14 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return null;
         }
         uploadContext.setSemaphoreAcquired(true);
-        
+
         // 8. 打开文件通道
         try {
             uploadContext.openFileChannel();
         } catch (IOException e) {
             log.error("打开文件通道失败", e);
             uploadContext.releaseSemaphore(uploadSemaphore);
-            
+
             // 删除数据库记录
             if (uploadContext.getFileId() != null) {
                 try {
@@ -373,10 +380,10 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
             throw e;
         }
-        
+
         // 9. 保存上下文到Map
         uploadContextMap.put(uploadContext.getTaskId(), uploadContext);
-        
+
         // 10. 设置限流器
         long rateLimitBps = config.getPerConnectionRateBps();
         if (config.isEnableDynamicRateAdjustment()) {
@@ -384,17 +391,17 @@ public class FileUploadHandler extends AbstractChannelHandler {
             rateLimitBps = config.calculateDynamicRate(currentUploads);
         }
         socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
-            rateLimitBps,
-            rateLimitBps * config.getBucketCapacityMultiplier()
-        ));
-        
+                rateLimitBps,
+                rateLimitBps * config.getBucketCapacityMultiplier()));
+
         log.info("上传上下文创建成功 - taskId: {}, 文件: {}, 模式: {}, 起始偏移: {}",
                 uploadContext.getTaskId(), fileName,
                 isResume ? "断点续传" : "全新上传",
                 uploadContext.getStartOffset());
-        
+
         return uploadContext;
     }
+
     /**
      * 处理元数据帧（META_FRAME）
      * 解析文件信息，创建数据库记录，打开文件通道
@@ -443,6 +450,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             sendAckFrame(socketChannelContext, null, "error", e.getMessage());
         }
     }
+
     /**
      * 处理数据帧（DATA_FRAME）
      * 将文件字节数据写入本地文件
@@ -472,28 +480,33 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 long fileSize = uploadContext.getFileSize();
                 double progress = uploadContext.getProgress();
                 String speed = uploadContext.getFormattedSpeed();
-                
+
                 // 使用 System.out.print 而不是 log，实现单行滚动
                 // 格式：[文件名] 进度: XX.XX% (已上传/总大小) 速率: XX.XX MB/s
                 String progressBar = generateProgressBar(progress, 30);
-                /*System.out.print(String.format(
-                    "\r[%s] %s %.2f%% (%s/%s) 速率: %s",
-                    uploadContext.getFileName(),
-                    progressBar,
-                    progress,
-                    formatBytes(bytesWritten),
-                    formatBytes(fileSize),
-                    speed
-                ));
-                System.out.flush();*/
-                
+                /*
+                 * System.out.print(String.format(
+                 * "\r[%s] %s %.2f%% (%s/%s) 速率: %s",
+                 * uploadContext.getFileName(),
+                 * progressBar,
+                 * progress,
+                 * formatBytes(bytesWritten),
+                 * formatBytes(fileSize),
+                 * speed
+                 * ));
+                 * System.out.flush();
+                 */
+
+                // 也保留一个详细日志用于调试（降低频率）
                 // 也保留一个详细日志用于调试（降低频率）
                 if (bytesWritten % (10 * 1024 * 1024) == 0 || uploadContext.isComplete()) { // 每 10MB 或完成时记录
-                    log.info("上传进度 - taskId: {}, 文件: {}, 进度: {:.2f}%, 已上传: {}, 速率: {}",
+                    String progressStr = String.format("%.1f%%", progress);
+                    String sizePair = formatSizePair(bytesWritten, fileSize);
+                    log.info("上传进度 - taskId: {}, 文件: {}, 进度: {}, 已上传: {}, 速率: {}",
                             uploadContext.getTaskId(),
                             uploadContext.getFileName(),
-                            progress,
-                            formatBytes(bytesWritten),
+                            progressStr,
+                            sizePair,
                             speed);
                 }
             }
@@ -506,14 +519,14 @@ public class FileUploadHandler extends AbstractChannelHandler {
     /**
      * 生成进度条
      * 
-     * @param progress 进度百分比 (0-100)
+     * @param progress  进度百分比 (0-100)
      * @param barLength 进度条长度
-     * @return 进度条字符串，例如：[=========>     ]
+     * @return 进度条字符串，例如：[=========> ]
      */
     private String generateProgressBar(double progress, int barLength) {
         int filledLength = (int) (barLength * progress / 100.0);
         StringBuilder bar = new StringBuilder("[");
-        
+
         for (int i = 0; i < barLength; i++) {
             if (i < filledLength - 1) {
                 bar.append("=");
@@ -523,9 +536,30 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 bar.append(" ");
             }
         }
-        
+
         bar.append("]");
         return bar.toString();
+    }
+
+    /**
+     * 格式化字节大小
+     * 
+     * @param bytes 字节数
+     *              /**
+     *              格式化文件大小对（统一单位，保留一位小数）
+     *              例如：[10.5 MB / 20.0 MB]
+     */
+    private String formatSizePair(long written, long total) {
+        if (total < 1024) {
+            return String.format("[%d B / %d B]", written, total);
+        } else if (total < 1024 * 1024) {
+            return String.format("[%.1f KB / %.1f KB]", written / 1024.0, total / 1024.0);
+        } else if (total < 1024 * 1024 * 1024) {
+            return String.format("[%.1f MB / %.1f MB]", written / 1024.0 / 1024.0, total / 1024.0 / 1024.0);
+        } else {
+            return String.format("[%.1f GB / %.1f GB]", written / 1024.0 / 1024.0 / 1024.0,
+                    total / 1024.0 / 1024.0 / 1024.0);
+        }
     }
 
     /**
@@ -631,11 +665,12 @@ public class FileUploadHandler extends AbstractChannelHandler {
         }
         return null;
     }
+
     /**
      * 发送断点应答帧（RESUME_ACK）
      */
     private void sendResumeAck(SocketChannelContext ctx, String taskId,
-                               String status, long uploadedSize, String message) throws IOException {
+            String status, long uploadedSize, String message) throws IOException {
         JSONObject ackJson = new JSONObject();
         ackJson.put("taskId", taskId);
         ackJson.put("status", status);
@@ -654,13 +689,14 @@ public class FileUploadHandler extends AbstractChannelHandler {
         WriteQueueHelper.submitWrite(ctx, buffer);
         log.debug("发送断点应答: status={}, uploadedSize={}, taskId={}", status, uploadedSize, taskId);
     }
+
     /**
      * 发送 ACK 帧给客户端（使用 NIO 事件驱动的写操作）
      */
     private void sendAckFrame(SocketChannelContext socketChannelContext,
-                              String taskId,
-                              String status,
-                              String message) throws IOException {
+            String taskId,
+            String status,
+            String message) throws IOException {
         try {
             SocketChannel socketChannel = socketChannelContext.getSocketChannel();
             if (socketChannel == null || !socketChannel.isOpen()) {
@@ -712,7 +748,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
         uploadContextMap.entrySet().removeIf(entry -> {
             FileUploadContext ctx = entry.getValue();
             // 只清理属于该客户端且未完成的上传
-            if (remoteAddress.equals(ctx.getRemoteAddress()) && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
+            if (remoteAddress.equals(ctx.getRemoteAddress())
+                    && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
 
                 log.warn("连接断开，保存断点信息: taskId={}, fileName={}, remoteAddress={}, uploaded={}/{}",
                         ctx.getTaskId(), ctx.getFileName(), remoteAddress, ctx.getBytesWritten(), ctx.getFileSize());

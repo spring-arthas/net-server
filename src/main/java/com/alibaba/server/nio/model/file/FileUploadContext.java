@@ -25,12 +25,14 @@ public class FileUploadContext {
      * 文件存储根目录
      */
     private static final String FILE_STORAGE_ROOT = "/Users/hljy/Downloads/西班牙的荷包蛋/";
+
     /**
      * 生成唯一任务ID
      */
     public static String generateTaskId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
+
     /**
      * 任务ID（唯一标识一次上传）
      */
@@ -79,6 +81,7 @@ public class FileUploadContext {
      * 是否为断点续传模式
      */
     private boolean isResume = false;
+
     /**
      * 上传状态
      */
@@ -88,6 +91,7 @@ public class FileUploadContext {
         COMPLETED, // 已完成
         FAILED // 失败
     }
+
     private UploadStatus status = UploadStatus.INITIALIZED;
     /**
      * 标记是否已获取并发许可（用于释放时判断）
@@ -113,12 +117,14 @@ public class FileUploadContext {
      * 起始偏移量（断点续传时非0）
      */
     private long startOffset = 0;
+
     /**
      * 检查上传是否完成
      */
     public boolean isComplete() {
         return bytesWritten >= fileSize;
     }
+
     /**
      * 获取上传进度（百分比）
      */
@@ -128,6 +134,7 @@ public class FileUploadContext {
         }
         return (bytesWritten * 100.0) / fileSize;
     }
+
     /**
      * 构建文件存储路径
      * 如果设置了 basePath，使用自定义路径
@@ -168,10 +175,10 @@ public class FileUploadContext {
             this.fileChannel = FileChannel.open(path,
                     StandardOpenOption.WRITE,
                     StandardOpenOption.APPEND);
-            
+
             // 初始化已写入字节数为起始偏移量
             this.bytesWritten = startOffset;
-            
+
             log.info("断点续传模式 - taskId: {}, 文件: {}, 从 {} 字节继续上传 ({:.2f}%)",
                     taskId, fileName, startOffset, getProgress());
         } else {
@@ -180,7 +187,7 @@ public class FileUploadContext {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.WRITE,
                     StandardOpenOption.TRUNCATE_EXISTING);
-            
+
             this.bytesWritten = 0;
             log.info("全新上传模式 - taskId: {}, 文件: {}", taskId, fileName);
         }
@@ -191,6 +198,7 @@ public class FileUploadContext {
         log.info("打开文件通道: taskId={}, filePath={}", taskId, filePath);
         return this.fileChannel;
     }
+
     /**
      * 写入数据
      * 注意：FileChannel.write() 可能不会一次写入所有数据，需要循环确保完整写入
@@ -221,40 +229,45 @@ public class FileUploadContext {
 
         bytesWritten += totalWritten;
 
-        /*log.debug("写入数据: taskId={}, written={}, total={}/{}",
-                taskId, totalWritten, bytesWritten, fileSize);*/
+        /*
+         * log.debug("写入数据: taskId={}, written={}, total={}/{}",
+         * taskId, totalWritten, bytesWritten, fileSize);
+         */
 
         return totalWritten;
     }
+
     /**
      * 更新上传速率统计
      * 计算当前上传速率（字节/秒）
      */
     public void updateSpeed() {
         long currentTime = System.currentTimeMillis();
-        
+
         if (lastStatTime == 0) {
             lastStatTime = currentTime;
             lastStatBytes = bytesWritten;
             currentSpeed = 0;
             return;
         }
-        
+
         long timeDiff = currentTime - lastStatTime;
         if (timeDiff >= 1000) {
             long bytesDiff = bytesWritten - lastStatBytes;
             currentSpeed = (bytesDiff * 1000) / timeDiff;
-            
+
             lastStatTime = currentTime;
             lastStatBytes = bytesWritten;
         }
     }
+
     /**
      * 获取当前上传速率（字节/秒）
      */
     public long getCurrentSpeed() {
         return currentSpeed;
     }
+
     /**
      * 格式化速率显示（KB/s 或 MB/s）
      */
@@ -262,11 +275,12 @@ public class FileUploadContext {
         if (currentSpeed < 1024) {
             return currentSpeed + " B/s";
         } else if (currentSpeed < 1024 * 1024) {
-            return String.format("%.2f KB/s", currentSpeed / 1024.0);
+            return String.format("%.1f KB/s", currentSpeed / 1024.0);
         } else {
-            return String.format("%.2f MB/s", currentSpeed / 1024.0 / 1024.0);
+            return String.format("%.1f MB/s", currentSpeed / 1024.0 / 1024.0);
         }
     }
+
     /**
      * 关闭文件通道
      */
