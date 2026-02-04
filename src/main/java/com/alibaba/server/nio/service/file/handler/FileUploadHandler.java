@@ -167,7 +167,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return;
         }
 
-        log.debug("处理帧: type={}, dataLength={}", frame.getType(), frame.getDataLength());
+        //log.debug("处理帧: type={}, dataLength={}", frame.getType(), frame.getDataLength());
 
         switch (frame.getType()) {
             case RESUME_CHECK: // 如果当前文件上传时默认会发送为断点续传帧，因为不确定当前文件上传是全新上传还是断点续传
@@ -476,7 +476,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 // 使用 System.out.print 而不是 log，实现单行滚动
                 // 格式：[文件名] 进度: XX.XX% (已上传/总大小) 速率: XX.XX MB/s
                 String progressBar = generateProgressBar(progress, 30);
-                System.out.print(String.format(
+                /*System.out.print(String.format(
                     "\r[%s] %s %.2f%% (%s/%s) 速率: %s",
                     uploadContext.getFileName(),
                     progressBar,
@@ -485,7 +485,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     formatBytes(fileSize),
                     speed
                 ));
-                System.out.flush();
+                System.out.flush();*/
                 
                 // 也保留一个详细日志用于调试（降低频率）
                 if (bytesWritten % (10 * 1024 * 1024) == 0 || uploadContext.isComplete()) { // 每 10MB 或完成时记录

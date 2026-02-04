@@ -155,7 +155,7 @@ public class FrameParser {
             if (buf[position] == MAGIC[0] && buf[position + 1] == MAGIC[1]) {
                 // 找到魔数，进入头部解析状态
                 state = ParseState.PARSE_HEADER;
-                log.debug("找到魔数，位置: {}", position);
+                //log.debug("找到魔数，位置: {}", position);
                 return true;
             }
             position++; // 跳过无效字节
@@ -217,8 +217,8 @@ public class FrameParser {
             state = ParseState.FRAME_COMPLETE;
         }
 
-        log.debug("解析帧头: type={}, flags={}, dataLength={}",
-                frameType, flags, dataLength);
+        /*log.debug("解析帧头: type={}, flags={}, dataLength={}",
+                frameType, flags, dataLength);*/
 
         return true;
     }
@@ -244,7 +244,7 @@ public class FrameParser {
         // 进入帧完成状态
         state = ParseState.FRAME_COMPLETE;
 
-        log.debug("解析数据: {} 字节", currentDataLength);
+        //log.debug("解析数据: {} 字节", currentDataLength);
 
         return true;
     }
@@ -256,7 +256,7 @@ public class FrameParser {
         // 添加到完成列表
         completeFrames.add(currentFrame);
 
-        log.debug("帧解析完成: {}", currentFrame);
+        //log.debug("帧解析完成: {}", currentFrame);
 
         // 重置状态，准备解析下一帧
         currentFrame = null;
@@ -285,7 +285,7 @@ public class FrameParser {
                 buffer.reset();
                 buffer.write(remaining, 0, remaining.length);
                 position = 0;
-                log.debug("压缩缓存: 剩余 {} 字节", remaining.length);
+                //log.debug("压缩缓存: 剩余 {} 字节", remaining.length);
             }
         }
     }

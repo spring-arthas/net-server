@@ -221,8 +221,8 @@ public class FileUploadContext {
 
         bytesWritten += totalWritten;
 
-        log.debug("写入数据: taskId={}, written={}, total={}/{}",
-                taskId, totalWritten, bytesWritten, fileSize);
+        /*log.debug("写入数据: taskId={}, written={}, total={}/{}",
+                taskId, totalWritten, bytesWritten, fileSize);*/
 
         return totalWritten;
     }

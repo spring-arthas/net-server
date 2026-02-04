@@ -31,7 +31,7 @@
         <!-- 配置初始化大小、最小、最大 -->
         <property name="initialSize" value="1" />
         <property name="minIdle" value="1" />
-        <property name="maxActive" value="10" />
+        <property name="maxActive" value="50" />
         <!-- 配置获取连接等待超时的时间 -->
         <property name="maxWait" value="10000" />
         <!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->
