@@ -286,7 +286,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         if (dirId != null) {
             dirPath = fileService.validateDirectory(dirId);
             if (dirPath == null) {
-                log.error("目录不存在或类型错误: dirId={}", dirId);
+                log.error("目录不存在或类型错误: dirId={}，上传文件时dirId必须是目录Id", dirId);
                 return null;
             }
         }
@@ -298,7 +298,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileQueryParam.setFileName(fileName);
             fileQueryParam.setFileSize(fileSize);
             fileQueryParam.setUserId(userId);
-            fileQueryParam.setFilePath(dirPath);
+            fileQueryParam.setFilePath(dirPath + File.separator + taskId + "_" + fileName);
             fileQueryParam.setFileType(fileType);
 
             try {
