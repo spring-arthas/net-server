@@ -814,7 +814,7 @@ public class FileServiceImpl implements FileService {
         }
 
         // 2. 删除DB记录
-        this.fileRepository.delete(fileId);
+        this.fileRepository.logicDelete(fileId);
         log.info("文件删除成功: fileId={}, fileName={}", fileId, fileDo.getFileName());
         return true;
     }
