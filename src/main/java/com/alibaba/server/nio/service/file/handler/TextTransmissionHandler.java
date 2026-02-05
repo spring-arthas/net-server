@@ -143,13 +143,12 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case FILE_LIST_REQ:
                     handleFileList(frame, context);
                     break;
-                case FILE_DETAIL_REQ:
-                    handleFileDetail(frame, context);
-                    break;
                 case FILE_DELETE_REQ:
                     handleFileDelete(frame, context);
                     break;
-
+                case FILE_DETAIL_REQ:
+                    handleFileDetail(frame, context);
+                    break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
             }

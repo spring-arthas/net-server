@@ -127,13 +127,13 @@ public class FileUploadFrame {
          */
         FILE_LIST_REQ(0x40, "文件列表请求"),
         /**
-         * 文件详情请求
-         */
-        FILE_DETAIL_REQ(0x41, "文件详情请求"),
-        /**
          * 文件删除请求
          */
-        FILE_DELETE_REQ(0x42, "文件删除请求"),
+        FILE_DELETE_REQ(0x41, "文件删除请求"),
+        /**
+         * 文件详情请求
+         */
+        FILE_DETAIL_REQ(0x42, "文件详情请求"),
         /**
          * 文件操作响应
          */
