@@ -268,7 +268,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
             boolean isResume,
             UploadCheckpoint checkpoint) throws IOException {
         // 1. 文件上传校验所属目录（如果指定了dirId）
-        FileTaskService fileTaskService = BasicServer.classPathXmlApplicationContext.getBean(FileTaskService.class);
         String dirPath = null;
         Long fileTaskId = null;
         if (Objects.nonNull(request.getDirId())) {
@@ -592,7 +591,6 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileTaskDto.setId(uploadContext.getFileTaskId());
             fileTaskDto.setStatus(FileTaskStatusEnum.UPLOAD_SUCCESS.getCode());
             fileTaskDto.setGmtModified(new Date());
-            FileTaskService fileTaskService = BasicServer.classPathXmlApplicationContext.getBean(FileTaskService.class);
             fileTaskService.update(fileTaskDto);
             fileTaskDto = fileTaskService.getById(fileTaskDto.getId());
             FileDo fileDo = fileService.createByTask(fileTaskDto);

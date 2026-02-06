@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.util.List;
@@ -31,6 +32,7 @@ public class FileTaskServiceImpl implements FileTaskService {
     @Autowired
     private FileTaskRepository fileTaskRepository;
 
+    @Transactional(rollbackFor = Throwable.class)
     @Override
     public FileTaskDto create(FileTaskDto fileTaskDto) {
         FileTaskDo fileTaskDo = this.dtoToDo(fileTaskDto);
@@ -43,7 +45,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         fileTaskRepository.insertSelective(fileTaskDo);
         return this.doToDto(fileTaskDo);
     }
-
+    @Transactional(rollbackFor = Throwable.class)
     @Override
     public FileTaskDto update(FileTaskDto fileTaskDto) {
         if (Objects.isNull(fileTaskDto.getId())) {
@@ -84,7 +86,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         }
         return result;
     }
-
+    @Transactional(rollbackFor = Throwable.class)
     @Override
     public Boolean deleteById(Long id) {
         if (Objects.isNull(id)) {
