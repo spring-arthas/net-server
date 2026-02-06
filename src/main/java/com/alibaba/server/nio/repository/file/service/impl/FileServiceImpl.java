@@ -466,6 +466,7 @@ public class FileServiceImpl implements FileService {
         fileDo.setGmtCreated(new Date());
         fileDo.setGmtModified(fileDo.getGmtCreated());
         fileDo.setId(SnowflakeIdWorkerUtil.generateId());
+        this.fileRepository.insertSelective(fileDo);
         return fileDo;
     }
 
