@@ -3,6 +3,7 @@ package com.alibaba.server.nio.service.file.handler;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.server.common.FileTaskStatusEnum;
+import com.alibaba.server.common.YesOrNoEnum;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
@@ -350,7 +351,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 try {
                     FileTaskDto fileTaskDto = new FileTaskDto();
                     fileTaskDto.setId(fileTaskId);
-                    fileTaskDto.setIsDeleted(1);
+                    fileTaskDto.setDel(YesOrNoEnum.Y.name());
                     fileTaskDto.setGmtModified(new Date());
                     fileTaskService.update(fileTaskDto);
                 } catch (Exception e) {
@@ -371,7 +372,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 try {
                     FileTaskDto fileTaskDto = new FileTaskDto();
                     fileTaskDto.setId(uploadContext.getFileTaskId());
-                    fileTaskDto.setIsDeleted(1);
+                    fileTaskDto.setDel(YesOrNoEnum.Y.name());
                     fileTaskDto.setGmtModified(new Date());
                     fileTaskService.update(fileTaskDto);
                 } catch (Exception ex) {
