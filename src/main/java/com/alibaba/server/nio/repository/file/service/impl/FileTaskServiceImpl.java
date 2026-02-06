@@ -2,6 +2,7 @@ package com.alibaba.server.nio.repository.file.service.impl;
 
 import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.SnowflakeIdWorkerUtil;
+import com.alibaba.server.common.YesOrNoEnum;
 import com.alibaba.server.nio.core.result.PageResult;
 import com.alibaba.server.nio.repository.file.mapper.FileTaskRepository;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileTaskDo;
@@ -38,7 +39,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         FileTaskDo fileTaskDo = this.dtoToDo(fileTaskDto);
         fileTaskDo.setId(SnowflakeIdWorkerUtil.generateId());
         // 根据表结构截图，is_deleted 为 int 类型，0=否，1=是
-        fileTaskDo.setIsDeleted(0);
+        fileTaskDo.setDel(YesOrNoEnum.N.name());
         Date date = new Date();
         fileTaskDo.setGmtCreated(date);
         fileTaskDo.setGmtModified(date);
@@ -107,7 +108,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         fileTaskDo.setStatus(dto.getStatus());
         fileTaskDo.setUserId(dto.getUserId());
         fileTaskDo.setUserName(dto.getUserName());
-        fileTaskDo.setIsDeleted(dto.getIsDeleted());
+        fileTaskDo.setDel(dto.getDel());
         fileTaskDo.setGmtCreated(dto.getGmtCreated());
         fileTaskDo.setGmtModified(dto.getGmtModified());
         return fileTaskDo;
@@ -124,7 +125,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         dto.setStatus(fileTaskDo.getStatus());
         dto.setUserId(fileTaskDo.getUserId());
         dto.setUserName(fileTaskDo.getUserName());
-        dto.setIsDeleted(fileTaskDo.getIsDeleted());
+        dto.setDel(fileTaskDo.getDel());
         dto.setGmtCreated(fileTaskDo.getGmtCreated());
         dto.setGmtModified(fileTaskDo.getGmtModified());
         return dto;

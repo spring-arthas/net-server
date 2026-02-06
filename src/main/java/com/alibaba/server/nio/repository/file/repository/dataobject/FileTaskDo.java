@@ -1,6 +1,6 @@
 package com.alibaba.server.nio.repository.file.repository.dataobject;
 
-import com.alibaba.server.nio.core.dataobject.Base2DO;
+import com.alibaba.server.nio.core.dataobject.BaseDO;
 import lombok.Data;
 
 import java.util.Date;
@@ -11,7 +11,7 @@ import java.util.Date;
  * @author spring
  */
 @Data
-public class FileTaskDo extends Base2DO {
+public class FileTaskDo extends BaseDO {
 
     /**
      * 所属目录Id
