@@ -309,19 +309,17 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
         }
 
-        // 4. 创建上传上下文
+        // 4. 创建上传上下文（断点续传时数据来自断点对象，如果是全新上传时来自请求）
         FileUploadContext uploadContext = new FileUploadContext();
-        uploadContext.setRequestTaskId(request.getTaskId());
-        uploadContext.setMd5(request.getMd5());
-        uploadContext.setFileName(request.getFileName());
-        uploadContext.setFileSize(request.getFileSize());
-        uploadContext.setFileType(request.getFileType());
-        uploadContext.setUserId(request.getUserId());
-        uploadContext.setUserName(request.getUserName());
-        uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
-        // 5. 设置断点续传相关字段
         if (isResume && checkpoint != null) {
-            // 断点续传模式
+            // 断点续传模式, 从断点续传对象中恢复元数据
+            uploadContext.setMd5(checkpoint.getMd5());
+            uploadContext.setFileName(checkpoint.getFileName());
+            uploadContext.setFileSize(checkpoint.getFileSize());
+            uploadContext.setFileType(request.getFileType());
+            uploadContext.setUserId(checkpoint.getUserId());
+            uploadContext.setUserName(checkpoint.getUserName());
+            uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
             uploadContext.setStartOffset(checkpoint.getUploadedSize());
             uploadContext.setResume(true);
             uploadContext.setFilePath(checkpoint.getFilePath());
@@ -330,7 +328,15 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setFileId(checkpoint.getFileId());
             uploadContext.setFileTaskId(checkpoint.getFileTaskId());
         } else {
-            // 全新上传模式
+            // 全新上传模式，使用全新请求对象构建上下文
+            uploadContext.setRequestTaskId(request.getTaskId());
+            uploadContext.setMd5(request.getMd5());
+            uploadContext.setFileName(request.getFileName());
+            uploadContext.setFileSize(request.getFileSize());
+            uploadContext.setFileType(request.getFileType());
+            uploadContext.setUserId(request.getUserId());
+            uploadContext.setUserName(request.getUserName());
+            uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
             uploadContext.setStartOffset(0);
             uploadContext.setResume(false);
             // 传输任务关联的标识元数据信息从入参对象中获取，全新上传无断点对象
