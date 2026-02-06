@@ -241,7 +241,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
                         formatBytes(fileUploadRequest.getFileSize() - uploadedSize));
             } else {
                 // ==== 全新上传模式 ====
-                sendResumeAck(socketChannelContext, null, "new", 0, "全新上传，请发送META_FRAME");
+                FileUploadContext uploadContext = new FileUploadContext();
+                uploadContext.setRequestTaskId(fileUploadRequest.getTaskId());
+                sendResumeAck(socketChannelContext, uploadContext, "new", 0, "全新上传，请发送META_FRAME");
                 log.info("无断点记录，指示客户端全新上传: fileName={}", fileUploadRequest.getFileName());
             }
 
