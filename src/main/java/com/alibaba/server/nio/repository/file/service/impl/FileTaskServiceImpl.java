@@ -44,7 +44,9 @@ public class FileTaskServiceImpl implements FileTaskService {
         fileTaskDo.setGmtCreated(date);
         fileTaskDo.setGmtModified(date);
         fileTaskRepository.insertSelective(fileTaskDo);
-        return this.doToDto(fileTaskDo);
+        FileTaskDto existDto = this.doToDto(fileTaskDo);
+        existDto.setId(fileTaskDo.getId());
+        return existDto;
     }
     @Transactional(rollbackFor = Throwable.class)
     @Override
@@ -54,9 +56,10 @@ public class FileTaskServiceImpl implements FileTaskService {
         }
         FileTaskDo fileTaskDo = this.dtoToDo(fileTaskDto);
         fileTaskDo.setGmtModified(new Date());
-
         fileTaskRepository.updateSelective(fileTaskDo);
-        return this.doToDto(fileTaskRepository.get(fileTaskDto.getId()));
+        FileTaskDto existDto = this.doToDto(fileTaskRepository.get(fileTaskDto.getId()));
+        existDto.setId(fileTaskDo.getId());
+        return existDto;
     }
 
     @Override
