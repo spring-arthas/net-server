@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.alibaba.server.nio.repository.file.mapper.FileTaskRepository">
+
+    <sql id="Base_Column_List"> id, parent_id, file_name, file_path, file_type, file_size, status, user_id, user_name
+        is_deleted, gmt_created, gmt_modified </sql>
+
+    <!-- 分页查询 -->
+    <select id="page"
+        parameterType="com.alibaba.server.nio.repository.file.repository.param.FileTaskDalQueryParam"
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileTaskDo"> SELECT <include
+            refid="Base_Column_List" /> FROM file_task WHERE 1 = 1 <if
+            test="del != null and del != ''"> AND is_deleted = #{del} </if>
+        <if
+            test="parentId != null"> AND parent_id = #{parentId} </if>
+        <if
+            test="fileName != null and fileName != ''"> AND file_name LIKE CONCAT('%', #{fileName},
+        '%') </if>
+        <if test="status != null"> AND status = #{status} </if> ORDER BY gmt_created DESC
+        LIMIT #{offset}, #{pageSize} </select>
+
+    <!-- 查询总数 -->
+    <select id="count"
+        parameterType="com.alibaba.server.nio.repository.file.repository.param.FileTaskDalQueryParam"
+        resultType="java.lang.Long"> SELECT count(*) FROM file_task WHERE 1 = 1 <if
+            test="del != null and del != ''"> AND is_deleted = #{del} </if>
+        <if
+            test="parentId != null"> AND parent_id = #{parentId} </if>
+        <if
+            test="fileName != null and fileName != ''"> AND file_name LIKE CONCAT('%', #{fileName},
+        '%') </if>
+        <if test="status != null"> AND status = #{status} </if>
+    </select>
+
+</mapper>

@@ -32,11 +32,6 @@ public class FileUploadContext {
     public static String generateTaskId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
-
-    /**
-     * 任务ID（唯一标识一次上传）
-     */
-    private String taskId;
     /**
      * 文件名称
      */
@@ -70,7 +65,15 @@ public class FileUploadContext {
      */
     private String remoteAddress;
     /**
-     * 数据库记录 ID（用于断连时删除记录）
+     * 传输任务请求ID（唯一标识一次上传）
+     */
+    private String requestTaskId;
+    /**
+     * 传输任务数据库记录 ID（用于断连时删除记录）
+     */
+    private Long fileTaskId;
+    /**
+     * 真实文件 ID
      */
     private Long fileId;
     /**
@@ -81,6 +84,10 @@ public class FileUploadContext {
      * 是否为断点续传模式
      */
     private boolean isResume = false;
+
+    private Integer userId;
+
+    private String userName;
 
     /**
      * 上传状态
@@ -143,12 +150,12 @@ public class FileUploadContext {
     public String buildFilePath() {
         if (basePath != null && !basePath.isEmpty()) {
             // 使用自定义目录路径
-            this.filePath = basePath + "/" + taskId + "_" + fileName;
+            this.filePath = basePath + "/" + requestTaskId + "_" + fileName;
         } else {
             // 使用默认路径
             LocalDateTime now = LocalDateTime.now();
             String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            this.filePath = FILE_STORAGE_ROOT + datePath + "/" + taskId + "_" + fileName;
+            this.filePath = FILE_STORAGE_ROOT + datePath + "/" + requestTaskId + "_" + fileName;
         }
         return this.filePath;
     }
@@ -180,7 +187,7 @@ public class FileUploadContext {
             this.bytesWritten = startOffset;
 
             log.info("断点续传模式 - taskId: {}, 文件: {}, 从 {} 字节继续上传 ({:.2f}%)",
-                    taskId, fileName, startOffset, getProgress());
+                    requestTaskId, fileName, startOffset, getProgress());
         } else {
             // 全新上传：覆盖模式（TRUNCATE_EXISTING）
             this.fileChannel = FileChannel.open(path,
@@ -189,13 +196,13 @@ public class FileUploadContext {
                     StandardOpenOption.TRUNCATE_EXISTING);
 
             this.bytesWritten = 0;
-            log.info("全新上传模式 - taskId: {}, 文件: {}", taskId, fileName);
+            log.info("全新上传模式 - taskId: {}, 文件: {}", requestTaskId, fileName);
         }
 
         this.status = UploadStatus.UPLOADING;
         this.startTime = LocalDateTime.now();
 
-        log.info("打开文件通道: taskId={}, filePath={}", taskId, filePath);
+        log.info("打开文件通道: taskId={}, filePath={}", requestTaskId, filePath);
         return this.fileChannel;
     }
 
@@ -292,7 +299,7 @@ public class FileUploadContext {
                     fileChannel.close();
                 }
             } catch (IOException e) {
-                log.error("关闭文件通道失败: taskId={}", taskId, e);
+                log.error("关闭文件通道失败: taskId={}", requestTaskId, e);
             }
         }
     }
@@ -303,7 +310,7 @@ public class FileUploadContext {
     public void markCompleted() {
         this.status = UploadStatus.COMPLETED;
         closeFileChannel();
-        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", taskId, fileName, fileSize,
+        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", requestTaskId, fileName, fileSize,
                 bytesWritten, fileSize);
     }
 
@@ -318,9 +325,9 @@ public class FileUploadContext {
         if (filePath != null) {
             try {
                 java.nio.file.Files.deleteIfExists(Paths.get(filePath));
-                log.warn("上传失败，已删除未完成文件: taskId={}, reason={}", taskId, reason);
+                log.warn("上传失败，已删除未完成文件: taskId={}, reason={}", requestTaskId, reason);
             } catch (IOException e) {
-                log.error("删除未完成文件失败: taskId={}", taskId, e);
+                log.error("删除未完成文件失败: taskId={}", requestTaskId, e);
             }
         }
     }
@@ -335,7 +342,7 @@ public class FileUploadContext {
         if (semaphoreAcquired && semaphore != null) {
             semaphore.release();
             semaphoreAcquired = false;
-            log.debug("释放上传并发许可: taskId={}", taskId);
+            log.debug("释放上传并发许可: taskId={}", requestTaskId);
         }
     }
 }

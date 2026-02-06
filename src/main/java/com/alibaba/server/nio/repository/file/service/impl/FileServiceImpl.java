@@ -13,6 +13,7 @@ import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
+import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.file.service.param.FileCreateParam;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
@@ -442,6 +443,30 @@ public class FileServiceImpl implements FileService {
             log.error("handleUserTwoLevelDirectory: 查询用户目录树失败, userName={}", userDTO.getUserName(), e);
             throw e;
         }
+    }
+
+    @Override
+    public FileDo createByTask(FileTaskDto fileTaskDto) {
+        if(Objects.isNull(fileTaskDto)) {
+            return null;
+        }
+        FileDo fileDo = new FileDo();
+        fileDo.setParentId(fileTaskDto.getParentId());
+        fileDo.setFileName(fileTaskDto.getFileName());
+        fileDo.setFilePath(fileTaskDto.getFilePath());
+        fileDo.setFileSize(fileTaskDto.getFileSize());
+        fileDo.setFileType(fileTaskDto.getFileType());
+        fileDo.setUserId(fileTaskDto.getUserId());
+        fileDo.setUserName(fileTaskDto.getUserName());
+        fileDo.setIsFile(YesOrNoEnum.Y.name());
+        fileDo.setIsExist(YesOrNoEnum.Y.name());
+        fileDo.setHasChild(YesOrNoEnum.N.name());
+        fileDo.setDel(YesOrNoEnum.N.name());
+        fileDo.setDelTime(fileDo.getGmtModified());
+        fileDo.setGmtCreated(new Date());
+        fileDo.setGmtModified(fileDo.getGmtCreated());
+        fileDo.setId(SnowflakeIdWorkerUtil.generateId());
+        return fileDo;
     }
 
     /**

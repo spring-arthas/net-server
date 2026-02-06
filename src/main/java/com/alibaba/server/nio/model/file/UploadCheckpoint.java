@@ -38,10 +38,20 @@ public class UploadCheckpoint {
     private String filePath;
     
     /**
-     * 数据库记录ID（用于关联文件表）
+     * 真实文件ID（用于关联文件表）
      */
     private Long fileId;
-    
+
+    /**
+     * 数据库传输任务ID（用于关联文件表）
+     */
+    private Long fileTaskId;
+
+    /**
+     * 传输任务请求ID（唯一标识一次上传）
+     */
+    private String requestTaskId;
+
     /**
      * 创建时间
      */
@@ -55,7 +65,12 @@ public class UploadCheckpoint {
     /**
      * 用户ID
      */
-    private Long userId;
+    private Integer userId;
+
+    /**
+     * 用户名
+     */
+    private String userName;
     
     /**
      * 目录ID
