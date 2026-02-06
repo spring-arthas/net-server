@@ -37,7 +37,8 @@ public class FileTaskServiceImpl implements FileTaskService {
     @Override
     public FileTaskDto create(FileTaskDto fileTaskDto) {
         FileTaskDo fileTaskDo = this.dtoToDo(fileTaskDto);
-        fileTaskDo.setId(SnowflakeIdWorkerUtil.generateId());
+        Long taskId = SnowflakeIdWorkerUtil.generateId();
+        fileTaskDo.setId(taskId);
         // 根据表结构截图，is_deleted 为 int 类型，0=否，1=是
         fileTaskDo.setDel(YesOrNoEnum.N.name());
         Date date = new Date();
@@ -45,7 +46,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         fileTaskDo.setGmtModified(date);
         fileTaskRepository.insertSelective(fileTaskDo);
         FileTaskDto existDto = this.doToDto(fileTaskDo);
-        existDto.setId(fileTaskDo.getId());
+        existDto.setId(taskId);
         return existDto;
     }
     @Transactional(rollbackFor = Throwable.class)
