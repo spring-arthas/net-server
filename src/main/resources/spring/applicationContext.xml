@@ -111,4 +111,8 @@
     <bean id="fileService"
         class="com.alibaba.server.nio.repository.file.service.impl.FileServiceImpl"
         scope="singleton" />
+
+    <bean id="fileTaskService"
+          class="com.alibaba.server.nio.repository.file.service.impl.FileTaskServiceImpl"
+          scope="singleton" />
 </beans>
