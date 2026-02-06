@@ -285,8 +285,11 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileTaskDto.setFilePath(dirPath + File.separator + request.getTaskId() + "_" + request.getFileName());
             fileTaskDto.setFileType(request.getFileType());
             fileTaskDto.setFileSize(request.getFileSize());
+            fileTaskDto.setUserId(request.getUserId());
+            fileTaskDto.setUserName(request.getUserName());
+            fileTaskDto.setParentId(request.getDirId());
             // 默认为待上传状态
-            fileTaskDto.setStatus(0);
+            fileTaskDto.setStatus(FileTaskStatusEnum.WAIT_UPLOAD.getCode());
 
             try {
                 UserDTO userDTO = new UserDTO();
