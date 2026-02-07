@@ -1,0 +1,63 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Current File",
+            "request": "launch",
+            "mainClass": "${file}"
+        },
+        {
+            "type": "java",
+            "name": "NetServer",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.NetServer",
+            "projectName": "net-server"
+        },
+        {
+            "type": "java",
+            "name": "DirectoryClient",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.nio.client.DirectoryClient",
+            "projectName": "net-server"
+        },
+        {
+            "type": "java",
+            "name": "FileDownloadClient",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.nio.client.FileDownloadClient",
+            "projectName": "net-server"
+        },
+        {
+            "type": "java",
+            "name": "FileUploadClient",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.nio.client.FileUploadClient",
+            "projectName": "net-server"
+        },
+        {
+            "type": "java",
+            "name": "UserAuthClient",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.nio.client.UserAuthClient",
+            "projectName": "net-server"
+        },
+        {
+            "type": "java",
+            "name": "BasicUtil",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.util.BasicUtil",
+            "projectName": "net-server"
+        },
+        {
+            "type": "java",
+            "name": "NetUtil",
+            "request": "launch",
+            "mainClass": "com.alibaba.server.util.NetUtil",
+            "projectName": "net-server"
+        }
+    ]
+}

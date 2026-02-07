@@ -1,7 +1,7 @@
 package com.alibaba.server.nio.service.file.parser;
 
-import com.alibaba.server.nio.model.file.FileUploadFrame;
-import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
+import com.alibaba.server.nio.model.file.FileDownloadFrame;
+import com.alibaba.server.nio.model.file.FileDownloadFrame.FrameType;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayOutputStream;
@@ -23,7 +23,7 @@ import java.util.List;
  * @author YSFY
  */
 @Slf4j
-public class FrameUploadParser {
+public class FrameDownloadParser {
 
     /**
      * 解析状态枚举
@@ -38,12 +38,12 @@ public class FrameUploadParser {
     /**
      * 魔数
      */
-    private static final byte[] MAGIC = FileUploadFrame.MAGIC;
+    private static final byte[] MAGIC = FileDownloadFrame.MAGIC;
 
     /**
      * 帧头长度
      */
-    private static final int HEADER_LENGTH = FileUploadFrame.HEADER_LENGTH;
+    private static final int HEADER_LENGTH = FileDownloadFrame.HEADER_LENGTH;
 
     /**
      * 缓冲区最大大小限制（10MB）
@@ -69,7 +69,7 @@ public class FrameUploadParser {
     /**
      * 当前正在解析的帧
      */
-    private FileUploadFrame currentFrame = null;
+    private FileDownloadFrame currentFrame = null;
 
     /**
      * 当前帧的数据长度
@@ -82,8 +82,8 @@ public class FrameUploadParser {
      * @param data 输入字节数据
      * @return 解析完成的帧列表（可能为空）
      */
-    public List<FileUploadFrame> parse(byte[] data) {
-        List<FileUploadFrame> completeFrames = new ArrayList<>();
+    public List<FileDownloadFrame> parse(byte[] data) {
+        List<FileDownloadFrame> completeFrames = new ArrayList<>();
 
         if (data == null || data.length == 0) {
             return completeFrames;
@@ -119,7 +119,7 @@ public class FrameUploadParser {
      * @param completeFrames 用于收集完成帧的列表
      * @return true=继续解析，false=需要更多数据
      */
-    private boolean processState(List<FileUploadFrame> completeFrames) {
+    private boolean processState(List<FileDownloadFrame> completeFrames) {
         byte[] buf = buffer.toByteArray();
         int available = buf.length - position;
 
@@ -201,7 +201,7 @@ public class FrameUploadParser {
         }
 
         // 创建帧对象
-        currentFrame = new FileUploadFrame();
+        currentFrame = new FileDownloadFrame();
         currentFrame.setType(frameType);
         currentFrame.setFlags(flags);
         currentFrame.setDataLength(dataLength);
@@ -252,7 +252,7 @@ public class FrameUploadParser {
     /**
      * 帧完成状态处理
      */
-    private boolean handleFrameComplete(List<FileUploadFrame> completeFrames) {
+    private boolean handleFrameComplete(List<FileDownloadFrame> completeFrames) {
         // 添加到完成列表
         completeFrames.add(currentFrame);
 

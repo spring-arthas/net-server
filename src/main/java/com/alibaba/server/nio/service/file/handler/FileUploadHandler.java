@@ -4,7 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.server.common.FileTaskStatusEnum;
 import com.alibaba.server.common.YesOrNoEnum;
-import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteQueueHelper;
@@ -20,18 +19,13 @@ import com.alibaba.server.nio.model.file.UploadCheckpoint;
 import com.alibaba.server.nio.model.file.request.FileUploadRequest;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.service.FileService;
-import com.alibaba.server.nio.repository.file.service.FileTaskService;
-import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
-import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
-import com.alibaba.server.nio.repository.file.service.param.FileTaskQueryParam;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.checkpoint.CheckpointManager;
 import com.alibaba.server.nio.service.file.config.FileUploadConfig;
-import com.alibaba.server.nio.service.file.parser.FrameParser;
+import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
 import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
-import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -42,7 +36,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
@@ -82,7 +75,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
     /**
      * 帧解析器缓存：一个remoteAddress对应一个帧解析器
      */
-    private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, FrameUploadParser> parserMap = new ConcurrentHashMap<>();
 
     /**
      * 静态初始化块：初始化全局限流器和信号量
@@ -146,7 +139,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             return;
         }
         // 获取或创建帧解析器
-        FrameParser parser = getOrCreateParser(socketChannelContext);
+        FrameUploadParser parser = getOrCreateParser(socketChannelContext);
         // 逐个处理待处理数据
         for (ChannelEventModel.GroupData groupData : waitHandleDataList) {
             List<FileUploadFrame> frames = parser.parse(groupData.getBytes());
@@ -161,11 +154,11 @@ public class FileUploadHandler extends AbstractChannelHandler {
     /**
      * 获取或创建帧解析器
      */
-    private FrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
+    private FrameUploadParser getOrCreateParser(SocketChannelContext socketChannelContext) {
         String remoteAddress = socketChannelContext.getRemoteAddress();
         return parserMap.computeIfAbsent(remoteAddress, k -> {
             log.debug("为通道 {} 创建新的 FileUploadFrameParser", remoteAddress);
-            return new FrameParser();
+            return new FrameUploadParser();
         });
     }
 

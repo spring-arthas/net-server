@@ -37,7 +37,6 @@ public class MainFileDownloadAcceptor extends AbstractAcceptor implements Runnab
     public void run() {
         try {
             ServerSocketChannel serverSocketChannel = super.initServerSocketChannel(selector, this.acceptor);
-
             if (!serverSocketChannel.isOpen() || !serverSocketChannel.isRegistered()) {
                 throw new RuntimeException("ServerSocketChannel is not open or registered");
             }

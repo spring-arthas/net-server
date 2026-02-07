@@ -20,7 +20,7 @@ import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
-import com.alibaba.server.nio.service.file.parser.FrameParser;
+import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -51,7 +51,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     /**
      * 帧解析器缓存(即每个socketChannelContext均匹配一个解析器)
      */
-    private static final ConcurrentHashMap<String, FrameParser> parserMap = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, FrameUploadParser> parserMap = new ConcurrentHashMap<>();
 
     @Override
     public void handler(Object o, ChannelContext channelContext) throws IOException {
@@ -75,7 +75,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         }
 
         // 获取或创建帧解析器
-        FrameParser parser = getOrCreateParser(socketChannelContext);
+        FrameUploadParser parser = getOrCreateParser(socketChannelContext);
 
         // 逐个处理待处理数据
         for (ChannelEventModel.GroupData groupData : waitHandleDataList) {
@@ -91,11 +91,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     /**
      * 获取或创建帧解析器
      */
-    private FrameParser getOrCreateParser(SocketChannelContext socketChannelContext) {
+    private FrameUploadParser getOrCreateParser(SocketChannelContext socketChannelContext) {
         String remoteAddress = socketChannelContext.getRemoteAddress();
         return parserMap.computeIfAbsent(remoteAddress, k -> {
             log.debug("为通道 {} 创建新的 FrameParser", remoteAddress);
-            return new FrameParser();
+            return new FrameUploadParser();
         });
     }
 

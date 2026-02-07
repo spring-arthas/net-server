@@ -14,7 +14,7 @@ import lombok.Data;
  * @author YSFY
  */
 @Data
-public class FileUploadFrame {
+public class FileDownloadFrame {
 
     /**
      * 魔数：用于帧边界识别
@@ -54,72 +54,6 @@ public class FileUploadFrame {
          * 断点应答帧：服务端返回已上传大小和续传信息
          */
         RESUME_ACK(0x06, "断点应答帧"),
-
-        // ========== 目录操作帧 (0x10-0x1F) ==========
-        /**
-         * 目录新建请求
-         */
-        DIR_CREATE_REQ(0x10, "目录新建请求"),
-        /**
-         * 目录删除请求
-         */
-        DIR_DELETE_REQ(0x11, "目录删除请求"),
-        /**
-         * 目录更新请求
-         */
-        DIR_UPDATE_REQ(0x12, "目录更新请求"),
-        /**
-         * 目录移动请求
-         */
-        DIR_MOVE_REQ(0x13, "目录移动请求"),
-        /**
-         * 目录操作响应
-         */
-        DIR_RESPONSE(0x14, "目录操作响应"),
-        /**
-         * 获取当前用户顶层和第二层所有目录数据
-         */
-        DIR_USER_GET_TWO_LEVEL_REQ(0x15, "获取当前用户顶层和第二层目录数据"),
-
-        // ========== 目录文件上传帧 (0x20-0x2F) ==========
-        /**
-         * 目录文件元数据帧
-         */
-        DIR_FILE_META(0x20, "目录文件元数据"),
-        /**
-         * 目录文件数据帧
-         */
-        DIR_FILE_DATA(0x21, "目录文件数据"),
-        /**
-         * 目录文件结束帧
-         */
-        DIR_FILE_END(0x22, "目录文件结束"),
-        /**
-         * 目录文件确认帧
-         */
-        DIR_FILE_ACK(0x23, "目录文件确认"),
-
-        // ========== 用户认证帧 (0x30-0x3F) ==========
-        /**
-         * 用户注册请求
-         */
-        USER_REGISTER_REQ(0x30, "用户注册请求"),
-        /**
-         * 用户登录请求
-         */
-        USER_LOGIN_REQ(0x31, "用户登录请求"),
-        /**
-         * 用户修改密码请求
-         */
-        USER_CHANGE_PWD_REQ(0x32, "用户修改密码请求"),
-        /**
-         * 用户退出登录请求
-         */
-        USER_LOGOUT_REQ(0x33, "用户退出登录请求"),
-        /**
-         * 用户操作响应
-         */
-        USER_RESPONSE(0x34, "用户操作响应"),
 
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
@@ -215,6 +149,11 @@ public class FileUploadFrame {
      * 任务ID（用于关联同一次上传的多个帧）
      */
     private String taskId;
+
+    /**
+     * 起始偏移量（用于断点续传）
+     */
+    private long startOffset;
 
     // ============= 辅助方法 =============
 
