@@ -104,7 +104,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
      */
     private void processFrame(FileUploadFrame frame, SocketChannelContext context) {
         FrameType type = frame.getType();
-        log.debug("收到帧: type={}，数据内容={}", type, JSON.toJSONString(frame.getDataAsString()));
+        log.debug("收到帧: type={}，帧类型={}, 操作={}, 数据内容={}",
+            type, type.getCode(), type.getDescription(), JSON.toJSONString(frame.getDataAsString()));
 
         try {
             switch (type) {
@@ -121,7 +122,6 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case USER_LOGOUT_REQ: // 用户退出登录请求
                     handleLogout(frame, context);
                     break;
-
                 // ========== 目录操作帧 ==========
                 case DIR_USER_GET_TWO_LEVEL_REQ:
                     handleUserTwoLevelDirectory(frame, context);
