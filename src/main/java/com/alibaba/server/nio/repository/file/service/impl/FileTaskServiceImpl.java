@@ -76,7 +76,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         dalParam.setParentId(param.getParentId());
         dalParam.setFileName(param.getFileName());
         dalParam.setStatus(param.getStatus());
-        dalParam.setDel(param.getDel() == null ? "0" : param.getDel());
+        dalParam.setDel(param.getDel() == null ? YesOrNoEnum.N.name() : param.getDel());
         dalParam.setCurrentPage(param.getCurrentPage());
         dalParam.setPageSize(param.getPageSize());
 

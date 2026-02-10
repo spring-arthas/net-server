@@ -3,7 +3,7 @@
 <mapper namespace="com.alibaba.server.nio.repository.file.mapper.FileTaskRepository">
 
     <sql id="Base_Column_List"> id, parent_id, file_name, file_path, file_type, file_size, status,
-        user_id, user_name, current_offset, md5, last_active_time, is_deleted, gmt_created,
+        user_id, user_name, current_offset, md5, last_active_time, del, del_time, gmt_created,
         gmt_modified </sql>
 
     <!-- 分页查询 -->
@@ -11,7 +11,7 @@
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileTaskDalQueryParam"
         resultType="com.alibaba.server.nio.repository.file.repository.dataobject.FileTaskDo"> SELECT <include
             refid="Base_Column_List" /> FROM file_task WHERE 1 = 1 <if
-            test="del != null and del != ''"> AND is_deleted = #{del} </if>
+            test="del != null and del != ''"> AND del = #{del} </if>
         <if
             test="parentId != null"> AND parent_id = #{parentId} </if>
         <if
@@ -27,7 +27,7 @@
     <select id="count"
         parameterType="com.alibaba.server.nio.repository.file.repository.param.FileTaskDalQueryParam"
         resultType="java.lang.Long"> SELECT count(*) FROM file_task WHERE 1 = 1 <if
-            test="del != null and del != ''"> AND is_deleted = #{del} </if>
+            test="del != null and del != ''"> AND del = #{del} </if>
         <if
             test="parentId != null"> AND parent_id = #{parentId} </if>
         <if
