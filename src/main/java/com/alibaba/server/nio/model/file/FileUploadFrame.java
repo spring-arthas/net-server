@@ -121,6 +121,11 @@ public class FileUploadFrame {
          */
         USER_RESPONSE(0x34, "用户操作响应"),
 
+        /**
+         * 用户好友列表
+         */
+        USER_FRIEND_LIST_REQ(0x35, "用户好友列表"),
+
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
          * 文件列表分页请求

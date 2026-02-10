@@ -122,6 +122,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case USER_LOGOUT_REQ: // 用户退出登录请求
                     handleLogout(frame, context);
                     break;
+                case USER_FRIEND_LIST_REQ: // 用户好友列表
+                    handleLogout(frame, context);
+                    break;
                 // ========== 目录操作帧 ==========
                 case DIR_USER_GET_TWO_LEVEL_REQ:
                     handleUserTwoLevelDirectory(frame, context);
