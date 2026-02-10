@@ -32,6 +32,11 @@ public class FileDownloadContext {
     private Long fileId;
 
     /**
+     * 传输任务ID（数据库记录ID）
+     */
+    private Long fileTaskId;
+
+    /**
      * 文件名
      */
     private String fileName;
@@ -69,7 +74,19 @@ public class FileDownloadContext {
     /**
      * 最后活跃时间
      */
-    private LocalDateTime lastActiveTime;
+    /**
+     * 最后活跃时间
+     */
+    private long lastActiveTime;
+
+    /**
+     * 上次持久化保存的时间（毫秒）
+     */
+    private long lastSavedTime = 0;
+    /**
+     * 上次持久化保存的偏移量
+     */
+    private long lastSavedOffset = 0;
 
     /**
      * 随机访问文件（支持 seek）
@@ -96,7 +113,7 @@ public class FileDownloadContext {
 
     public FileDownloadContext() {
         this.startTime = LocalDateTime.now();
-        this.lastActiveTime = LocalDateTime.now();
+        this.lastActiveTime = System.currentTimeMillis();
         this.status = DownloadStatus.INIT;
     }
 
@@ -130,7 +147,7 @@ public class FileDownloadContext {
         int bytesRead = fileChannel.read(buffer);
         if (bytesRead > 0) {
             currentOffset += bytesRead;
-            lastActiveTime = LocalDateTime.now();
+            lastActiveTime = System.currentTimeMillis();
         }
         return bytesRead;
     }
@@ -156,6 +173,6 @@ public class FileDownloadContext {
      * 更新最后活跃时间
      */
     public void touch() {
-        this.lastActiveTime = LocalDateTime.now();
+        this.lastActiveTime = System.currentTimeMillis();
     }
 }

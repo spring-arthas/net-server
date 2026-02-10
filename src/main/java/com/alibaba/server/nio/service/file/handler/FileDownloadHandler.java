@@ -13,9 +13,13 @@ import com.alibaba.server.nio.model.TransportDataModel;
 import com.alibaba.server.nio.model.file.FileDownloadContext;
 import com.alibaba.server.nio.model.file.FileDownloadFrame;
 import com.alibaba.server.nio.model.file.FileDownloadFrame.FrameType;
+import com.alibaba.server.nio.model.file.FileDownloadFrame.FrameType;
 import com.alibaba.server.nio.repository.file.service.FileService;
+import com.alibaba.server.nio.repository.file.service.FileTaskService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
+import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
+import com.alibaba.server.common.FileTaskStatusEnum;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.util.LocalTime;
@@ -29,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,7 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FileDownloadHandler extends AbstractChannelHandler {
 
     /**
-     * 帧解析器缓存：remoteAddress -> FileUploadFrameParser
+     * 帧解析器缓存：remoteAddress -> FrameDownloadParser
      */
     private static final ConcurrentHashMap<String, FrameDownloadParser> parserMap = new ConcurrentHashMap<>();
 
@@ -376,6 +381,21 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                     lastLogTime = now;
                 }
 
+                // 持久化进度 (每5秒或每10MB)
+                if (now - context.getLastSavedTime() > 5000 ||
+                        context.getCurrentOffset() - context.getLastSavedOffset() > 10 * 1024 * 1024) {
+                    if (context.getFileTaskId() != null) {
+                        try {
+                            // 使用 fileTaskService 更新
+                            fileTaskService.updateProgress(context.getFileTaskId(), context.getCurrentOffset());
+                            context.setLastSavedTime(now);
+                            context.setLastSavedOffset(context.getCurrentOffset());
+                        } catch (Exception e) {
+                            log.error("持久化下载进度失败: taskId={}", context.getFileTaskId(), e);
+                        }
+                    }
+                }
+
                 // ========== 读取文件数据 ==========
                 readBuffer.clear();
                 int bytesRead = context.readChunk(readBuffer);
@@ -499,16 +519,64 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     /**
      * 清理指定连接的资源 (static method for global cleanup)
      */
+    /**
+     * 检查并冻结超时任务
+     * 
+     * @param idleThreshold 空闲阈值（毫秒）
+     */
+    public static void checkAndFreezeIdleTasks(long idleThreshold) {
+        long now = System.currentTimeMillis();
+        contextMap.entrySet().removeIf(entry -> {
+            FileDownloadContext ctx = entry.getValue();
+            if (now - ctx.getLastActiveTime() > idleThreshold) {
+                log.info("下载任务超时，冻结清理: taskId={}, lastActive={}", ctx.getFileTaskId(),
+                        new Date(ctx.getLastActiveTime()));
+                cleanupContext(ctx);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    /**
+     * 清理指定连接的资源 (static method for global cleanup)
+     */
     public static void cleanupConnection(String remoteAddress) {
         parserMap.remove(remoteAddress);
         // 清理 contextMap 中属于该 remoteAddress 的条目，并关闭文件句柄
         contextMap.entrySet().removeIf(entry -> {
             FileDownloadContext ctx = entry.getValue();
             if (remoteAddress.equals(ctx.getRemoteAddress())) {
-                ctx.close(); // 务必关闭文件句柄
+                cleanupContext(ctx);
                 return true;
             }
             return false;
         });
+    }
+
+    /**
+     * 清理单个下载上下文资源
+     */
+    private static void cleanupContext(FileDownloadContext ctx) {
+        try {
+            // 持久化为 PAUSED 状态
+            if (ctx.getFileTaskId() != null && ctx.getCurrentOffset() < ctx.getFileSize()) {
+                try {
+                    FileTaskDto fileTaskDto = new FileTaskDto();
+                    fileTaskDto.setId(ctx.getFileTaskId());
+                    fileTaskDto.setStatus(FileTaskStatusEnum.PAUSED.getCode());
+                    fileTaskDto.setCurrentOffset(ctx.getCurrentOffset());
+                    fileTaskDto.setLastActiveTime(new Date());
+                    fileTaskDto.setGmtModified(new Date());
+                    fileTaskService.update(fileTaskDto);
+                    log.info("连接断开或超时，保存下载断点: taskId={}, offset={}", ctx.getFileTaskId(), ctx.getCurrentOffset());
+                } catch (Exception e) {
+                    log.error("暂停下载任务持久化失败: taskId={}", ctx.getFileTaskId(), e);
+                }
+            }
+            ctx.close(); // 务必关闭文件句柄
+        } catch (Exception e) {
+            log.error("清理下载上下文失败: taskId={}", ctx.getTaskId(), e);
+        }
     }
 }

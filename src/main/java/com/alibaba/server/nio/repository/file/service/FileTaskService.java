@@ -49,5 +49,22 @@ public interface FileTaskService {
      * @param id
      * @return
      */
+    /**
+     * 更新文件任务进度
+     * 
+     * @param id     任务ID
+     * @param offset 当前偏移量
+     */
+    void updateProgress(Long id, Long offset);
+
+    /**
+     * 根据MD5查找已暂停的任务（用于秒传/续传）
+     * 
+     * @param md5    文件MD5
+     * @param userId 用户ID
+     * @return 任务DTO
+     */
+    FileTaskDto findPausedTask(String md5, Integer userId);
+
     Boolean deleteById(Long id);
 }

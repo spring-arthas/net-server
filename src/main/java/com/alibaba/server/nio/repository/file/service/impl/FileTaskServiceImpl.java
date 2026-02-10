@@ -49,6 +49,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         existDto.setId(taskId);
         return existDto;
     }
+
     @Transactional(rollbackFor = Throwable.class)
     @Override
     public FileTaskDto update(FileTaskDto fileTaskDto) {
@@ -91,6 +92,7 @@ public class FileTaskServiceImpl implements FileTaskService {
         }
         return result;
     }
+
     @Transactional(rollbackFor = Throwable.class)
     @Override
     public Boolean deleteById(Long id) {
@@ -115,6 +117,9 @@ public class FileTaskServiceImpl implements FileTaskService {
         fileTaskDo.setDel(dto.getDel());
         fileTaskDo.setGmtCreated(dto.getGmtCreated());
         fileTaskDo.setGmtModified(dto.getGmtModified());
+        fileTaskDo.setCurrentOffset(dto.getCurrentOffset());
+        fileTaskDo.setMd5(dto.getMd5());
+        fileTaskDo.setLastActiveTime(dto.getLastActiveTime());
         return fileTaskDo;
     }
 
@@ -132,6 +137,38 @@ public class FileTaskServiceImpl implements FileTaskService {
         dto.setDel(fileTaskDo.getDel());
         dto.setGmtCreated(fileTaskDo.getGmtCreated());
         dto.setGmtModified(fileTaskDo.getGmtModified());
+        dto.setCurrentOffset(fileTaskDo.getCurrentOffset());
+        dto.setMd5(fileTaskDo.getMd5());
+        dto.setLastActiveTime(fileTaskDo.getLastActiveTime());
         return dto;
+    }
+
+    @Override
+    public void updateProgress(Long id, Long offset) {
+        if (id == null)
+            return;
+        FileTaskDo update = new FileTaskDo();
+        update.setId(id);
+        update.setCurrentOffset(offset);
+        update.setLastActiveTime(new Date());
+        update.setGmtModified(new Date());
+        fileTaskRepository.updateSelective(update);
+    }
+
+    @Override
+    public FileTaskDto findPausedTask(String md5, Integer userId) {
+        if (md5 == null || userId == null)
+            return null;
+        FileTaskDalQueryParam param = new FileTaskDalQueryParam();
+        param.setMd5(md5);
+        param.setUserId(userId);
+        param.setStatus(com.alibaba.server.common.FileTaskStatusEnum.PAUSED.getCode());
+        param.setPageSize(1);
+
+        List<FileTaskDo> list = fileTaskRepository.page(param);
+        if (list != null && !list.isEmpty()) {
+            return doToDto(list.get(0));
+        }
+        return null;
     }
 }

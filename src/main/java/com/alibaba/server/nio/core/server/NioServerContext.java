@@ -34,15 +34,17 @@ import java.util.Optional;
 public class NioServerContext {
 
     private static final Object lock = new Object();
-    
+
     /**
      * 限速恢复调度器
      * 用于在 ReadEventHandler 暂停 OP_READ 后，定时恢复事件
      * 线程数设为4以支持多个并发连接的限速恢复任务
      */
-    private static final java.util.concurrent.ScheduledExecutorService rateLimitScheduler = 
-            java.util.concurrent.Executors.newScheduledThreadPool(4, new java.util.concurrent.ThreadFactory() {
-                private final java.util.concurrent.atomic.AtomicInteger threadNumber = new java.util.concurrent.atomic.AtomicInteger(1);
+    private static final java.util.concurrent.ScheduledExecutorService rateLimitScheduler = java.util.concurrent.Executors
+            .newScheduledThreadPool(4, new java.util.concurrent.ThreadFactory() {
+                private final java.util.concurrent.atomic.AtomicInteger threadNumber = new java.util.concurrent.atomic.AtomicInteger(
+                        1);
+
                 @Override
                 public Thread newThread(Runnable r) {
                     Thread t = new Thread(r, "RATE-LIMIT-SCHEDULER-" + threadNumber.getAndIncrement());
@@ -77,7 +79,7 @@ public class NioServerContext {
             // 4、追加额外处理
             // CoreServer.appendHandler();
         } catch (Exception e) {
-            log.error("NioServerContext: 服务启动失败, error = {}", 
+            log.error("NioServerContext: 服务启动失败, error = {}",
                     org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
         }
     }
@@ -218,6 +220,7 @@ public class NioServerContext {
 
     /**
      * 释放通道资源
+     * 
      * @param socketChannel
      * @return Boolean 关闭结果
      */
@@ -232,8 +235,9 @@ public class NioServerContext {
         try {
             String remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
             String localAddress = NioServerContext.getLocalAddress(socketChannel);
-            // 1、清理该远程连接对应的上传任务
+            // 1、清理该远程连接对应的上传/下载任务
             com.alibaba.server.nio.service.file.handler.FileUploadHandler.cleanupConnection(remoteAddress);
+            com.alibaba.server.nio.service.file.handler.FileDownloadHandler.cleanupConnection(remoteAddress);
             // 2、关闭socketChannel，将会发送流截至符 -1到客户端
             Socket socket = socketChannel.socket();
             if (!socket.isClosed()) {
@@ -241,19 +245,21 @@ public class NioServerContext {
                 socketChannel.shutdownOutput();
                 socketChannel.close();
             }
-            log.info("NioServerContext: 服务端socketChannel关闭成功, 资源已释放, 本次通道连接信息：remoteAddress = {}, localAddress = {}, thread = {}",
+            log.info(
+                    "NioServerContext: 服务端socketChannel关闭成功, 资源已释放, 本次通道连接信息：remoteAddress = {}, localAddress = {}, thread = {}",
                     remoteAddress, localAddress, Thread.currentThread().getName());
             return true;
         } catch (Exception e) {
-             log.error("NioServerContext: 服务端通道socketChannel资源释放出现异常, 通道信息 = {}, error = {}",
-                JSON.toJSONString(socketChannel),
-                ExceptionUtils.getStackTrace(e));
+            log.error("NioServerContext: 服务端通道socketChannel资源释放出现异常, 通道信息 = {}, error = {}",
+                    JSON.toJSONString(socketChannel),
+                    ExceptionUtils.getStackTrace(e));
         } finally {
-            
+
         }
 
         return false;
     }
+
     /**
      * 获取IOC容器对象
      * 

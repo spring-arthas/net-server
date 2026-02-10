@@ -32,6 +32,7 @@ public class FileUploadContext {
     public static String generateTaskId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
+
     /**
      * 文件名称
      */
@@ -123,7 +124,30 @@ public class FileUploadContext {
     /**
      * 起始偏移量（断点续传时非0）
      */
+    /**
+     * 起始偏移量（断点续传时非0）
+     */
     private long startOffset = 0;
+
+    /**
+     * 上次持久化保存的时间（毫秒）
+     */
+    private long lastSavedTime = 0;
+    /**
+     * 上次持久化保存的偏移量
+     */
+    private long lastSavedOffset = 0;
+    /**
+     * 最后活跃时间（毫秒，用于超时清理）
+     */
+    private long lastActiveTime = System.currentTimeMillis();
+
+    /**
+     * 更新最后活跃时间
+     */
+    public void touch() {
+        this.lastActiveTime = System.currentTimeMillis();
+    }
 
     /**
      * 检查上传是否完成
@@ -310,7 +334,8 @@ public class FileUploadContext {
     public void markCompleted() {
         this.status = UploadStatus.COMPLETED;
         closeFileChannel();
-        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", requestTaskId, fileName, fileSize,
+        log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", requestTaskId, fileName,
+                fileSize,
                 bytesWritten, fileSize);
     }
 

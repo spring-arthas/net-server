@@ -22,10 +22,12 @@ public enum FileTaskStatusEnum {
     DOWNLOADING(5, "下载中"),
     DOWNLOAD_SUCCESS(6, "下载成功"),
     DOWNLOAD_FAIL(7, "下载失败"),
+    PAUSED(8, "已暂停"),
     ;
 
     private int code;
     private String desc;
+
     FileTaskStatusEnum(int code, String desc) {
         this.code = code;
         this.desc = desc;

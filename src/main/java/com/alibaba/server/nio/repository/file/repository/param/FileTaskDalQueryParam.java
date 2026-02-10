@@ -35,5 +35,18 @@ public class FileTaskDalQueryParam extends DalPageQueryParam {
     /**
      * 传输状态
      */
+    /**
+     * 传输状态
+     */
     private Integer status;
+
+    /**
+     * MD5
+     */
+    private String md5;
+
+    /**
+     * 用户ID
+     */
+    private Integer userId;
 }

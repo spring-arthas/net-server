@@ -2,8 +2,9 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.alibaba.server.nio.repository.file.mapper.FileTaskRepository">
 
-    <sql id="Base_Column_List"> id, parent_id, file_name, file_path, file_type, file_size, status, user_id, user_name
-        is_deleted, gmt_created, gmt_modified </sql>
+    <sql id="Base_Column_List"> id, parent_id, file_name, file_path, file_type, file_size, status,
+        user_id, user_name, current_offset, md5, last_active_time, is_deleted, gmt_created,
+        gmt_modified </sql>
 
     <!-- 分页查询 -->
     <select id="page"
@@ -16,8 +17,11 @@
         <if
             test="fileName != null and fileName != ''"> AND file_name LIKE CONCAT('%', #{fileName},
         '%') </if>
-        <if test="status != null"> AND status = #{status} </if> ORDER BY gmt_created DESC
-        LIMIT #{offset}, #{pageSize} </select>
+        <if test="status != null"> AND status = #{status} </if>
+        <if
+            test="md5 != null and md5 != ''"> AND md5 = #{md5} </if>
+        <if test="userId != null"> AND
+        user_id = #{userId} </if> ORDER BY gmt_created DESC LIMIT #{offset}, #{pageSize} </select>
 
     <!-- 查询总数 -->
     <select id="count"
@@ -30,6 +34,10 @@
             test="fileName != null and fileName != ''"> AND file_name LIKE CONCAT('%', #{fileName},
         '%') </if>
         <if test="status != null"> AND status = #{status} </if>
+        <if
+            test="md5 != null and md5 != ''"> AND md5 = #{md5} </if>
+        <if test="userId != null"> AND
+        user_id = #{userId} </if>
     </select>
 
 </mapper>

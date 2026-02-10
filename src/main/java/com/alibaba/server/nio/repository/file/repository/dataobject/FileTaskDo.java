@@ -45,11 +45,26 @@ public class FileTaskDo extends BaseDO {
 
     /**
      * 用户Id
-     * */
+     */
     private Integer userId;
 
     /**
      * 用户名
-     * */
+     */
     private String userName;
+
+    /**
+     * 当前已传输字节偏移量
+     */
+    private Long currentOffset;
+
+    /**
+     * 文件MD5校验码
+     */
+    private String md5;
+
+    /**
+     * 最后活跃时间
+     */
+    private Date lastActiveTime;
 }
