@@ -306,6 +306,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
             fileTaskDto.setParentId(request.getDirId());
             // 默认为待上传状态
             fileTaskDto.setStatus(FileTaskStatusEnum.WAIT_UPLOAD.getCode());
+            fileTaskDto.setMd5(request.getMd5());
+            fileTaskDto.setCurrentOffset(0L);
+            fileTaskDto.setLastActiveTime(new Date());
 
             try {
                 UserDTO userDTO = new UserDTO();

@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.repository.file.repository.dataobject;
 
+import com.alibaba.server.nio.core.annotation.Column;
 import com.alibaba.server.nio.core.dataobject.BaseDO;
 import lombok.Data;
 
@@ -61,6 +62,7 @@ public class FileTaskDo extends BaseDO {
     /**
      * 文件MD5校验码
      */
+    @Column(value = "md5")
     private String md5;
 
     /**
