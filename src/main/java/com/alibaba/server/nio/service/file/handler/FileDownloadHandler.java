@@ -58,6 +58,22 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      */
     private static final ConcurrentHashMap<String, FileDownloadContext> contextMap = new ConcurrentHashMap<>();
 
+    /**
+     * 全局并发下载控制信号量（最多5个并发下载）
+     */
+    private static final java.util.concurrent.Semaphore DOWNLOAD_SEMAPHORE = new java.util.concurrent.Semaphore(5);
+
+    /**
+     * 最大待发送缓冲区数量（流控阈值）
+     * 50 × 64KB = 3.2MB 每连接最大内存占用
+     */
+    private static final int MAX_PENDING_BUFFERS = 50;
+
+    /**
+     * 文件读取缓冲区大小（64KB）
+     */
+    private static final int BUFFER_SIZE = 65536;
+
     @Override
     public void handler(Object o, ChannelContext channelContext) throws IOException {
         TransportDataModel transportDataModel = (TransportDataModel) o;
@@ -253,8 +269,38 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             log.info("[ {} ] FileDownloadHandler | --> 客户端已准备好，开始传输文件: fileName={}, offset={}",
                     LocalTime.formatDate(LocalDateTime.now()), context.getFileName(), context.getCurrentOffset());
 
-            // 开始传输文件
-            transferFile(context, socketChannelContext, simpleChannelContext);
+            // 获取下载许可（限制并发下载数）
+            boolean acquired = false;
+            try {
+                acquired = DOWNLOAD_SEMAPHORE.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (!acquired) {
+                    log.warn("服务器繁忙，下载任务排队超时: taskId={}", taskId);
+                    sendErrorFrame(socketChannelContext, "服务器繁忙，请稍后重试");
+                    contextMap.remove(taskId);
+                    closeConnection(socketChannelContext, simpleChannelContext);
+                    return;
+                }
+
+                log.info("[ {} ] FileDownloadHandler | --> 获得下载许可，当前可用许可数: {}",
+                        LocalTime.formatDate(LocalDateTime.now()), DOWNLOAD_SEMAPHORE.availablePermits());
+
+                // 开始传输文件
+                transferFile(context, socketChannelContext, simpleChannelContext);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("等待下载许可被中断: taskId={}", taskId, e);
+                sendErrorFrame(socketChannelContext, "服务器内部错误");
+                contextMap.remove(taskId);
+                closeConnection(socketChannelContext, simpleChannelContext);
+            } finally {
+                // 释放下载许可
+                if (acquired) {
+                    DOWNLOAD_SEMAPHORE.release();
+                    log.info("[ {} ] FileDownloadHandler | --> 释放下载许可，当前可用许可数: {}",
+                            LocalTime.formatDate(LocalDateTime.now()), DOWNLOAD_SEMAPHORE.availablePermits());
+                }
+            }
 
         } catch (Exception e) {
             log.error("处理客户端确认失败", e);
@@ -277,11 +323,60 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 context.getRandomAccessFile().seek(context.getCurrentOffset());
             }
 
-            // 分块读取并发送 - 使用直接缓冲区减少内存拷贝
-            int bufferSize = 131072; // 128KB
-            ByteBuffer readBuffer = ByteBuffer.allocate(bufferSize); // 使用堆内存，避免 DirectBuffer 回收问题，或者手动管理
+            // 分块读取并发送 - 使用优化后的缓冲区大小
+            ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE); // 64KB
+            int totalWaitCount = 0;
+            long lastLogTime = System.currentTimeMillis();
 
             while (true) {
+                // ========== 应用层流控：检查发送队列大小 ==========
+                java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue = socketChannelContext
+                        .getPendingWriteQueue();
+                int queueSize = queue.size();
+                int waitCount = 0;
+
+                // 当队列积压超过阈值时，暂停读取文件，等待队列消化
+                while (queueSize > MAX_PENDING_BUFFERS) {
+                    waitCount++;
+                    totalWaitCount++;
+
+                    // 每等待 100 次（5秒）记录一次日志
+                    if (waitCount % 100 == 0) {
+                        log.info("[ {} ] FileDownloadHandler | --> 流控等待中，队列积压: {} 个缓冲区，已等待: {} 次",
+                                LocalTime.formatDate(LocalDateTime.now()), queueSize, waitCount);
+                    }
+
+                    try {
+                        Thread.sleep(50); // 等待 50ms
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("传输被中断", e);
+                    }
+
+                    // 检查通道是否仍然打开
+                    if (socketChannelContext.getSocketChannel() == null
+                            || !socketChannelContext.getSocketChannel().isOpen()) {
+                        throw new IOException("通道已关闭");
+                    }
+
+                    queueSize = queue.size();
+                }
+
+                // 定期记录流控统计信息（每 10 秒）
+                long now = System.currentTimeMillis();
+                if (now - lastLogTime >= 10000) {
+                    log.info(
+                            "[ {} ] FileDownloadHandler | --> 传输进度: fileName={}, progress={}/{}, queueSize={}, totalWaits={}",
+                            LocalTime.formatDate(LocalDateTime.now()),
+                            context.getFileName(),
+                            context.getCurrentOffset(),
+                            context.getFileSize(),
+                            queueSize,
+                            totalWaitCount);
+                    lastLogTime = now;
+                }
+
+                // ========== 读取文件数据 ==========
                 readBuffer.clear();
                 int bytesRead = context.readChunk(readBuffer);
 
@@ -294,9 +389,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                     byte[] data = new byte[readBuffer.remaining()];
                     readBuffer.get(data);
                     sendDataFrame(socketChannelContext, data);
-
-                    // 简单的流控，防止发送过快撑爆内存（实际应配合WriteQueueHelper的流控机制）
-                    // 这里不做 sleep，依赖 NIO 队列
                 }
             }
 
