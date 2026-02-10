@@ -849,6 +849,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 checkpoint.setUserName(ctx.getUserName());
                 checkpoint.setUpdateTime(java.time.LocalDateTime.now());
                 checkpoint.setCreateTime(ctx.getStartTime());
+                checkpoint.setMd5(ctx.getMd5());
                 CheckpointManager.saveCheckpoint(checkpoint);
                 log.info("已保存断点，支持续传: MD5={}, 已上传={} ({:.2f}%)",
                         ctx.getMd5(), ctx.getBytesWritten(), ctx.getProgress());
