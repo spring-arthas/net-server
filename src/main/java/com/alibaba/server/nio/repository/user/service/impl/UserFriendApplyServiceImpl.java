@@ -16,6 +16,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 好友添加请求服务实现
@@ -59,8 +60,12 @@ public class UserFriendApplyServiceImpl implements UserFriendApplyService {
     @Override
     public List<UserFriendApplyDTO> query(UserFriendApplyQueryParam param) {
         UserFriendApplyDalQueryParam dalParam = new UserFriendApplyDalQueryParam();
-        dalParam.setSenderId(param.getSenderId());
-        dalParam.setReceiverId(param.getReceiverId());
+        if(Objects.nonNull(param.getSenderId())) {
+            dalParam.setSenderId(param.getSenderId());
+        }
+        if(Objects.nonNull(param.getReceiverId())) {
+            dalParam.setReceiverId(param.getReceiverId());
+        }
         dalParam.setStatus(param.getStatus());
 
         List<UserFriendApplyDo> doList = userFriendApplyRepository.query(dalParam);
