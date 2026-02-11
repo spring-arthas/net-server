@@ -14,6 +14,8 @@ import java.util.Date;
 public class UserCreateParam {
     private String userName;
 
+    private String nickName;
+
     private String password;
 
     private String phone;

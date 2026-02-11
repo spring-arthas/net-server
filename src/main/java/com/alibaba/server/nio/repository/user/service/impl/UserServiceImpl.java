@@ -75,6 +75,7 @@ public class UserServiceImpl implements UserService {
     private UserDo createParamToDo(UserCreateParam param) {
         UserDo userDo = new UserDo();
         userDo.setUserName(param.getUserName());
+        userDo.setNickName(param.getNickName());
         userDo.setPassword(param.getPassword());
         userDo.setPhone(param.getPhone());
         userDo.setMail(param.getMail());
@@ -91,6 +92,7 @@ public class UserServiceImpl implements UserService {
         UserDo userDo = new UserDo();
         userDo.setId(param.getId());
         userDo.setUserName(param.getUserName());
+        userDo.setNickName(param.getNickName());
         userDo.setPassword(param.getPassword());
         userDo.setPhone(param.getPhone());
         userDo.setMail(param.getMail());
@@ -121,7 +123,7 @@ public class UserServiceImpl implements UserService {
     private static final int MAX_USERNAME_LENGTH = 64;
 
     @Override
-    public UserDTO register(String userName, String password, String mail, String avatar) {
+    public UserDTO register(String userName, String password, String mail, String nickName, String avatar) {
         // 1. 校验参数
         if (userName == null || userName.trim().isEmpty()) {
             throw new IllegalArgumentException("用户名不能为空");
@@ -151,6 +153,7 @@ public class UserServiceImpl implements UserService {
         createParam.setPassword(password);
         createParam.setMail(mail);
         createParam.setAvatar(avatar);
+        createParam.setNickName(nickName);
         createParam.setRegisterDate(new Date());
 
         return this.create(createParam);

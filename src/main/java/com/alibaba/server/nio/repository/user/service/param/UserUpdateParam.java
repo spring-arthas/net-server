@@ -17,6 +17,8 @@ public class UserUpdateParam {
 
     private String userName;
 
+    private String nickName;
+
     private String password;
 
     private String phone;
@@ -26,8 +28,4 @@ public class UserUpdateParam {
     private Date lastLoginDate;
 
     private Date registerDate;
-
-    private String register;
-
-    private String status;
 }

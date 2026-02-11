@@ -186,6 +186,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             String userName = request.getString("userName");
+            String nickName = request.getString("nickName");
             String password = request.getString("password");
             String mail = request.getString("mail");
             // 处理头像上传
@@ -236,12 +237,12 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 }
             }
 
-            UserDTO result = getUserService().register(userName, password, mail, avatarPath);
+            UserDTO result = getUserService().register(userName, password, mail, nickName, avatarPath);
 
             JSONObject data = new JSONObject();
             data.put("userId", result.getId());
             data.put("userName", result.getUserName());
-
+            data.put("nickName", result.getNickName());
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "注册成功", data);
             log.info("用户注册成功: userName={}", userName);
         } catch (IllegalArgumentException e) {
