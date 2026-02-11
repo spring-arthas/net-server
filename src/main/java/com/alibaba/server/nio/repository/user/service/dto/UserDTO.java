@@ -29,4 +29,11 @@ public class UserDTO extends BaseDTO {
     private Date lastLoginDate;
 
     private Date registerDate;
+
+    /**
+     * 好友状态描述 (e.g. "已是好友", "已申请", "添加")
+     */
+    private String friendStatusDesc;
+
+    private Integer friendStatus;
 }

@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static com.alibaba.server.nio.model.file.FileUploadFrame.FrameType.USER_FRIEND_APPLY_REQ;
 
@@ -437,13 +438,74 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         UserQueryParam userQueryParam = new UserQueryParam();
         userQueryParam.setUserName(userName);
 
-        // Fix: Use getUserService() instead of userService
         List<UserDTO> userDTOS = getUserService().getUserListByName(userQueryParam);
 
-        // Process avatars
         if (userDTOS != null && !userDTOS.isEmpty()) {
+            Long currentUserId = context.getUserDTO().getId();
+
+            // 1. 批量查询当前用户的好友列表
+            UserFriendsQueryParam friendQuery = new UserFriendsQueryParam();
+            friendQuery.setUserId(Integer.valueOf(currentUserId.toString()));
+            List<UserFriendsDTO> friends = getUserFriendsService().query(friendQuery);
+            java.util.Set<Integer> friendIds = friends == null ? new java.util.HashSet<>()
+                    : friends.stream().map(UserFriendsDTO::getFriendId).collect(Collectors.toSet());
+
+            // 2. 批量查询当前用户发出的好友申请
+            UserFriendApplyQueryParam applyQuery = new UserFriendApplyQueryParam();
+            applyQuery.setSenderId(Integer.valueOf(currentUserId.toString()));
+            List<UserFriendApplyDTO> myApplies = getUserFriendApplyService().query(applyQuery);
+            // Map<ReceiverId, Status> - 如果有多个申请，取最新的状态？这里假设最近的一个。
+            // 实际上 query 可能返回列表。为了简化，我们只关心是否有 pending (0) 或 rejected (2) 的记录。
+            // 优先级: Pending > Rejected > None?
+            // 如果同时有 rejected 和 pending (重新申请)，则 pending 优先。
+            java.util.Map<Integer, Integer> applyStatusMap = new java.util.HashMap<>();
+            if (myApplies != null) {
+                for (UserFriendApplyDTO apply : myApplies) {
+                    Integer receiverId = apply.getReceiverId();
+                    Integer status = apply.getStatus();
+                    // 逻辑：如果已经有状态，且新状态是0（待处理），覆盖之（显示待同意）。
+                    // 如果原状态是0，不变。
+                    // 简单粗暴点：0优先。
+                    if (!applyStatusMap.containsKey(receiverId)) {
+                        applyStatusMap.put(receiverId, status);
+                    } else {
+                        Integer existingStatus = applyStatusMap.get(receiverId);
+                        if (status == 0) { // 发现待处理，优先级最高
+                            applyStatusMap.put(receiverId, status);
+                        }
+                    }
+                }
+            }
+
             for (UserDTO user : userDTOS) {
                 user.setAvatar(getAvatarBase64(user.getAvatar()));
+
+                Integer targetId = Integer.valueOf(user.getId().toString());
+                if (currentUserId.equals(user.getId())) {
+                    user.setFriendStatusDesc("你自己");
+                    continue;
+                }
+                if (friendIds.contains(targetId)) {
+                    user.setFriendStatusDesc("【已是好友啦，开始聊天吧】");
+                    user.setFriendStatus(1);
+                } else {
+                    Integer applyStatus = applyStatusMap.get(targetId);
+                    if (applyStatus != null) {
+                        if (applyStatus == 0) {
+                            user.setFriendStatus(0);
+                            user.setFriendStatusDesc("【已申请添加好友，待对方同意】");
+                        } else if (applyStatus == 2) {
+                            user.setFriendStatus(2);
+                            user.setFriendStatusDesc("【对方拒绝了你的好友申请】");
+                        } else {
+                            user.setFriendStatus(3);
+                            user.setFriendStatusDesc("【添加】");
+                        }
+                    } else {
+                        user.setFriendStatus(3);
+                        user.setFriendStatusDesc("【添加】");
+                    }
+                }
             }
         }
 
