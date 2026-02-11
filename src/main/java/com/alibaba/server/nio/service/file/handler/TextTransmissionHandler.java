@@ -480,14 +480,15 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             for (UserDTO user : userDTOS) {
                 user.setAvatar(getAvatarBase64(user.getAvatar()));
 
-                Integer targetId = Integer.valueOf(user.getId().toString());
                 if (currentUserId.equals(user.getId())) {
                     user.setFriendStatusDesc("你自己");
                     continue;
                 }
+
+                Integer targetId = Integer.valueOf(user.getId().toString());
                 if (friendIds.contains(targetId)) {
-                    user.setFriendStatusDesc("【已是好友啦，开始聊天吧】");
                     user.setFriendStatus(1);
+                    user.setFriendStatusDesc("【已是好友啦，开始聊天吧】");
                 } else {
                     Integer applyStatus = applyStatusMap.get(targetId);
                     if (applyStatus != null) {

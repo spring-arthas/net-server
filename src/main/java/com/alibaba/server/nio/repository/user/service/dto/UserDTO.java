@@ -35,5 +35,8 @@ public class UserDTO extends BaseDTO {
      */
     private String friendStatusDesc;
 
+    /**
+     * 好友状态: 0-已申请, 1-已是好友, 2-已拒绝, 3-未添加
+     */
     private Integer friendStatus;
 }
