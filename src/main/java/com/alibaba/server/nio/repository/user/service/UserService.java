@@ -79,4 +79,6 @@ public interface UserService {
     void changePassword(Long userId, String oldPassword, String newPassword);
 
     List<UserDTO> getUserListByName(UserQueryParam userQueryParam);
+
+    UserDTO getById(Long id);
 }

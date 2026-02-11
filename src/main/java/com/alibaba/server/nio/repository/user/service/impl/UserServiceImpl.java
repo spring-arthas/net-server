@@ -229,6 +229,14 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public UserDTO getById(Long id) {
+        if (id == null) {
+            return null;
+        }
+        return this.doToDto(this.userRepository.get(id));
+    }
+
+    @Override
     public List<UserDTO> getUserListByName(UserQueryParam userQueryParam) {
         UserDalQueryParam userDalQueryParam = new UserDalQueryParam();
         userDalQueryParam.setUserName(userQueryParam.getUserName());

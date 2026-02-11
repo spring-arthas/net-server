@@ -128,6 +128,18 @@ public class FileUploadFrame {
          * 好友搜索
          */
         USER_FRIEND_QUERY_REQ(0x36, "好友搜索"),
+        /**
+         * 用户添加好友请求
+         */
+        USER_FRIEND_ADD_REQ(0x37, "用户添加好友请求"),
+        /**
+         * 获取好友申请列表
+         */
+        USER_FRIEND_APPLY_REQ(0x38, "获取好友申请列表"),
+        /**
+         * 处理好友申请
+         */
+        USER_FRIEND_APPLY_HANDLE_REQ(0x39, "处理好友申请"),
 
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
