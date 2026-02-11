@@ -2,6 +2,7 @@ package com.alibaba.server.nio.service.file.handler;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.handler.event.concret.WriteQueueHelper;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
@@ -27,10 +28,14 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.util.CollectionUtils;
 
 import java.io.IOException;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -105,7 +110,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void processFrame(FileUploadFrame frame, SocketChannelContext context) {
         FrameType type = frame.getType();
         log.debug("收到帧: type={}，帧类型={}, 操作={}, 数据内容={}",
-            type, type.getCode(), type.getDescription(), JSON.toJSONString(frame.getDataAsString()));
+                type, type.getCode(), type.getDescription(), JSON.toJSONString(frame.getDataAsString()));
 
         try {
             switch (type) {
@@ -116,14 +121,14 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case USER_LOGIN_REQ: // 用户登录请求
                     handleLogin(frame, context);
                     break;
-                case USER_CHANGE_PWD_REQ:  // 用户修改密码请求
+                case USER_CHANGE_PWD_REQ: // 用户修改密码请求
                     handleChangePassword(frame, context);
                     break;
                 case USER_LOGOUT_REQ: // 用户退出登录请求
                     handleLogout(frame, context);
                     break;
                 case USER_FRIEND_LIST_REQ: // 用户好友列表
-                    handleLogout(frame, context);
+                    handleFriendList(frame, context);
                     break;
                 // ========== 目录操作帧 ==========
                 case DIR_USER_GET_TWO_LEVEL_REQ:
@@ -179,8 +184,54 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             String userName = request.getString("userName");
             String password = request.getString("password");
             String mail = request.getString("mail");
+            // 处理头像上传
+            String avatarData = request.getString("avatarData");
+            String avatarPath = null;
+            if (org.apache.commons.lang.StringUtils.isNotBlank(avatarData)) {
+                try {
+                    byte[] decodedBytes = Base64.getDecoder().decode(avatarData);
+                    String suffix = ".png"; // 默认为 png
+                    if (request.containsKey("avatarName")) {
+                        String originalName = request.getString("avatarName");
+                        if (originalName != null && originalName.contains(".")) {
+                            suffix = originalName.substring(originalName.lastIndexOf("."));
+                        }
+                    }
 
-            UserDTO result = getUserService().register(userName, password, mail);
+                    String fileName = UUID.randomUUID().toString() + suffix;
+
+                    // 获取基础路径
+                    String osName = System.getProperty("os.name");
+                    String basePath;
+                    if (osName != null && osName.toLowerCase().contains("win")) {
+                        basePath = (String) BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_WINDOWS);
+                    } else {
+                        basePath = (String) BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC);
+                    }
+
+                    // 如果配置为空，使用默认路径
+                    if (basePath == null) {
+                        basePath = System.getProperty("user.dir") + File.separator + "data";
+                    }
+
+                    String savePath = basePath + File.separator + userName + File.separator + "avatars" + File.separator + fileName;
+                    File destFile = new File(savePath);
+                    if (!destFile.getParentFile().exists()) {
+                        destFile.getParentFile().mkdirs();
+                    }
+
+                    try (FileOutputStream fos = new FileOutputStream(destFile)) {
+                        fos.write(decodedBytes);
+                    }
+                    avatarPath = savePath;
+                    log.info("用户注册头像保存成功: path={}", avatarPath);
+                } catch (Exception e) {
+                    log.error("用户注册头像保存失败", e);
+                    // 头像保存失败不影响注册主流程，只是没有头像
+                }
+            }
+
+            UserDTO result = getUserService().register(userName, password, mail, avatarPath);
 
             JSONObject data = new JSONObject();
             data.put("userId", result.getId());
@@ -270,6 +321,43 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "退出登录成功", null);
             log.info("用户退出登录: userId={}, userName={}", userId, userName);
+        } catch (Exception e) {
+            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    private void handleFriendList(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String userName = request.getString("userName");
+            String password = request.getString("password");
+            UserDTO userDTO = getUserService().login(userName, password);
+            if (Objects.isNull(userDTO) || StringUtils.equals("del", userDTO.getDel())) {
+                throw new IllegalArgumentException("不存在");
+            }
+            // 登录成功后保存用户信息到连接上下文, 即将当前用户信息与服务端对应的SocketChannel进行绑定
+            context.setUserDTO(userDTO);
+
+            // 3、为当前用户创建网盘目录
+            try {
+                com.alibaba.server.nio.core.initializer.DirectoryInitializer.initialize(userDTO);
+            } catch (Exception e) {
+                log.error("NioServerContext: 目录初始化失败，但服务将继续启动, error = {}",
+                        org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            }
+            JSONObject data = new JSONObject();
+            data.put("userId", Integer.valueOf(String.valueOf(userDTO.getId())));
+            data.put("token", "后期引入");
+            data.put("userName", userDTO.getUserName());
+            data.put("phone", userDTO.getPhone());
+            data.put("mail", userDTO.getMail());
+            sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
+            log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
+        } catch (IllegalArgumentException e) {
+            String errorCode = e.getMessage().contains("不存在") ? UserAuthFrame.ErrorCode.USER_NOT_FOUND
+                    : (e.getMessage().contains("密码") ? UserAuthFrame.ErrorCode.PASSWORD_ERROR
+                            : UserAuthFrame.ErrorCode.INVALID_REQUEST);
+            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), errorCode);
         } catch (Exception e) {
             sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
         }
@@ -374,16 +462,20 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             String fileName = request.getString("fileName"); //
             int pageNum = request.getIntValue("pageNum");
             int pageSize = request.getIntValue("pageSize");
-            if (pageNum < 1) { pageNum = 1; }
-            if (pageSize < 1) { pageSize = 10; }
+            if (pageNum < 1) {
+                pageNum = 1;
+            }
+            if (pageSize < 1) {
+                pageSize = 10;
+            }
 
             FileQueryParam fileQueryParam = new FileQueryParam();
             fileQueryParam.setUserId(userId);
-            if(Objects.nonNull(dirId) && 0L != dirId) {
+            if (Objects.nonNull(dirId) && 0L != dirId) {
                 fileQueryParam.setParentId(dirId);
             }
             fileQueryParam.setFileName(null);
-            if(org.apache.commons.lang.StringUtils.isNotBlank(fileName)) {
+            if (org.apache.commons.lang.StringUtils.isNotBlank(fileName)) {
                 fileQueryParam.setParentId(null);
                 fileQueryParam.setFileName(fileName);
             }
@@ -465,7 +557,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             buffer.flip();
 
             log.info("=> 成功向客户端发送内容: 远程地址: {}, 数据内容: {}, 帧类型: {}, ",
-                context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
+                    context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
             WriteQueueHelper.submitWrite(context, buffer);
         } catch (Exception e) {
             log.error("发送帧失败: type={}, error={}", type, ExceptionUtils.getStackTrace(e));

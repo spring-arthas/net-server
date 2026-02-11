@@ -15,11 +15,15 @@ public class UserDo extends BaseDO implements Identity, CloneableSupport {
 
     private String userName;
 
+    private String nickName;
+
     private String password;
 
     private String phone;
 
     private String mail;
+
+    private String avatar;
 
     private Date lastLoginDate;
 

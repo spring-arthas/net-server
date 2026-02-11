@@ -16,23 +16,17 @@ public class UserDTO extends BaseDTO {
 
     private String userName;
 
+    private String nickName;
+
     private String password;
-
-    private Date lastLoginDate;
-
-    private Date registerDate;
 
     private String phone;
 
     private String mail;
 
-    /**
-     * 上传的文件信息
-     * */
-    private Map<String, Map<String, Object>> uploadFileMap;
+    private String avatar;
 
-    /**
-     * 下载的文件信息
-     * */
-    private Map<String, Map<String, Object>> downloadFileMap;
+    private Date lastLoginDate;
+
+    private Date registerDate;
 }

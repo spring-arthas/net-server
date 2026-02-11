@@ -22,9 +22,7 @@ public class UserCreateParam {
 
     private Date lastLoginDate;
 
+    private String avatar;
+
     private Date registerDate;
-
-    private String register;
-
-    private String status;
 }

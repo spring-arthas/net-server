@@ -52,14 +52,4 @@ public class BaseDTO implements Identity, CloneableSupport {
      * @see YesOrNoEnum
      */
     private String del;
-
-    /**
-     * 当前用户所占用的聊天SocketChannel
-     * */
-    private SocketChannel chatSocketChannel;
-
-    /**
-     * 当前用户所占用的文件SocketChannel
-     * */
-    private SocketChannel fileSocketChannel;
 }

@@ -18,8 +18,4 @@ public class UserDalQueryParam extends DalPageQueryParam {
     private Date lastLoginDate;
 
     private Date registerDate;
-
-    private String register;
-
-    private String status;
 }
