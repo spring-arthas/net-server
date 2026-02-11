@@ -2,4 +2,14 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.alibaba.server.nio.repository.user.mapper.UserRepository">
 
+    <select id="queryFuzzy"
+        resultType="com.alibaba.server.nio.repository.user.repository.dataobject.UserDo">
+        SELECT *
+        FROM user
+        where
+            del = 'N'
+            <if test="userName != null and userName != ''">
+                AND (user_name LIKE CONCAT('%',#{userName}, '%') OR nick_name LIKE CONCAT('%', #{userName}, '%'))
+            </if>
+    </select>
 </mapper>

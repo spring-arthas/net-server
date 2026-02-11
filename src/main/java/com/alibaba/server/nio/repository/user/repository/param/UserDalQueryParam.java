@@ -13,7 +13,7 @@ public class UserDalQueryParam extends DalPageQueryParam {
 
     private String userName;
 
-    private String password;
+    private String nickName;
 
     private Date lastLoginDate;
 

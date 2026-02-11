@@ -5,6 +5,8 @@ import com.alibaba.server.nio.repository.user.service.param.UserCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
 
+import java.util.List;
+
 /**
  * 用户服务
  *
@@ -75,4 +77,6 @@ public interface UserService {
      * @throws IllegalArgumentException 旧密码错误
      */
     void changePassword(Long userId, String oldPassword, String newPassword);
+
+    List<UserDTO> getUserListByName(UserQueryParam userQueryParam);
 }

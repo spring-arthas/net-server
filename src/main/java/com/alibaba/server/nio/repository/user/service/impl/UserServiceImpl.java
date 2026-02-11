@@ -10,6 +10,7 @@ import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
+import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -36,9 +37,10 @@ public class UserServiceImpl implements UserService {
         try {
             UserDalQueryParam userDalQueryParam = new UserDalQueryParam();
             userDalQueryParam.setUserName(userQueryParam.getUserName());
-            List<UserDo> list = this.userRepository.query(userDalQueryParam);
-            if (Optional.ofNullable(list).isPresent() && !list.isEmpty()) {
-                return this.doToDto(list.get(0));
+            // Use queryFuzzy to search by userName OR nickName
+            List<UserDo> userDoList = this.userRepository.queryFuzzy(userDalQueryParam);
+            if (Optional.ofNullable(userDoList).isPresent() && !userDoList.isEmpty()) {
+                return this.doToDto(userDoList.get(0));
             }
         } catch (Exception e) {
             log.error(e.getMessage());
@@ -220,5 +222,16 @@ public class UserServiceImpl implements UserService {
         this.userRepository.updateSelective(updateDo);
 
         log.info("用户修改密码成功: userId={}", userId);
+    }
+
+    @Override
+    public List<UserDTO> getUserListByName(UserQueryParam userQueryParam) {
+        UserDalQueryParam userDalQueryParam = new UserDalQueryParam();
+        userDalQueryParam.setUserName(userQueryParam.getUserName());
+        userDalQueryParam.setNickName(userQueryParam.getUserName());
+        List<UserDo> userDoList = this.userRepository.queryFuzzy(userDalQueryParam);
+        List<UserDTO> userDTOList = Lists.newArrayList();
+        userDoList.stream().forEach(userDo -> userDTOList.add(this.doToDto(userDo)));
+        return userDTOList;
     }
 }

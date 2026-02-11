@@ -20,6 +20,7 @@ import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
+import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
 import lombok.extern.slf4j.Slf4j;
@@ -130,6 +131,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case USER_FRIEND_LIST_REQ: // 用户好友列表
                     handleFriendList(frame, context);
                     break;
+                case USER_FRIEND_QUERY_REQ: // 用户好友列表
+                    handleFriendQuery(frame, context);
+                    break;
                 // ========== 目录操作帧 ==========
                 case DIR_USER_GET_TWO_LEVEL_REQ:
                     handleUserTwoLevelDirectory(frame, context);
@@ -214,7 +218,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                         basePath = System.getProperty("user.dir") + File.separator + "data";
                     }
 
-                    String savePath = basePath + File.separator + userName + File.separator + "avatars" + File.separator + fileName;
+                    String savePath = basePath + File.separator + userName + File.separator + "avatars" + File.separator
+                            + fileName;
                     File destFile = new File(savePath);
                     if (!destFile.getParentFile().exists()) {
                         destFile.getParentFile().mkdirs();
@@ -351,6 +356,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             data.put("userName", userDTO.getUserName());
             data.put("phone", userDTO.getPhone());
             data.put("mail", userDTO.getMail());
+            data.put("avatar", userDTO.getAvatar());
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
             log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
         } catch (IllegalArgumentException e) {
@@ -361,6 +367,42 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
         }
+    }
+
+    private void handleFriendQuery(FileUploadFrame frame, SocketChannelContext context) {
+        JSONObject request = JSON.parseObject(frame.getDataAsString());
+        String userName = request.getString("userName");
+        UserQueryParam userQueryParam = new UserQueryParam();
+        userQueryParam.setUserName(userName);
+
+        // Fix: Use getUserService() instead of userService
+        List<UserDTO> userDTOS = getUserService().getUserListByName(userQueryParam);
+
+        // Process avatars
+        if (userDTOS != null && !userDTOS.isEmpty()) {
+            for (UserDTO user : userDTOS) {
+                String avatarPath = user.getAvatar();
+                if (org.apache.commons.lang.StringUtils.isNotBlank(avatarPath)) {
+                    File avatarFile = new File(avatarPath);
+                    if (avatarFile.exists() && avatarFile.isFile()) {
+                        try (java.io.FileInputStream fis = new java.io.FileInputStream(avatarFile)) {
+                            byte[] fileBytes = new byte[(int) avatarFile.length()];
+                            fis.read(fileBytes);
+                            String base64Avatar = Base64.getEncoder().encodeToString(fileBytes);
+                            user.setAvatar(base64Avatar);
+                        } catch (Exception e) {
+                            log.error("读取用户头像文件失败: userName={}, path={}", user.getUserName(), avatarPath, e);
+                            user.setAvatar(null); // Clear invalid path if read fails
+                        }
+                    } else {
+                        user.setAvatar(org.apache.commons.lang.StringUtils.EMPTY); // Clear invalid path if file doesn't exist
+                    }
+                }
+            }
+        }
+
+        sendSuccessResponse(context, FrameType.USER_RESPONSE, "搜索成功", userDTOS);
+        log.info("添加好友搜索成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
     }
 
     // ========== 目录操作处理 ==========

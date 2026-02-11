@@ -120,11 +120,14 @@ public class FileUploadFrame {
          * 用户操作响应
          */
         USER_RESPONSE(0x34, "用户操作响应"),
-
         /**
          * 用户好友列表
          */
         USER_FRIEND_LIST_REQ(0x35, "用户好友列表"),
+        /**
+         * 好友搜索
+         */
+        USER_FRIEND_QUERY_REQ(0x36, "好友搜索"),
 
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
