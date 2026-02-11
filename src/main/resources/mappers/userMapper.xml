@@ -5,7 +5,7 @@
     <select id="queryFuzzy"
         resultType="com.alibaba.server.nio.repository.user.repository.dataobject.UserDo">
         SELECT *
-        FROM user
+        FROM `user`
         where
             del = 'N'
             <if test="userName != null and userName != ''">
