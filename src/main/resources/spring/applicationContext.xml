@@ -106,6 +106,14 @@
         class="com.alibaba.server.nio.repository.user.service.impl.UserServiceImpl"
         scope="singleton" />
 
+    <bean id="userFriendsService"
+          class="com.alibaba.server.nio.repository.user.service.impl.UserFriendsServiceImpl"
+          scope="singleton" />
+
+    <bean id="userFriendApplyService"
+          class="com.alibaba.server.nio.repository.user.service.impl.UserFriendApplyServiceImpl"
+          scope="singleton" />
+
     <bean id="taskService"
         class="com.alibaba.server.nio.repository.task.service.impl.TaskServiceImpl"
         scope="singleton" />
