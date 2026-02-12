@@ -601,8 +601,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleFriendApplylyHandle(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Long applyId = request.getLong("id");
-            Integer status = request.getInteger("status"); // 1=同意, 2=拒绝
+            Long applyId = request.getLong("requestId");
+            Integer status = request.getInteger("action"); // 1=同意, 2=拒绝
             String alias = request.getString("alias"); // 备注名
 
             if (applyId == null || status == null) {
