@@ -482,8 +482,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
                 // 定时/定量持久化进度
                 long now = System.currentTimeMillis();
-                if (now - uploadContext.getLastSavedTime() > 5000 ||
-                        uploadContext.getBytesWritten() - uploadContext.getLastSavedOffset() > 5 * 1024 * 1024) {
+                if (now - uploadContext.getLastSavedTime() > 60000 ||
+                        uploadContext.getBytesWritten() - uploadContext.getLastSavedOffset() > 60 * 1024 * 1024) {
                     if (uploadContext.getFileTaskId() != null) {
                         try {
                             fileTaskService.updateProgress(uploadContext.getFileTaskId(),
