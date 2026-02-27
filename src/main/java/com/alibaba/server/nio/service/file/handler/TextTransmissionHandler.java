@@ -14,6 +14,8 @@ import com.alibaba.server.nio.model.file.DirectoryFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.model.user.UserAuthFrame;
+import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
+import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
@@ -204,9 +206,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         return BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
     }
 
-    private com.alibaba.server.nio.repository.chat.service.ChatMessageService getChatMessageService() {
+    private UserFriendMessageService getChatMessageService() {
         return BasicServer.classPathXmlApplicationContext
-                .getBean(com.alibaba.server.nio.repository.chat.service.ChatMessageService.class);
+                .getBean(UserFriendMessageService.class);
     }
 
     private UserFriendsService getUserFriendsService() {
@@ -238,7 +240,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
 
             // 1. 持久化记录
-            com.alibaba.server.nio.repository.chat.mapper.ChatMessageDO savedMsg = getChatMessageService()
+            UserFriendMessageDO savedMsg = getChatMessageService()
                     .saveMessage(senderId.intValue(), receiverId, content, msgType);
 
             // 2. 构建推送给接收方的消息报文

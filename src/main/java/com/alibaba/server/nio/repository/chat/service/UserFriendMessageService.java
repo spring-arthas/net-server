@@ -1,12 +1,12 @@
 package com.alibaba.server.nio.repository.chat.service;
 
-import com.alibaba.server.nio.repository.chat.mapper.ChatMessageDO;
+import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
 import java.util.List;
 
 /**
  * 聊天消息服务接口
  */
-public interface ChatMessageService {
+public interface UserFriendMessageService {
 
     /**
      * 保存单条聊天记录
@@ -17,7 +17,7 @@ public interface ChatMessageService {
      * @param msgType    消息类型
      * @return 保存成功后的实体
      */
-    ChatMessageDO saveMessage(Integer senderId, Integer receiverId, String content, String msgType);
+    UserFriendMessageDO saveMessage(Integer senderId, Integer receiverId, String content, String msgType);
 
     /**
      * 获取两人之间的聊天记录
@@ -27,5 +27,5 @@ public interface ChatMessageService {
      * @param limit   返回条数限制
      * @return 聊天记录列表
      */
-    List<ChatMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit);
+    List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit);
 }

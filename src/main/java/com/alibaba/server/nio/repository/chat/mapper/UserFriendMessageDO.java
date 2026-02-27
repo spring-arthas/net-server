@@ -6,11 +6,11 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 聊天消息记录表(mds_chat_message)实体类
+ * 聊天消息记录表(user_friend_message)实体类
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class ChatMessageDO extends BaseDO implements Serializable {
+public class UserFriendMessageDO extends BaseDO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**

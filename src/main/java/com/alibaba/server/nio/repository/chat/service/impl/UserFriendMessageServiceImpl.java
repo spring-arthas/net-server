@@ -1,8 +1,8 @@
 package com.alibaba.server.nio.repository.chat.service.impl;
 
-import com.alibaba.server.nio.repository.chat.mapper.ChatMessageDO;
-import com.alibaba.server.nio.repository.chat.mapper.ChatMessageRepository;
-import com.alibaba.server.nio.repository.chat.service.ChatMessageService;
+import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
+import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageRepository;
+import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -16,19 +16,19 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @Slf4j
-public class ChatMessageServiceImpl implements ChatMessageService {
+public class UserFriendMessageServiceImpl implements UserFriendMessageService {
 
     @Autowired
-    private ChatMessageRepository chatMessageRepository;
+    private UserFriendMessageRepository chatMessageRepository;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ChatMessageDO saveMessage(Integer senderId, Integer receiverId, String content, String msgType) {
+    public UserFriendMessageDO saveMessage(Integer senderId, Integer receiverId, String content, String msgType) {
         if (senderId == null || receiverId == null) {
             throw new IllegalArgumentException("发送方或接收方ID不能为空");
         }
 
-        ChatMessageDO msg = new ChatMessageDO();
+        UserFriendMessageDO msg = new UserFriendMessageDO();
         msg.setSenderId(senderId);
         msg.setReceiverId(receiverId);
         msg.setContent(content);
@@ -49,7 +49,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     }
 
     @Override
-    public List<ChatMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit) {
+    public List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit) {
         if (userId1 == null || userId2 == null) {
             return Collections.emptyList();
         }
