@@ -49,8 +49,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static com.alibaba.server.nio.model.file.FileUploadFrame.FrameType.USER_FRIEND_APPLY_REQ;
-
 /**
  * 文本传输处理器（统一处理器）
  * 
@@ -140,7 +138,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case USER_LOGOUT_REQ: // 用户退出登录请求
                     handleLogout(frame, context);
                     break;
-                case USER_FRIEND_LIST_REQ: // 用户好友列表 todo
+                case USER_FRIEND_LIST_REQ: // 用户好友列表
                     handleFriendList(frame, context);
                     break;
                 case USER_FRIEND_QUERY_REQ: // 好友搜索列表
@@ -182,6 +180,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case FILE_DETAIL_REQ:
                     handleFileDetail(frame, context);
                     break;
+
+                // ========== 聊天消息帧 ==========
+                case CHAT_MSG_SEND_REQ:
+                    handleChatMessageSend(frame, context);
+                    break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
             }
@@ -201,12 +204,71 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         return BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
     }
 
+    private com.alibaba.server.nio.repository.chat.service.ChatMessageService getChatMessageService() {
+        return BasicServer.classPathXmlApplicationContext
+                .getBean(com.alibaba.server.nio.repository.chat.service.ChatMessageService.class);
+    }
+
     private UserFriendsService getUserFriendsService() {
         return BasicServer.classPathXmlApplicationContext.getBean(UserFriendsService.class);
     }
 
     private UserFriendApplyService getUserFriendApplyService() {
         return BasicServer.classPathXmlApplicationContext.getBean(UserFriendApplyService.class);
+    }
+
+    private void handleChatMessageSend(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long senderId = (Long) context.getAttribute("loggedInUserId");
+            if (senderId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "未登录, 无法发消息",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Integer receiverId = request.getInteger("receiverId");
+            String content = request.getString("content");
+            String msgType = request.getString("msgType"); // TEXT, IMAGE, etc.
+
+            if (receiverId == null || org.apache.commons.lang.StringUtils.isBlank(content)) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "接收方或内容不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            // 1. 持久化记录
+            com.alibaba.server.nio.repository.chat.mapper.ChatMessageDO savedMsg = getChatMessageService()
+                    .saveMessage(senderId.intValue(), receiverId, content, msgType);
+
+            // 2. 构建推送给接收方的消息报文
+            JSONObject pushData = new JSONObject();
+            pushData.put("messageId", savedMsg.getId());
+            pushData.put("senderId", senderId);
+            pushData.put("content", content);
+            pushData.put("msgType", savedMsg.getMsgType());
+            pushData.put("gmtCreated",
+                    savedMsg.getGmtCreated() != null ? savedMsg.getGmtCreated().getTime() : System.currentTimeMillis());
+
+            // 3. 实时推送给接收方 (如果在线)
+            SocketChannelContext receiverContext = BasicServer.onlineUserChannels.get(receiverId.longValue());
+            if (receiverContext != null && receiverContext.getSocketChannel().isConnected()) {
+                sendFrame(receiverContext, FrameType.CHAT_MSG_PUSH, pushData);
+                log.info("聊天消息实时推送成功: sender={}, receiver={}", senderId, receiverId);
+            } else {
+                log.info("接收方离线或Channel关闭, 消息已落库: receiver={}", receiverId);
+            }
+
+            // 4. 返回发信者成功回执
+            JSONObject responseData = new JSONObject();
+            responseData.put("messageId", savedMsg.getId());
+            responseData.put("status", "SUCCESS");
+            sendSuccessResponse(context, FrameType.CHAT_MSG_RESPONSE, "发送成功", responseData);
+
+        } catch (Exception e) {
+            log.error("处理聊天消息异常", e);
+            sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "发送失败: " + e.getMessage(), "CHAT_SEND_FAIL");
+        }
     }
 
     private String getAvatarBase64(String avatarPath) {
@@ -311,6 +373,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
             // 登录成功后保存用户信息到连接上下文, 即将当前用户信息与服务端对应的SocketChannel进行绑定
             context.setUserDTO(userDTO);
+            context.putAttribute("loggedInUserId", userDTO.getId());
+            context.putAttribute("loggedInUserName", userDTO.getUserName());
+
+            // 将登录成功的用户加入在线列表缓存
+            BasicServer.onlineUserChannels.put(userDTO.getId(), context);
 
             // 3、为当前用户创建网盘目录
             try {
@@ -367,6 +434,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             Long userId = (Long) context.getAttribute("loggedInUserId");
             String userName = (String) context.getAttribute("loggedInUserName");
 
+            if (userId != null) {
+                BasicServer.onlineUserChannels.remove(userId);
+            }
             context.removeAttribute("loggedInUserId");
             context.removeAttribute("loggedInUserName");
 

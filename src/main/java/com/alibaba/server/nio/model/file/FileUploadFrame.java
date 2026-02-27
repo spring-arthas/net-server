@@ -157,7 +157,21 @@ public class FileUploadFrame {
         /**
          * 文件操作响应
          */
-        FILE_RESPONSE(0x43, "文件操作响应");
+        FILE_RESPONSE(0x43, "文件操作响应"),
+
+        // ========== 聊天消息帧 (0x50-0x5F) ==========
+        /**
+         * 发送聊天消息请求
+         */
+        CHAT_MSG_SEND_REQ(0x50, "发送聊天消息请求"),
+        /**
+         * 推送聊天消息
+         */
+        CHAT_MSG_PUSH(0x51, "推送聊天消息"),
+        /**
+         * 聊天消息回执
+         */
+        CHAT_MSG_RESPONSE(0x52, "聊天消息回执");
 
         private final int code;
         private final String description;
