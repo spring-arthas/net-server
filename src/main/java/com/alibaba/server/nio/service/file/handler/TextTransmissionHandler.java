@@ -184,11 +184,14 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     break;
 
                 // ========== 聊天消息帧 ==========
-                case CHAT_MSG_SEND_REQ:
+                case CHAT_MSG_SEND_REQ: // 0x50
                     handleChatMessageSend(frame, context);
                     break;
-                case CHAT_MSG_HISTORY_REQ:
+                case CHAT_MSG_HISTORY_REQ:  // 0x53
                     handleChatMessageHistory(frame, context);
+                    break;
+                case CHAT_MSG_READ_REQ: // 0x55
+                    handleChatMessageRead(frame, context);
                     break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
@@ -281,6 +284,42 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             responseData.put("messageId", -1);
             responseData.put("status", "FALSE");
             sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "消息发送失败", JSON.toJSONString(responseData));
+        }
+    }
+
+    private void handleChatMessageRead(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_READ_RESPONSE, "未登录, 无法上报已读",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Integer friendId = request.getInteger("friendId");
+
+            if (friendId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_READ_RESPONSE, "好友ID不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            // 更新数据库: 把 friendId 发送给 userId 且 status = 0 的消息更新为 1
+            int updateCount = getChatMessageService().updateMessageStatusRead(friendId, userId.intValue());
+
+            JSONObject responseData = new JSONObject();
+            responseData.put("status", "SUCCESS");
+            //responseData.put("updatedCount", updateCount);
+            //responseData.put("friendId", friendId);
+            sendSuccessResponse(context, FrameType.CHAT_MSG_READ_RESPONSE, "已读上报成功", responseData);
+
+        } catch (Exception e) {
+            log.warn("处理聊天消息已读上报异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            JSONObject responseData = new JSONObject();
+            responseData.put("status", "FALSE");
+            sendErrorResponse(context, FrameType.CHAT_MSG_READ_RESPONSE, "已读上报失败", JSON.toJSONString(responseData));
         }
     }
 

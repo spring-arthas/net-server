@@ -72,4 +72,12 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
         }
         return chatMessageRepository.getLatestUnreadMessage(senderId, receiverId);
     }
+
+    @Override
+    public int updateMessageStatusRead(Integer senderId, Integer receiverId) {
+        if (senderId == null || receiverId == null) {
+            return 0;
+        }
+        return chatMessageRepository.updateMessageStatusRead(senderId, receiverId);
+    }
 }

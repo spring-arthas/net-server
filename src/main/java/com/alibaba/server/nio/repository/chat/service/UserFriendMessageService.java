@@ -47,4 +47,13 @@ public interface UserFriendMessageService {
      * @return 最新未读消息内容数据（如果无则返回null）
      */
     UserFriendMessageDO getLatestUnreadMessage(Integer senderId, Integer receiverId);
+
+    /**
+     * 将发送方给接收方的所有未读消息标记为已读
+     *
+     * @param senderId   发送方用户 ID (对方)
+     * @param receiverId 接收方用户 ID (当前用户)
+     * @return 标记成功的消息条数
+     */
+    int updateMessageStatusRead(Integer senderId, Integer receiverId);
 }

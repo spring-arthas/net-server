@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -28,4 +29,7 @@ public interface UserFriendMessageRepository
         @Select("SELECT * FROM user_friend_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N' ORDER BY gmt_created DESC LIMIT 1")
         UserFriendMessageDO getLatestUnreadMessage(@Param("senderId") Integer senderId,
                         @Param("receiverId") Integer receiverId);
+
+        @Update("UPDATE user_friend_message SET status = 1 WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N'")
+        int updateMessageStatusRead(@Param("senderId") Integer senderId, @Param("receiverId") Integer receiverId);
 }

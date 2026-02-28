@@ -180,7 +180,17 @@ public class FileUploadFrame {
         /**
          * 查询聊天历史记录回执
          */
-        CHAT_MSG_HISTORY_RESPONSE(0x54, "查询聊天历史记录回执");
+        CHAT_MSG_HISTORY_RESPONSE(0x54, "查询聊天历史记录回执"),
+
+        /**
+         * 聊天消息已读上报
+         */
+        CHAT_MSG_READ_REQ(0x55, "聊天消息已读上报"),
+
+        /**
+         * 聊天消息已读回执
+         */
+        CHAT_MSG_READ_RESPONSE(0x56, "聊天消息已读回执");
 
         private final int code;
         private final String description;
