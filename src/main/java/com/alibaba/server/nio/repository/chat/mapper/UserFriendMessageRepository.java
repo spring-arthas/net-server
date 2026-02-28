@@ -18,7 +18,7 @@ import java.util.List;
 public interface UserFriendMessageRepository
         extends BaseMapperRepository<UserFriendMessageQueryParam, UserFriendMessageDO> {
 
-    @Select("SELECT * FROM user_friend_message WHERE (sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1}) ORDER BY gmt_created DESC LIMIT #{limit}")
+    @Select("SELECT * FROM user_friend_message WHERE (sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1}) ORDER BY gmt_created ASC LIMIT #{limit}")
     List<UserFriendMessageDO> getChatHistory(@Param("userId1") Integer userId1, @Param("userId2") Integer userId2,
             @Param("limit") int limit);
 
