@@ -24,10 +24,11 @@ public interface UserFriendMessageService {
      *
      * @param userId1 用户1 ID
      * @param userId2 用户2 ID
+     * @param offset  起始偏移量
      * @param limit   返回条数限制
      * @return 聊天记录列表
      */
-    List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit);
+    List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int offset, int limit);
 
     /**
      * 获取指定发送者发给指定接收者的未读消息数量

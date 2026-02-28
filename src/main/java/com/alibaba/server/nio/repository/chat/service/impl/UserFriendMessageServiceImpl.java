@@ -50,11 +50,11 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
     }
 
     @Override
-    public List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit) {
+    public List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int offset, int limit) {
         if (userId1 == null || userId2 == null) {
             return Collections.emptyList();
         }
-        return chatMessageRepository.getChatHistory(userId1, userId2, limit > 0 ? limit : 50);
+        return chatMessageRepository.getChatHistory(userId1, userId2, Math.max(0, offset), limit > 0 ? limit : 50);
     }
 
     @Override

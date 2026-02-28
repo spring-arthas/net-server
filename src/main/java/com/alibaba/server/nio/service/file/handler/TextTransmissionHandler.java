@@ -296,8 +296,12 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             Integer friendId = request.getInteger("friendId");
             Integer limit = request.getInteger("limit");
+            Integer offset = request.getInteger("offset");
             if (limit == null || limit <= 0) {
                 limit = 50;
+            }
+            if (offset == null || offset < 0) {
+                offset = 0;
             }
 
             if (friendId == null) {
@@ -307,7 +311,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
 
             List<UserFriendMessageDO> historyList = getChatMessageService().getChatHistory(userId.intValue(), friendId,
-                    limit);
+                    offset, limit);
 
             // 获取当前用户和好友的头像
             UserDTO currentUser = getUserService().getById(userId);
