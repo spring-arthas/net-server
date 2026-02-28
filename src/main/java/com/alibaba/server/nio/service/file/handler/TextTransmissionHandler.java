@@ -550,6 +550,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             data.put("userName", userDTO.getUserName());
             data.put("phone", userDTO.getPhone());
             data.put("mail", userDTO.getMail());
+            data.put("avatar", userDTO.getAvatar());
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
             log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
         } catch (IllegalArgumentException e) {
