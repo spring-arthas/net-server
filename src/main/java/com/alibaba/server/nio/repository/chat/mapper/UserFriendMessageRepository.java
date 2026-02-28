@@ -15,9 +15,17 @@ import java.util.List;
  */
 @Repository
 @Mapper
-public interface UserFriendMessageRepository extends BaseMapperRepository<UserFriendMessageQueryParam, UserFriendMessageDO> {
+public interface UserFriendMessageRepository
+        extends BaseMapperRepository<UserFriendMessageQueryParam, UserFriendMessageDO> {
 
     @Select("SELECT * FROM mds_chat_message WHERE (sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1}) ORDER BY gmt_created ASC LIMIT #{limit}")
     List<UserFriendMessageDO> getChatHistory(@Param("userId1") Integer userId1, @Param("userId2") Integer userId2,
-                                             @Param("limit") int limit);
+            @Param("limit") int limit);
+
+    @Select("SELECT COUNT(*) FROM mds_chat_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N'")
+    int getUnreadMessageCount(@Param("senderId") Integer senderId, @Param("receiverId") Integer receiverId);
+
+    @Select("SELECT * FROM mds_chat_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N' ORDER BY gmt_created DESC LIMIT 1")
+    UserFriendMessageDO getLatestUnreadMessage(@Param("senderId") Integer senderId,
+            @Param("receiverId") Integer receiverId);
 }

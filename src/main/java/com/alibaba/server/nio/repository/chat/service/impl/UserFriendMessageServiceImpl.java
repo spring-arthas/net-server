@@ -56,4 +56,20 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
         }
         return chatMessageRepository.getChatHistory(userId1, userId2, limit > 0 ? limit : 50);
     }
+
+    @Override
+    public int getUnreadMessageCount(Integer senderId, Integer receiverId) {
+        if (senderId == null || receiverId == null) {
+            return 0;
+        }
+        return chatMessageRepository.getUnreadMessageCount(senderId, receiverId);
+    }
+
+    @Override
+    public UserFriendMessageDO getLatestUnreadMessage(Integer senderId, Integer receiverId) {
+        if (senderId == null || receiverId == null) {
+            return null;
+        }
+        return chatMessageRepository.getLatestUnreadMessage(senderId, receiverId);
+    }
 }

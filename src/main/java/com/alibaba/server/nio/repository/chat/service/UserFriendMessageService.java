@@ -28,4 +28,22 @@ public interface UserFriendMessageService {
      * @return 聊天记录列表
      */
     List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int limit);
+
+    /**
+     * 获取指定发送者发给指定接收者的未读消息数量
+     *
+     * @param senderId   发送人ID
+     * @param receiverId 接收人ID
+     * @return 未读消息数量
+     */
+    int getUnreadMessageCount(Integer senderId, Integer receiverId);
+
+    /**
+     * 获取指定发送者发给指定接收者的最新未读消息
+     *
+     * @param senderId   发送人ID
+     * @param receiverId 接收人ID
+     * @return 最新未读消息内容数据（如果无则返回null）
+     */
+    UserFriendMessageDO getLatestUnreadMessage(Integer senderId, Integer receiverId);
 }

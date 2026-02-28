@@ -268,8 +268,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendSuccessResponse(context, FrameType.CHAT_MSG_RESPONSE, "发送成功", responseData);
 
         } catch (Exception e) {
-            log.error("处理聊天消息异常", e);
-            sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "发送失败: " + e.getMessage(), "CHAT_SEND_FAIL");
+            log.warn("处理聊天消息异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame), ExceptionUtils.getStackTrace(e));
+            JSONObject responseData = new JSONObject();
+            responseData.put("messageId", -1);
+            responseData.put("status", "FALSE");
+            sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "消息发送失败", JSON.toJSONString(responseData));
         }
     }
 
@@ -479,20 +482,44 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             // 使用JSONObject列表返回，以便包含头像和详细信息
             List<JSONObject> resultList = new java.util.ArrayList<>();
-            if (friends != null) {
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(friends)) {
                 for (UserFriendsDTO friend : friends) {
                     UserDTO friendInfo = getUserService().getById(Long.valueOf(friend.getFriendId()));
-                    if (friendInfo != null) {
-                        JSONObject item = new JSONObject();
-                        item.put("id", friend.getId());
-                        item.put("userId", friend.getUserId());
-                        item.put("friendId", friend.getFriendId());
-                        item.put("alias", friend.getAlias());
-                        item.put("userName", friendInfo.getUserName());
-                        item.put("nickName", friendInfo.getNickName());
-                        item.put("avatar", getAvatarBase64(friendInfo.getAvatar()));
-                        resultList.add(item);
+                    if (Objects.isNull(friendInfo)) {
+                        continue;
                     }
+
+                    JSONObject item = new JSONObject();
+                    item.put("id", friend.getId());
+                    item.put("userId", friend.getUserId());
+                    item.put("friendId", friend.getFriendId());
+                    item.put("alias", friend.getAlias());
+                    item.put("userName", friendInfo.getUserName());
+                    item.put("nickName", friendInfo.getNickName());
+                    item.put("avatar", getAvatarBase64(friendInfo.getAvatar()));
+
+                    // 增加当前好友所发送的消息中未读消息数量
+                    int unreadCount = getChatMessageService().getUnreadMessageCount(friend.getFriendId(),
+                            Integer.valueOf(userId.toString()));
+                    item.put("unreadCount", unreadCount);
+
+                    // 增加最新未读消息内容数据（只保留前若干内容片段，如20个字符）
+                    UserFriendMessageDO latestMsg = getChatMessageService()
+                            .getLatestUnreadMessage(friend.getFriendId(), Integer.valueOf(userId.toString()));
+                    if (latestMsg != null
+                            && org.apache.commons.lang.StringUtils.isNotBlank(latestMsg.getContent())) {
+                        String content = latestMsg.getContent();
+                        int snippetLength = 8; // 摘要长度
+                        if (content.length() > snippetLength) {
+                            item.put("latestUnreadMsg", content.substring(0, snippetLength) + "...");
+                        } else {
+                            item.put("latestUnreadMsg", content);
+                        }
+                    } else {
+                        item.put("latestUnreadMsg", "");
+                    }
+
+                    resultList.add(item);
                 }
             }
 
