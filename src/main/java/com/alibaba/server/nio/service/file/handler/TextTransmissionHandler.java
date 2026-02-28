@@ -187,6 +187,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case CHAT_MSG_SEND_REQ:
                     handleChatMessageSend(frame, context);
                     break;
+                case CHAT_MSG_HISTORY_REQ:
+                    handleChatMessageHistory(frame, context);
+                    break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
             }
@@ -243,12 +246,17 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             UserFriendMessageDO savedMsg = getChatMessageService()
                     .saveMessage(senderId.intValue(), receiverId, content, msgType);
 
+            // 获取发送者头像
+            UserDTO senderInfo = getUserService().getById(senderId.longValue());
+            String senderAvatar = senderInfo != null ? getAvatarBase64(senderInfo.getAvatar()) : "";
+
             // 2. 构建推送给接收方的消息报文
             JSONObject pushData = new JSONObject();
             pushData.put("messageId", savedMsg.getId());
             pushData.put("senderId", senderId);
             pushData.put("content", content);
             pushData.put("msgType", savedMsg.getMsgType());
+            pushData.put("avatar", senderAvatar); // 消息附带发送人头像
             pushData.put("gmtCreated",
                     savedMsg.getGmtCreated() != null ? savedMsg.getGmtCreated().getTime() : System.currentTimeMillis());
 
@@ -273,6 +281,104 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             responseData.put("messageId", -1);
             responseData.put("status", "FALSE");
             sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "消息发送失败", JSON.toJSONString(responseData));
+        }
+    }
+
+    private void handleChatMessageHistory(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "未登录, 无法查询消息",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Integer friendId = request.getInteger("friendId");
+            Integer limit = request.getInteger("limit");
+            if (limit == null || limit <= 0) {
+                limit = 50;
+            }
+
+            if (friendId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "好友ID不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            List<UserFriendMessageDO> historyList = getChatMessageService().getChatHistory(userId.intValue(), friendId,
+                    limit);
+
+            // 获取当前用户和好友的头像
+            UserDTO currentUser = getUserService().getById(userId);
+            UserDTO friendInfo = getUserService().getById(friendId.longValue());
+            String currentUserAvatar = currentUser != null ? getAvatarBase64(currentUser.getAvatar()) : "";
+            String friendAvatar = friendInfo != null ? getAvatarBase64(friendInfo.getAvatar()) : "";
+
+            java.text.SimpleDateFormat timeFormat = new java.text.SimpleDateFormat("HH:mm");
+            java.text.SimpleDateFormat fullFormat = new java.text.SimpleDateFormat("yyyy-MM-dd");
+
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
+            cal.set(java.util.Calendar.MINUTE, 0);
+            cal.set(java.util.Calendar.SECOND, 0);
+            cal.set(java.util.Calendar.MILLISECOND, 0);
+            long todayStart = cal.getTimeInMillis();
+
+            cal.add(java.util.Calendar.DATE, -1);
+            long yesterdayStart = cal.getTimeInMillis();
+
+            List<JSONObject> resultList = new java.util.ArrayList<>();
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(historyList)) {
+                for (UserFriendMessageDO msg : historyList) {
+                    JSONObject item = new JSONObject();
+                    // 本条消息Id
+                    item.put("id", msg.getId());
+                    // 消息发送方userId，类型为Int32
+                    item.put("senderId", msg.getSenderId());
+                    // 消息接收方userId，类型为Int32
+                    item.put("receiverId", msg.getReceiverId());
+                    // 消息内容
+                    item.put("content", msg.getContent());
+                    // 消息类型 类型为Int32
+                    item.put("msgType", msg.getMsgType());
+                    // 消息状态 类型为Int32
+                    item.put("status", msg.getStatus());
+
+                    // 消息对应的头像，根据发送者ID设置头像
+                    if (msg.getSenderId().equals(userId.intValue())) {
+                        item.put("avatar", currentUserAvatar);
+                    } else {
+                        item.put("avatar", friendAvatar);
+                    }
+                    // 根据本条消息发送时间来配置消息所属的分组名称
+                    long msgTime = msg.getGmtCreated() != null ? msg.getGmtCreated().getTime()
+                            : System.currentTimeMillis();
+                    String timeStr;
+                    if (msgTime >= todayStart) {
+                        timeStr = timeFormat.format(msg.getGmtCreated());
+                    } else if (msgTime >= yesterdayStart) {
+                        timeStr = "昨天 " + timeFormat.format(msg.getGmtCreated());
+                    } else {
+                        timeStr = fullFormat.format(msg.getGmtCreated());
+                    }
+                    // 本条消息所属的分组名称
+                    item.put("groupTime", timeStr);
+                    // 每条消息增加一个消息发送时间
+                    item.put("msgTimeStr", timeFormat.format(msgTime));
+                    // 消息添加到集合中
+                    resultList.add(item);
+                }
+            }
+
+            sendSuccessResponse(context, FrameType.CHAT_MSG_RESPONSE, "查询成功", resultList);
+
+        } catch (Exception e) {
+            log.warn("处理历史消息异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            JSONObject responseData = new JSONObject();
+            responseData.put("status", "FALSE");
+            sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "查询失败", JSON.toJSONString(responseData));
         }
     }
 

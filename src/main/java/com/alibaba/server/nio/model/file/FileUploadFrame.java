@@ -171,7 +171,11 @@ public class FileUploadFrame {
         /**
          * 聊天消息回执
          */
-        CHAT_MSG_RESPONSE(0x52, "聊天消息回执");
+        CHAT_MSG_RESPONSE(0x52, "聊天消息回执"),
+        /**
+         * 查询聊天历史记录请求
+         */
+        CHAT_MSG_HISTORY_REQ(0x53, "查询聊天历史记录请求");
 
         private final int code;
         private final String description;
