@@ -36,6 +36,7 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
         msg.setStatus(0); // 0-未读
         // BaseDO settings
         msg.setDel("N");
+        msg.setDelTime(null);
         msg.setGmtCreated(new Date());
         msg.setGmtModified(new Date());
 
