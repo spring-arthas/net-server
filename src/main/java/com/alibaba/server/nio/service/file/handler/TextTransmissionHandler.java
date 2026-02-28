@@ -371,7 +371,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 }
             }
 
-            sendSuccessResponse(context, FrameType.CHAT_MSG_RESPONSE, "查询成功", resultList);
+            sendSuccessResponse(context, FrameType.CHAT_MSG_HISTORY_RESPONSE, "查询成功", resultList);
 
         } catch (Exception e) {
             log.warn("处理历史消息异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
