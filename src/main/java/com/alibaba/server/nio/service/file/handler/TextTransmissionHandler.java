@@ -349,12 +349,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     // 消息状态 类型为Int32
                     item.put("status", msg.getStatus());
 
-                    // 消息对应的头像，根据发送者ID设置头像
-                    if (msg.getSenderId().equals(userId.intValue())) {
-                        item.put("avatar", currentUserAvatar);
-                    } else {
-                        item.put("avatar", friendAvatar);
-                    }
+                    // 【优化去重】不再每条消息放置完整的头像base64数据
                     // 根据本条消息发送时间来配置消息所属的分组名称
                     long msgTime = msg.getGmtCreated() != null ? msg.getGmtCreated().getTime()
                             : System.currentTimeMillis();
@@ -375,7 +370,16 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 }
             }
 
-            sendSuccessResponse(context, FrameType.CHAT_MSG_HISTORY_RESPONSE, "查询成功", resultList);
+            // 【优化结构】将消息列表与用户头像信息拆分，减小网络传输体积
+            JSONObject responseData = new JSONObject();
+            responseData.put("list", resultList);
+
+            JSONObject avatars = new JSONObject();
+            avatars.put(userId.toString(), currentUserAvatar);
+            avatars.put(friendId.toString(), friendAvatar);
+            responseData.put("avatars", avatars);
+
+            sendSuccessResponse(context, FrameType.CHAT_MSG_HISTORY_RESPONSE, "查询成功", responseData);
 
         } catch (Exception e) {
             log.warn("处理历史消息异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
