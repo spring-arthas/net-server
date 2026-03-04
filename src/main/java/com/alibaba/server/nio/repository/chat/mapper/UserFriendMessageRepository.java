@@ -26,7 +26,7 @@ public interface UserFriendMessageRepository
         @Select("SELECT COUNT(*) FROM user_friend_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N'")
         int getUnreadMessageCount(@Param("senderId") Integer senderId, @Param("receiverId") Integer receiverId);
 
-        @Select("SELECT * FROM user_friend_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N' ORDER BY gmt_created DESC LIMIT 1")
+        @Select("SELECT * FROM user_friend_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND del = 'N' ORDER BY gmt_created DESC LIMIT 1")
         UserFriendMessageDO getLatestUnreadMessage(@Param("senderId") Integer senderId,
                         @Param("receiverId") Integer receiverId);
 
