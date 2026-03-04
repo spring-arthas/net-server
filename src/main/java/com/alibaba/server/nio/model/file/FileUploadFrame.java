@@ -188,9 +188,19 @@ public class FileUploadFrame {
         CHAT_MSG_READ_REQ(0x55, "聊天消息已读上报"),
 
         /**
-         * 聊天消息已读回执
+         * 聊天消息已读重回执
          */
-        CHAT_MSG_READ_RESPONSE(0x56, "聊天消息已读回执");
+        CHAT_MSG_READ_RESPONSE(0x56, "聊天消息已读回执"),
+
+        /**
+         * 更新好友别名请求
+         */
+        USER_FRIEND_UPDATE_ALIAS_REQ(0x57, "更新好友别名请求"),
+
+        /**
+         * 更新好友别名回执
+         */
+        USER_FRIEND_UPDATE_ALIAS_RESPONSE(0x58, "更新好友别名回执");
 
         private final int code;
         private final String description;

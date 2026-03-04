@@ -187,11 +187,14 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case CHAT_MSG_SEND_REQ: // 0x50
                     handleChatMessageSend(frame, context);
                     break;
-                case CHAT_MSG_HISTORY_REQ:  // 0x53
+                case CHAT_MSG_HISTORY_REQ: // 0x53
                     handleChatMessageHistory(frame, context);
                     break;
                 case CHAT_MSG_READ_REQ: // 0x55
                     handleChatMessageRead(frame, context);
+                    break;
+                case USER_FRIEND_UPDATE_ALIAS_REQ: // 0x57
+                    handleUserFriendUpdateAlias(frame, context);
                     break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
@@ -287,6 +290,45 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         }
     }
 
+    private void handleUserFriendUpdateAlias(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, "未登录, 无法更新好友别名",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Long id = request.getLong("id");
+            String alias = request.getString("alias");
+
+            if (id == null) {
+                sendErrorResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, "好友关系ID不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            com.alibaba.server.nio.repository.user.service.param.UserFriendsUpdateParam updateParam = new com.alibaba.server.nio.repository.user.service.param.UserFriendsUpdateParam();
+            updateParam.setId(id);
+            updateParam.setAlias(alias);
+
+            getUserFriendsService().update(updateParam);
+
+            JSONObject responseData = new JSONObject();
+            responseData.put("status", "SUCCESS");
+            sendSuccessResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, "更新好友别名成功", responseData);
+
+        } catch (Exception e) {
+            log.warn("处理更新好友别名异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            JSONObject responseData = new JSONObject();
+            responseData.put("status", "FALSE");
+            sendErrorResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, "更新好友别名失败",
+                    JSON.toJSONString(responseData));
+        }
+    }
+
     private void handleChatMessageRead(FileUploadFrame frame, SocketChannelContext context) {
         try {
             Long userId = (Long) context.getAttribute("loggedInUserId");
@@ -310,8 +352,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             JSONObject responseData = new JSONObject();
             responseData.put("status", "SUCCESS");
-            //responseData.put("updatedCount", updateCount);
-            //responseData.put("friendId", friendId);
+            // responseData.put("updatedCount", updateCount);
+            // responseData.put("friendId", friendId);
             sendSuccessResponse(context, FrameType.CHAT_MSG_READ_RESPONSE, "已读上报成功", responseData);
 
         } catch (Exception e) {
