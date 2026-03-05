@@ -202,15 +202,29 @@ public class FileUploadContext {
 
         // 根据是否断点续传选择打开模式
         if (isResume && java.nio.file.Files.exists(path)) {
-            // 断点续传：追加模式（APPEND）
+            // 断点续传：使用 WRITE 模式（非 APPEND）打开，然后精确 seek 到逻辑断点偏移位置
+            // ⚠️ 不能使用 APPEND 模式！APPEND 会强制写入到磁盘物理末尾
+            // 而磁盘末尾可能因为 OS 页缓存等原因大于 current_offset 断点记录值
+            // 导致 [startOffset, 磁盘末尾] 区间的数据被重复追加写入，使文件比原始大
             this.fileChannel = FileChannel.open(path,
-                    StandardOpenOption.WRITE,
-                    StandardOpenOption.APPEND);
+                    StandardOpenOption.WRITE);
+
+            // 精确 seek 到逻辑断点偏移，后续数据从该精确位置覆盖写入
+            this.fileChannel.position(startOffset);
+
+            // 如果磁盘文件物理大小 > startOffset（即有多余尾巴），截断到 startOffset
+            // 确保不会在断点之后保留任何旧数据，以免文件比源文件大
+            long diskFileSize = java.nio.file.Files.size(path);
+            if (diskFileSize > startOffset) {
+                this.fileChannel.truncate(startOffset);
+                log.warn("断点续传：磁盘文件({} bytes) > 断点偏移({} bytes)，已截断多余尾部数据",
+                        diskFileSize, startOffset);
+            }
 
             // 初始化已写入字节数为起始偏移量
             this.bytesWritten = startOffset;
 
-            log.info("断点续传模式 - taskId: {}, 文件: {}, 从 {} 字节继续上传 ({:.2f}%)",
+            log.info("断点续传模式 - taskId: {}, 文件: {}, 从精确偏移 {} 字节处继续写入 ({:.2f}%)",
                     requestTaskId, fileName, startOffset, getProgress());
         } else {
             // 全新上传：覆盖模式（TRUNCATE_EXISTING）
