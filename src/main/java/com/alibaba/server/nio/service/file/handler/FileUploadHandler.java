@@ -858,13 +858,38 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     ctx.getRemoteAddress(),
                     ctx.getBytesWritten(),
                     ctx.getFileSize());
+
+            // *** 关键步骤：在读取任何偏移量之前，先强制刷盘并关闭通道 ***
+            // 这确保 OS page cache 中的所有数据都已持久化到磁盘
+            // 避免内存计数器与磁盘实际字节数不一致的问题
+            ctx.closeFileChannel();
+
             // 1. 保存断点而非删除文件（支持断点续传）
             if (ctx.getMd5() != null && ctx.getBytesWritten() > 0) {
+
+                // 从磁盘读取实际文件大小，作为断点偏移量的唯一真实来源
+                // 这样无论内存计数器是否精准，磁盘上有多少字节就续传多少，100% 一致
+                long actualDiskSize = ctx.getBytesWritten(); // fallback: in-memory counter
+                if (ctx.getFilePath() != null) {
+                    try {
+                        java.nio.file.Path filePath = java.nio.file.Paths.get(ctx.getFilePath());
+                        if (java.nio.file.Files.exists(filePath)) {
+                            actualDiskSize = java.nio.file.Files.size(filePath);
+                            if (actualDiskSize != ctx.getBytesWritten()) {
+                                log.warn("磁盘实际大小({})与内存计数器({})不一致，以磁盘大小为准",
+                                        actualDiskSize, ctx.getBytesWritten());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("读取磁盘文件大小失败，回退使用内存计数器: taskId={}", ctx.getRequestTaskId(), e);
+                    }
+                }
+
                 UploadCheckpoint checkpoint = new UploadCheckpoint();
                 checkpoint.setMd5(ctx.getMd5());
                 checkpoint.setFileName(ctx.getFileName());
                 checkpoint.setFileSize(ctx.getFileSize());
-                checkpoint.setUploadedSize(ctx.getBytesWritten());
+                checkpoint.setUploadedSize(actualDiskSize); // 使用磁盘真实大小
                 checkpoint.setFilePath(ctx.getFilePath());
                 checkpoint.setFileId(ctx.getFileId());
                 checkpoint.setFileTaskId(ctx.getFileTaskId());
@@ -875,15 +900,16 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 checkpoint.setCreateTime(ctx.getStartTime());
                 checkpoint.setMd5(ctx.getMd5());
                 CheckpointManager.saveCheckpoint(checkpoint);
-                log.info("已保存断点，支持续传: MD5={}, 已上传={} ({:.2f}%)",
-                        ctx.getMd5(), ctx.getBytesWritten(), ctx.getProgress());
-                // 持久化到数据库（PAUSED状态）
+                log.info("已保存断点，支持续传: MD5={}, 磁盘实际大小={} ({:.2f}%)",
+                        ctx.getMd5(), actualDiskSize,
+                        ctx.getFileSize() > 0 ? actualDiskSize * 100.0 / ctx.getFileSize() : 0.0);
+                // 持久化到数据库（PAUSED状态），使用磁盘真实大小作为 current_offset
                 if (ctx.getFileTaskId() != null) {
                     try {
                         FileTaskDto fileTaskDto = new FileTaskDto();
                         fileTaskDto.setId(ctx.getFileTaskId());
                         fileTaskDto.setStatus(FileTaskStatusEnum.PAUSED.getCode());
-                        fileTaskDto.setCurrentOffset(ctx.getBytesWritten());
+                        fileTaskDto.setCurrentOffset(actualDiskSize); // 使用磁盘真实大小
                         fileTaskDto.setLastActiveTime(new Date());
                         fileTaskDto.setGmtModified(new Date());
                         fileTaskService.update(fileTaskDto);
@@ -899,9 +925,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
             // 2. 释放并发许可
             ctx.releaseSemaphore(uploadSemaphore);
-            // 3. 关闭文件通道（但不删除文件）
-            ctx.closeFileChannel();
-            // 4. 删除数据库记录（仅在无断点时）
+            // 注意：文件通道已在步骤开头关闭，此处无需再次调用 closeFileChannel()
+            // 3. 删除数据库记录（仅在无断点时）
             if (ctx.getMd5() == null && ctx.getFileId() != null) {
                 try {
                     // FileService fileService = NioServerContext.getFileService();
