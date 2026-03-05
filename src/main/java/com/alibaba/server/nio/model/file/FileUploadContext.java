@@ -130,6 +130,12 @@ public class FileUploadContext {
     private long startOffset = 0;
 
     /**
+     * 续传时实际使用的磁盘偏移量（由 openFileChannel 内部读取磁盘后确定）
+     * 可能与 startOffset(checkpoint值) 不同！客户端应以此值为准
+     */
+    private long actualResumeOffset = 0;
+
+    /**
      * 上次持久化保存的时间（毫秒）
      */
     private long lastSavedTime = 0;
@@ -202,30 +208,47 @@ public class FileUploadContext {
 
         // 根据是否断点续传选择打开模式
         if (isResume && java.nio.file.Files.exists(path)) {
-            // 断点续传：使用 WRITE 模式（非 APPEND）打开，然后精确 seek 到逻辑断点偏移位置
-            // ⚠️ 不能使用 APPEND 模式！APPEND 会强制写入到磁盘物理末尾
-            // 而磁盘末尾可能因为 OS 页缓存等原因大于 current_offset 断点记录值
-            // 导致 [startOffset, 磁盘末尾] 区间的数据被重复追加写入，使文件比原始大
-            this.fileChannel = FileChannel.open(path,
-                    StandardOpenOption.WRITE);
+            // *** 断点续传：以磁盘真实大小为唯一权威来源 ***
+            // 先读磁盘大小，再决定续传位置，而不是盲目信任 checkpoint/startOffset
 
-            // 精确 seek 到逻辑断点偏移，后续数据从该精确位置覆盖写入
-            this.fileChannel.position(startOffset);
-
-            // 如果磁盘文件物理大小 > startOffset（即有多余尾巴），截断到 startOffset
-            // 确保不会在断点之后保留任何旧数据，以免文件比源文件大
+            // 第一步：读取磁盘文件真实大小
             long diskFileSize = java.nio.file.Files.size(path);
+
+            // 第二步：确定实际的续传偏移
+            // 若磁盘大小 < checkpoint 记录的 startOffset（checkpoint 数据偏大），取磁盘大小
+            // 若磁盘大小 > checkpoint 记录的 startOffset（有多余数据尾巴），也取磁盘大小
+            // 这两种情况下磁盘大小才是真正安全的续传起点
+            // 但是，如果磁盘大小 > 期望的 startOffset，说明有脏数据尾巴，需要截断
+            // 若磁盘大小 < startOffset，代表有数据丢失，只能从磁盘有效字节末尾续传
+            this.actualResumeOffset = diskFileSize; // 默认用磁盘大小作为续传位置
+
+            // 第三步：打开文件通道（WRITE模式，不使用APPEND）
+            this.fileChannel = FileChannel.open(path, StandardOpenOption.WRITE);
+
+            // 第四步：如果磁盘大小 > startOffset（有多余的脏数据尾巴），截断
             if (diskFileSize > startOffset) {
                 this.fileChannel.truncate(startOffset);
-                log.warn("断点续传：磁盘文件({} bytes) > 断点偏移({} bytes)，已截断多余尾部数据",
-                        diskFileSize, startOffset);
+                this.actualResumeOffset = startOffset; // 截断后以 startOffset 为准
+                log.warn("断点续传截断: 磁盘大小({}) > checkpoint({})，截断到 checkpoint，续传偏移={}",
+                        diskFileSize, startOffset, this.actualResumeOffset);
+            } else if (diskFileSize < startOffset) {
+                // 磁盘数据比 checkpoint 少（数据丢失），只能从磁盘末尾续传
+                this.actualResumeOffset = diskFileSize;
+                log.warn("断点续传数据丢失: 磁盘大小({}) < checkpoint({})，从磁盘末尾续传，续传偏移={}",
+                        diskFileSize, startOffset, this.actualResumeOffset);
+            } else {
+                log.info("断点续传正常: 磁盘大小({}) == checkpoint({})，续传偏移={}",
+                        diskFileSize, startOffset, this.actualResumeOffset);
             }
 
-            // 初始化已写入字节数为起始偏移量
-            this.bytesWritten = startOffset;
+            // 第五步：将文件通道位置精确定位到 actualResumeOffset
+            this.fileChannel.position(this.actualResumeOffset);
 
-            log.info("断点续传模式 - taskId: {}, 文件: {}, 从精确偏移 {} 字节处继续写入 ({:.2f}%)",
-                    requestTaskId, fileName, startOffset, getProgress());
+            // 初始化已写入字节数为实际续传偏移量
+            this.bytesWritten = this.actualResumeOffset;
+
+            log.info("断点续传通道就绪 - taskId: {}, 文件: {}, 续传偏移={} bytes, channel.position()={} bytes",
+                    requestTaskId, fileName, this.actualResumeOffset, this.fileChannel.position());
         } else {
             // 全新上传：覆盖模式（TRUNCATE_EXISTING）
             this.fileChannel = FileChannel.open(path,

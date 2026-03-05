@@ -239,23 +239,26 @@ public class FileUploadHandler extends AbstractChannelHandler {
             // 2.2 断点续传帧查到了当前上传任务的断点数据，则按照断点进行恢复传输
             if (Objects.nonNull(checkpoint) && new File(checkpoint.getFilePath()).exists()) {
                 // ==== 断点续传模式 ====
-                long uploadedSize = checkpoint.getUploadedSize();
-                // 使用通用方法创建上传上下文
+                // 使用通用方法创建上传上下文（内部 openFileChannel 会以磁盘真实大小确定实际续传偏移）
                 FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest,
                         socketChannelContext, true, checkpoint);
                 if (uploadContext == null) {
                     sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
                     return;
                 }
-                // 发送断点应答
-                sendResumeAck(socketChannelContext, uploadContext, "resume", uploadedSize, "断点续传");
-                log.info("断点续传 - requestTaskId: {}, 文件: {}, 已上传: {} / {} ({:.2f}%), 剩余: {}",
+                // *** 关键：以服务端确定的实际磁盘偏移为准发给客户端 ***
+                // 不能直接用 checkpoint.getUploadedSize()，因为磁盘实际大小可能与 checkpoint 有偏差
+                // 客户端必须按照这个值来寻址源文件，才能确保服务端文件通道位置与客户端发送起点完全一致
+                long actualOffset = uploadContext.getActualResumeOffset();
+                sendResumeAck(socketChannelContext, uploadContext, "resume", actualOffset, "断点续传");
+                log.info(
+                        "断点续传 RESUME_ACK 已发送 - requestTaskId: {}, 文件: {}, 服务端实际续传偏移: {} bytes / 总大小: {} bytes ({:.2f}%)",
                         uploadContext.getRequestTaskId(),
                         fileUploadRequest.getFileName(),
-                        formatBytes(uploadedSize),
-                        formatBytes(fileUploadRequest.getFileSize()),
-                        uploadContext.getProgress(),
-                        formatBytes(fileUploadRequest.getFileSize() - uploadedSize));
+                        actualOffset,
+                        fileUploadRequest.getFileSize(),
+                        fileUploadRequest.getFileSize() > 0 ? actualOffset * 100.0 / fileUploadRequest.getFileSize()
+                                : 0.0);
             } else {
                 // ==== 全新上传模式 ====
                 FileUploadContext uploadContext = new FileUploadContext();
