@@ -241,7 +241,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 // ==== 断点续传模式 ====
                 long uploadedSize = checkpoint.getUploadedSize();
                 // 使用通用方法创建上传上下文
-                FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest, socketChannelContext, true, checkpoint);
+                FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest,
+                        socketChannelContext, true, checkpoint);
                 if (uploadContext == null) {
                     sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
                     return;
@@ -417,6 +418,11 @@ public class FileUploadHandler extends AbstractChannelHandler {
         socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
                 rateLimitBps,
                 rateLimitBps * config.getBucketCapacityMultiplier()));
+
+        // 将成功创建或恢复的任务 ID 绑定到当前的信道上下文
+        // 防止后续 DATA_FRAME 纯靠 remoteAddress 匹配失效
+        socketChannelContext.putAttribute("currentUploadTaskId", uploadContext.getRequestTaskId());
+
         log.info("上传上下文创建成功 - taskId: {}, 文件: {}, 模式: {}, 起始偏移: {}",
                 uploadContext.getRequestTaskId(), uploadContext.getFileName(),
                 isResume ? "断点续传" : "全新上传",
@@ -705,6 +711,20 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 return ctx;
             }
         }
+
+        // 兜底方案：如果在通过严格 remoteAddress 匹配不到的情况下
+        // 我们尝试通过 socketChannelContext 中缓存的 currentUploadTaskId 来寻找
+        // 应对断线重连/断点续传时，连接端口发生变化的问题
+        String currentUploadTaskId = (String) socketChannelContext.getAttribute("currentUploadTaskId");
+        if (StringUtils.isNotBlank(currentUploadTaskId)) {
+            FileUploadContext ctx = uploadContextMap.get(currentUploadTaskId);
+            if (ctx != null && ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING) {
+                // 找到后顺便将上下文的 remoteAddress 更新为当前连接，这样下一次能直接匹配到
+                ctx.setRemoteAddress(remoteAddress);
+                return ctx;
+            }
+        }
+
         return null;
     }
 
@@ -810,6 +830,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
     /**
      * 检查并冻结超时任务，即最后一次该任务有效数据的记录时间到当前任务检查时间之间的间隔超过阈值，说明客户端暂停或是
      * 出现了崩溃，则清理文件上传任务元数据
+     * 
      * @param idleThreshold 空闲阈值（毫秒）
      */
     public static void checkAndFreezeIdleTasks(long idleThreshold) {
