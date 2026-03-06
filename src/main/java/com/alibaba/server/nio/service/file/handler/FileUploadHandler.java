@@ -702,28 +702,39 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
     /**
      * 获取当前连接的活跃上传上下文
+     * <p>
+     * *** BUG FIX: 优先通过 currentUploadTaskId 精确查找（O(1)），再以 remoteAddress 兜底 ***
+     * 原来以 remoteAddress 轮询 ConcurrentHashMap.values() 作为主路径，在多客户端并发上传
+     * 场景下可能因遍历无序而返回错误的 Context，造成数据写入错文件。
+     * 修复后：taskId 直接 Map.get() 是确定性查找，不会出现歧义。
      */
     private FileUploadContext getActiveUploadContext(SocketChannelContext socketChannelContext) {
         String remoteAddress = socketChannelContext.getRemoteAddress();
-        // 根据远程地址精确匹配上传上下文，确保数据写入正确的文件
-        for (FileUploadContext ctx : uploadContextMap.values()) {
-            // 同时检查状态和远程地址，避免多客户端并发上传时数据写入错误文件
-            if (ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING
-                    && remoteAddress != null
-                    && remoteAddress.equals(ctx.getRemoteAddress())) {
-                return ctx;
-            }
-        }
 
-        // 兜底方案：如果在通过严格 remoteAddress 匹配不到的情况下
-        // 我们尝试通过 socketChannelContext 中缓存的 currentUploadTaskId 来寻找
-        // 应对断线重连/断点续传时，连接端口发生变化的问题
+        // *** 主路径：优先通过 channel 上绑定的 taskId 精确查找（O(1)，无歧义） ***
+        // createAndInitializeUploadContext 在成功创建 Context 后会将 taskId 写入 channel 属性
         String currentUploadTaskId = (String) socketChannelContext.getAttribute("currentUploadTaskId");
         if (StringUtils.isNotBlank(currentUploadTaskId)) {
             FileUploadContext ctx = uploadContextMap.get(currentUploadTaskId);
             if (ctx != null && ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING) {
-                // 找到后顺便将上下文的 remoteAddress 更新为当前连接，这样下一次能直接匹配到
-                ctx.setRemoteAddress(remoteAddress);
+                // 断点续传重连时远端口可能变化，顺便更新 remoteAddress 保证下次也能直接命中
+                if (remoteAddress != null && !remoteAddress.equals(ctx.getRemoteAddress())) {
+                    ctx.setRemoteAddress(remoteAddress);
+                    log.debug("续传重连，更新 remoteAddress: taskId={}, newAddr={}", currentUploadTaskId, remoteAddress);
+                }
+                return ctx;
+            }
+        }
+
+        // *** 兜底路径：通过 remoteAddress 遍历匹配（应对 taskId 未写入 channel 属性的极端情况） ***
+        // 注意：ConcurrentHashMap.values() 遍历无序，若同一 IP 有多个并发上传任务可能误匹配
+        // 但此处已作为兜底且生产环境同 IP 多并发概率低，可接受
+        for (FileUploadContext ctx : uploadContextMap.values()) {
+            if (ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING
+                    && remoteAddress != null
+                    && remoteAddress.equals(ctx.getRemoteAddress())) {
+                // 找到后将 taskId 回写到 channel，下次走主路径
+                socketChannelContext.putAttribute("currentUploadTaskId", ctx.getRequestTaskId());
                 return ctx;
             }
         }

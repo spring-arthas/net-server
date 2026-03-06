@@ -227,8 +227,11 @@ public class FileUploadContext {
             // 若磁盘大小 < startOffset，代表有数据丢失，只能从磁盘有效字节末尾续传
             this.actualResumeOffset = diskFileSize; // 默认用磁盘大小作为续传位置
 
-            // 第三步：打开文件通道（WRITE模式，不使用APPEND）
-            this.fileChannel = FileChannel.open(path, StandardOpenOption.WRITE);
+            // 第三步：打开文件通道（WRITE + CREATE 模式，不使用 APPEND）
+            // *** BUG FIX: 加上 CREATE 选项 ***
+            // 防止 Files.exists() 检查通过后、open() 调用前文件被意外删除
+            // 若文件已存在，CREATE 不会截断，仅在不存在时新建空文件，安全。
+            this.fileChannel = FileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
 
             // 第四步：如果磁盘大小 > startOffset（有多余的脏数据尾巴），截断
             if (diskFileSize > startOffset) {
