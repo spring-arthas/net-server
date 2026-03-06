@@ -888,6 +888,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     }
                 }
 
+                // 将此时文件传输任务此刻的数据写入缓存，方便后续重传恢复任务进行处理
                 UploadCheckpoint checkpoint = new UploadCheckpoint();
                 checkpoint.setMd5(ctx.getMd5());
                 checkpoint.setFileName(ctx.getFileName());
