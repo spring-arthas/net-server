@@ -149,6 +149,11 @@ public class FileUploadContext {
     private long lastActiveTime = System.currentTimeMillis();
 
     /**
+     * 是否已记录第一次写入日志（用于诊断续传偏移正确性）
+     */
+    private boolean firstWriteLogged = false;
+
+    /**
      * 更新最后活跃时间
      */
     public void touch() {
@@ -274,6 +279,22 @@ public class FileUploadContext {
     public int writeData(byte[] data) throws IOException {
         if (fileChannel == null || !fileChannel.isOpen()) {
             throw new IOException("文件通道未打开或已关闭");
+        }
+
+        // *** 关键诊断：仅在第一次写入时记录 channel 精确位置 ***
+        // 对于续传场景，此值应精确等于 actualResumeOffset
+        // 若不等，说明 seek 有问题或 channel 被意外修改
+        if (!firstWriteLogged) {
+            firstWriteLogged = true;
+            try {
+                long channelPos = fileChannel.position();
+                log.warn(
+                        "[诊断] 首次写入 - taskId={}, isResume={}, actualResumeOffset={}, bytesWritten={}, channel.position()={}, 三者{}一致",
+                        requestTaskId, isResume, actualResumeOffset, bytesWritten, channelPos,
+                        (channelPos == actualResumeOffset && channelPos == bytesWritten) ? "完全" : "【不】");
+            } catch (IOException e) {
+                log.error("[诊断] 读取 channel position 失败", e);
+            }
         }
 
         java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(data);
