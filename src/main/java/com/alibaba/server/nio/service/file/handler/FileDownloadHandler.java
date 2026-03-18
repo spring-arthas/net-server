@@ -24,6 +24,7 @@ import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.util.CollectionUtils;
 
 import java.io.File;
@@ -35,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -167,27 +169,24 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      * 解析请求，校验文件，发送文件信息
      */
     private void handleDownloadRequest(FileDownloadFrame frame,
-            SocketChannelContext socketChannelContext,
-            SimpleChannelContext simpleChannelContext) throws IOException {
+                                       SocketChannelContext socketChannelContext,
+                                       SimpleChannelContext simpleChannelContext) throws IOException {
         try {
-            // 1. 解析请求 JSON, 提取要下载的文件Id
+            // 1. 解析数据
             String jsonData = frame.getDataAsString();
             JSONObject request = JSON.parseObject(jsonData);
+            // 需要下载或是需要在线播放的文件Id
             Long fileId = request.getLong("fileId");
             // 客户端生成的任务ID，用于标识本次下载会话
             String taskId = request.getString("taskId");
             // 起始偏移量（断点续传）
             long startOffset = request.getLongValue("startOffset");
-
-            log.info("[ {} ] FileDownloadHandler | --> 接收到下载请求: fileId={}, taskId={}, startOffset={}",
-                    LocalTime.formatDate(LocalDateTime.now()), fileId, taskId, startOffset);
-
+            log.info("【接收到客户端文件传输请求】入参 = {}", jsonData);
             if (org.apache.commons.lang.StringUtils.isBlank(taskId)) {
                 sendErrorFrame(socketChannelContext, "taskId不能为空");
                 return;
             }
-
-            // 2. 从 DB 校验文件记录
+            // 2. DB校验文件记录
             FileQueryParam queryParam = new FileQueryParam();
             queryParam.setId(fileId);
             FileDto fileDto = getFileService().getFileById(queryParam);
@@ -196,7 +195,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 sendErrorFrame(socketChannelContext, "文件不存在");
                 return;
             }
-
             // 3. 校验文件系统中文件是否存在
             File file = new File(fileDto.getFilePath());
             if (!file.exists() || !file.isFile()) {
@@ -204,7 +202,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 sendErrorFrame(socketChannelContext, "文件不存在");
                 return;
             }
-
             // 4. 创建/更新上下文
             FileDownloadContext context = new FileDownloadContext();
             context.setTaskId(taskId);
@@ -216,10 +213,10 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             context.setCurrentOffset(startOffset); // 从指定位置开始
             context.setRemoteAddress(socketChannelContext.getRemoteAddress());
 
-            // 放入缓存
+            // 5. 当前传输任务放入缓存
             contextMap.put(taskId, context);
 
-            // 5. 发送文件信息给客户端 (META_FRAME)
+            // 6. 发送文件信息给客户端 (META_FRAME)
             JSONObject fileInfo = new JSONObject();
             fileInfo.put("fileId", fileDto.getId());
             fileInfo.put("fileName", fileDto.getFileName());
@@ -227,14 +224,13 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             fileInfo.put("fileType", fileDto.getFileType());
             fileInfo.put("taskId", taskId); // 回传taskId
             fileInfo.put("startOffset", startOffset); // 确认起始位置
-
             sendFrame(socketChannelContext, FrameType.ACK_FRAME, fileInfo.toJSONString());
 
-            log.info("[ {} ] FileDownloadHandler | --> 已发送文件信息，等待客户端确认: fileName={}, size={}, startOffset={}",
-                    LocalTime.formatDate(LocalDateTime.now()), fileDto.getFileName(), file.length(), startOffset);
+            log.info("【接收到客户端文件传输请求】服务端已成功确认文件合法性: fileName={}, size={}, startOffset={}",
+                fileDto.getFileName(), file.length(), startOffset);
         } catch (Exception e) {
-            log.error("处理下载请求失败", e);
-            sendErrorFrame(socketChannelContext, "处理请求失败: " + e.getMessage());
+            log.error("【接收到客户端文件传输请求】文件传输异常：error = {}", ExceptionUtils.getStackTrace(e));
+            sendErrorFrame(socketChannelContext, "服务器内部错误");
         }
     }
 
@@ -243,38 +239,36 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      * 开始传输文件流
      */
     private void handleClientAck(FileDownloadFrame frame,
-            SocketChannelContext socketChannelContext,
-            SimpleChannelContext simpleChannelContext) throws IOException {
+                                 SocketChannelContext socketChannelContext,
+                                 SimpleChannelContext simpleChannelContext) throws IOException {
         try {
+            // 1. 解析客户端下载或是在线播放请求确认数据
             String jsonData = frame.getDataAsString();
             JSONObject ack = JSON.parseObject(jsonData);
             String status = ack.getString("status");
             String taskId = ack.getString("taskId"); // 必须携带taskId
-
             if (org.apache.commons.lang.StringUtils.isBlank(taskId)) {
                 log.warn("ACK帧缺少taskId");
                 return;
             }
-
-            // 获取上下文
+            log.info("【接收到客户端文件传输请求确认】入参 = {}", jsonData);
+            // 2. 从缓存获取任务上下文
             FileDownloadContext context = contextMap.get(taskId);
-            if (context == null) {
+            if (Objects.isNull(context)) {
                 log.warn("下载上下文不存在或已过期: taskId={}", taskId);
                 sendErrorFrame(socketChannelContext, "会话已失效，请重新请求");
                 return;
             }
-
             if (!"ready".equals(status)) {
                 log.warn("客户端取消或未准备好: status={}", status);
                 contextMap.remove(taskId);
                 closeConnection(socketChannelContext, simpleChannelContext);
                 return;
             }
+            log.info("【接收到客户端文件传输请求确认】服务端即将开始传输流数据: fileName={}, 传输起始偏移={}",
+                context.getFileName(), context.getCurrentOffset());
 
-            log.info("[ {} ] FileDownloadHandler | --> 客户端已准备好，开始传输文件: fileName={}, offset={}",
-                    LocalTime.formatDate(LocalDateTime.now()), context.getFileName(), context.getCurrentOffset());
-
-            // 获取下载许可（限制并发下载数）
+            // 3. 获取下载许可（限制并发下载数）
             boolean acquired = false;
             try {
                 acquired = DOWNLOAD_SEMAPHORE.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -285,16 +279,14 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                     closeConnection(socketChannelContext, simpleChannelContext);
                     return;
                 }
-
-                log.info("[ {} ] FileDownloadHandler | --> 获得下载许可，当前可用许可数: {}",
-                        LocalTime.formatDate(LocalDateTime.now()), DOWNLOAD_SEMAPHORE.availablePermits());
-
-                // 开始传输文件
+                log.info("【接收到客户端文件传输请求确认】服务端该传输任务已获得传输许可: fileName={}, 传输起始偏移={}, 许可数={}",
+                        context.getFileName(), context.getCurrentOffset(), DOWNLOAD_SEMAPHORE.availablePermits());
+                // 无限循环开始传输文件
                 transferFile(context, socketChannelContext, simpleChannelContext);
-
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                log.error("等待下载许可被中断: taskId={}", taskId, e);
+                log.error("【接收到客户端文件传输请求确认】文件传输任务出现传输线程中断异常: fileName={}, taskId={}, error = {}",
+                    context.getFileName(), taskId, ExceptionUtils.getStackTrace(e));
                 sendErrorFrame(socketChannelContext, "服务器内部错误");
                 contextMap.remove(taskId);
                 closeConnection(socketChannelContext, simpleChannelContext);
@@ -302,14 +294,14 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 // 释放下载许可
                 if (acquired) {
                     DOWNLOAD_SEMAPHORE.release();
-                    log.info("[ {} ] FileDownloadHandler | --> 释放下载许可，当前可用许可数: {}",
-                            LocalTime.formatDate(LocalDateTime.now()), DOWNLOAD_SEMAPHORE.availablePermits());
+                    log.info("【接收到客户端文件传输请求确认】服务端该传输任务已完成传输，释放许可: fileName={}, 许可数={}",
+                            context.getFileName(), DOWNLOAD_SEMAPHORE.availablePermits());
                 }
             }
-
         } catch (Exception e) {
             log.error("处理客户端确认失败", e);
-            sendErrorFrame(socketChannelContext, "传输失败: " + e.getMessage());
+            log.error("【接收到客户端文件传输请求确认】文件传输任务出现异常: error = {}", ExceptionUtils.getStackTrace(e));
+            sendErrorFrame(socketChannelContext, "服务器内部错误");
         }
     }
 
@@ -317,9 +309,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      * 传输文件流
      */
     private void transferFile(FileDownloadContext context,
-            SocketChannelContext socketChannelContext,
-            SimpleChannelContext simpleChannelContext) throws IOException {
-
+                              SocketChannelContext socketChannelContext,
+                              SimpleChannelContext simpleChannelContext) throws IOException {
         try {
             // 初始化文件通道
             context.openFileChannel();
@@ -327,7 +318,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             if (context.getCurrentOffset() > 0) {
                 context.getRandomAccessFile().seek(context.getCurrentOffset());
             }
-
             // 分块读取并发送 - 使用优化后的缓冲区大小
             ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE); // 64KB
             int totalWaitCount = 0;
@@ -335,8 +325,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
 
             while (true) {
                 // ========== 应用层流控：检查发送队列大小 ==========
-                java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue = socketChannelContext
-                        .getPendingWriteQueue();
+                java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue = socketChannelContext.getPendingWriteQueue();
                 int queueSize = queue.size();
                 int waitCount = 0;
 
@@ -344,43 +333,36 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 while (queueSize > MAX_PENDING_BUFFERS) {
                     waitCount++;
                     totalWaitCount++;
-
                     // 每等待 100 次（5秒）记录一次日志
                     if (waitCount % 100 == 0) {
                         log.info("[ {} ] FileDownloadHandler | --> 流控等待中，队列积压: {} 个缓冲区，已等待: {} 次",
                                 LocalTime.formatDate(LocalDateTime.now()), queueSize, waitCount);
                     }
-
                     try {
                         Thread.sleep(50); // 等待 50ms
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         throw new IOException("传输被中断", e);
                     }
-
                     // 检查通道是否仍然打开
-                    if (socketChannelContext.getSocketChannel() == null
-                            || !socketChannelContext.getSocketChannel().isOpen()) {
+                    if (socketChannelContext.getSocketChannel() == null || !socketChannelContext.getSocketChannel().isOpen()) {
                         throw new IOException("通道已关闭");
                     }
-
                     queueSize = queue.size();
                 }
-
                 // 定期记录流控统计信息（每 10 秒）
                 long now = System.currentTimeMillis();
                 if (now - lastLogTime >= 10000) {
                     log.info(
-                            "[ {} ] FileDownloadHandler | --> 传输进度: fileName={}, progress={}/{}, queueSize={}, totalWaits={}",
-                            LocalTime.formatDate(LocalDateTime.now()),
-                            context.getFileName(),
-                            context.getCurrentOffset(),
-                            context.getFileSize(),
-                            queueSize,
-                            totalWaitCount);
+                        "[ {} ] FileDownloadHandler | --> 传输进度: fileName={}, progress={}/{}, queueSize={}, totalWaits={}",
+                        LocalTime.formatDate(LocalDateTime.now()),
+                        context.getFileName(),
+                        context.getCurrentOffset(),
+                        context.getFileSize(),
+                        queueSize,
+                        totalWaitCount);
                     lastLogTime = now;
                 }
-
                 // 持久化进度 (每5秒或每10MB)
                 if (now - context.getLastSavedTime() > 5000 ||
                         context.getCurrentOffset() - context.getLastSavedOffset() > 10 * 1024 * 1024) {
@@ -399,11 +381,9 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 // ========== 读取文件数据 ==========
                 readBuffer.clear();
                 int bytesRead = context.readChunk(readBuffer);
-
                 if (bytesRead == -1) {
                     break; // 文件读取完毕
                 }
-
                 if (bytesRead > 0) {
                     readBuffer.flip();
                     byte[] data = new byte[readBuffer.remaining()];
@@ -422,18 +402,14 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             endJson.put("totalBytes", context.getFileSize());
             endJson.put("taskId", context.getTaskId());
             sendFrame(socketChannelContext, FrameType.END_FRAME, endJson.toJSONString());
-
             // 等待 END_FRAME 发送完成
             WriteQueueHelper.waitForQueueDrain(socketChannelContext, 10000); // 10秒无进展超时
-
-            log.info("[ {} ] FileDownloadHandler | --> 文件传输完成: fileName={}, totalSize={}, transmitted={}",
-                    LocalTime.formatDate(LocalDateTime.now()),
-                    context.getFileName(), context.getFileSize(),
-                    context.getCurrentOffset() - context.getStartOffset());
-
+            log.info("【接收到客户端文件传输请求确认】服务端该传输任务已传输完成: 文件名称={}, 文件大小={}, 许可数={}",
+                context.getFileName(), context.getFileSize());
         } catch (Exception e) {
-            log.error("文件传输失败: context={}", context, e);
-            sendErrorFrame(socketChannelContext, "传输失败: " + e.getMessage());
+            log.error("【接收到客户端文件传输请求确认】服务端该传输任务传输出现异常: 文件名称={}, 文件大小={}, error={}",
+                context.getFileName(), context.getFileSize(), ExceptionUtils.getStackTrace(e));
+            sendErrorFrame(socketChannelContext, "服务端内部错误");
         } finally {
             // 清理上下文和关闭文件句柄
             context.close();
