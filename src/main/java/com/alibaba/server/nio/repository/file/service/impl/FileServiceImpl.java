@@ -30,6 +30,7 @@ import org.springframework.util.CollectionUtils;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -651,6 +652,34 @@ public class FileServiceImpl implements FileService {
         updateDo.setGmtModified(new Date());
         this.fileRepository.updateSelective(updateDo);
 
+        // 6. 异步批量更新所有子节点的 filePath（替换路径前缀，不阻塞接口响应）
+        final String oldPathFinal = oldPath;
+        final String newPathFinal = newPath;
+        CompletableFuture.runAsync(() -> {
+            try {
+                List<FileDo> descendants = collectAllDescendants(dirId);
+                if (!descendants.isEmpty()) {
+                    Date now = new Date();
+                    List<FileDo> updates = new ArrayList<>(descendants.size());
+                    for (FileDo desc : descendants) {
+                        if (desc.getFilePath() != null && desc.getFilePath().startsWith(oldPathFinal)) {
+                            FileDo up = new FileDo();
+                            up.setId(desc.getId());
+                            up.setFilePath(newPathFinal + desc.getFilePath().substring(oldPathFinal.length()));
+                            up.setGmtModified(now);
+                            updates.add(up);
+                        }
+                    }
+                    if (!updates.isEmpty()) {
+                        fileRepository.batchUpdateSelective(updates);
+                        log.info("异步更新子节点filePath完成: dirId={}, 更新数量={}", dirId, updates.size());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("异步更新子节点filePath失败: dirId={}", dirId, e);
+            }
+        });
+
         log.info("更新目录成功: id={}, newName={}", dirId, newName);
         return this.doToDto(this.fileRepository.get(dirId));
     }
@@ -701,6 +730,24 @@ public class FileServiceImpl implements FileService {
 
         log.info("移动目录成功: id={}, targetParentId={}", dirId, targetParentId);
         return this.doToDto(this.fileRepository.get(dirId));
+    }
+
+    /**
+     * 递归收集指定目录下的所有子孙节点（目录+文件）
+     */
+    private List<FileDo> collectAllDescendants(Long parentId) {
+        List<FileDo> result = new ArrayList<>();
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setParentId(parentId);
+        queryParam.setDel(YesOrNoEnum.N.name());
+        List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
+        if (!CollectionUtils.isEmpty(children)) {
+            result.addAll(children);
+            for (FileDo child : children) {
+                result.addAll(collectAllDescendants(child.getId()));
+            }
+        }
+        return result;
     }
 
     @Override
