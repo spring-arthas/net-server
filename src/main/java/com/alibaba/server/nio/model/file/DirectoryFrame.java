@@ -69,6 +69,7 @@ public class DirectoryFrame {
         public static final String FS_ERROR = "FS_ERROR";
         public static final String DB_ERROR = "DB_ERROR";
         public static final String INVALID_REQUEST = "INVALID_REQUEST";
+        public static final String DIR_ROOT_NOT_ALLOW_UPDATE = "DIR_ROOT_NOT_ALLOW_UPDATE";
     }
 
     /**

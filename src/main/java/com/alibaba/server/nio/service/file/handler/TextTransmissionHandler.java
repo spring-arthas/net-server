@@ -1054,7 +1054,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendSuccessResponse(context, FrameType.DIR_RESPONSE, "目录更新成功", result);
         } catch (IllegalArgumentException e) {
             String errorCode = e.getMessage().contains("同名") ? DirectoryFrame.ErrorCode.DIR_NAME_DUPLICATE
-                    : DirectoryFrame.ErrorCode.DIR_NAME_TOO_LONG;
+                    : (e.getMessage().contains("顶层目录") ? DirectoryFrame.ErrorCode.DIR_ROOT_NOT_ALLOW_UPDATE : DirectoryFrame.ErrorCode.DIR_NAME_TOO_LONG);
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), errorCode);
         } catch (RuntimeException e) {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);

@@ -448,7 +448,7 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public FileDo createByTask(FileTaskDto fileTaskDto) {
-        if(Objects.isNull(fileTaskDto)) {
+        if (Objects.isNull(fileTaskDto)) {
             return null;
         }
         FileDo fileDo = new FileDo();
@@ -625,6 +625,10 @@ public class FileServiceImpl implements FileService {
         FileDo dirDo = this.fileRepository.get(dirId);
         if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
             throw new IllegalArgumentException("目录不存在");
+        }
+
+        if (dirDo.getParentId() != null && dirDo.getParentId() == -1L) {
+            throw new IllegalArgumentException("顶层目录名称不允许修改");
         }
 
         // 3. 检查同级重名（排除自身）
