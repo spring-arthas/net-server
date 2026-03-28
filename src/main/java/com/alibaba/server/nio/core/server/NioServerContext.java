@@ -234,9 +234,10 @@ public class NioServerContext {
         try {
             String remoteAddress = NioServerContext.getRemoteAddress(socketChannel);
             String localAddress = NioServerContext.getLocalAddress(socketChannel);
-            // 1、清理该远程连接对应的上传/下载任务
+            // 1、清理该远程连接对应的上传/下载/文本任务
             com.alibaba.server.nio.service.file.handler.FileUploadHandler.cleanupConnection(remoteAddress);
             com.alibaba.server.nio.service.file.handler.FileDownloadHandler.cleanupConnection(remoteAddress);
+            com.alibaba.server.nio.service.file.handler.TextTransmissionHandler.cleanupConnection(remoteAddress);
             // 2、关闭socketChannel，将会发送流截至符 -1到客户端
             Socket socket = socketChannel.socket();
             if (!socket.isClosed()) {

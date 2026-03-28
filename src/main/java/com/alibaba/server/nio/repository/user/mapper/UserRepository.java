@@ -23,9 +23,17 @@ public interface UserRepository extends BaseMapperRepository<UserDalQueryParam, 
 
     /**
      * 模糊查询用户（用户名或昵称）
-     * 
+     *
      * @param param
      * @return
      */
     List<UserDo> queryFuzzy(UserDalQueryParam param);
+
+    /**
+     * 根据 ID 列表批量查询用户
+     *
+     * @param ids 用户 ID 列表
+     * @return 用户列表
+     */
+    List<UserDo> listByIds(List<Long> ids);
 }

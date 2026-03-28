@@ -201,7 +201,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
         } catch (Exception e) {
             log.error("处理帧异常: type={}", type, e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), "INTERNAL_ERROR");
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "服务内部错误", "INTERNAL_ERROR");
         }
     }
 
@@ -558,7 +558,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                             : UserAuthFrame.ErrorCode.INVALID_REQUEST);
             sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), errorCode);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
+            log.error("用户注册系统异常", e);
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "注册失败，请稍后重试", UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -601,7 +602,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                             : UserAuthFrame.ErrorCode.INVALID_REQUEST);
             sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), errorCode);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
+            log.error("用户登录系统异常", e);
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "登录失败，请稍后重试", UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -626,7 +628,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     : UserAuthFrame.ErrorCode.INVALID_REQUEST;
             sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), errorCode);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
+            log.error("修改密码系统异常", e);
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "修改密码失败，请稍后重试", UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -644,7 +647,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "退出登录成功", null);
             log.info("用户退出登录: userId={}, userName={}", userId, userName);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.DB_ERROR);
+            log.error("退出登录系统异常", e);
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "退出登录失败，请稍后重试", UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -652,37 +656,28 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         try {
             Long userId = context.getUserDTO().getId();
             UserFriendsQueryParam queryParam = new UserFriendsQueryParam();
-            queryParam.setUserId(Integer.valueOf(userId.toString()));
+            queryParam.setUserId(userId.intValue());
             List<UserFriendsDTO> friends = getUserFriendsService().query(queryParam);
 
-            // 丰富好友信息（头像、昵称等）
-            if (friends != null && !friends.isEmpty()) {
-                for (UserFriendsDTO friend : friends) {
-                    UserDTO friendInfo = getUserService().getById(Long.valueOf(friend.getFriendId()));
-                    if (friendInfo != null) {
-                        // 如果没有备注，使用昵称或用户名
-                        if (org.apache.commons.lang.StringUtils.isBlank(friend.getAlias())) {
-                            friend.setAlias(org.apache.commons.lang.StringUtils.isNotBlank(friendInfo.getNickName())
-                                    ? friendInfo.getNickName()
-                                    : friendInfo.getUserName());
-                        }
-                        // 这里我们借用UserFriendsDTO中没有的字段来传头像和名字用于显示，或者扩展UserFriendsDTO
-                        // 鉴于UserFriendsDTO是生成的，我们可以考虑将这些信息放入额外字段，或者直接修改DTO
-                        // 为了简单起见，我们假设客户端需要头像和名字，我们可以用Map返回或者扩展DTO。
-                        // 由于DTO不仅用于数据库也用于传输，最好在DTO中增加transient字段，或者使用Map。
-                        // 但为了不修改DTO结构，我们这里仅作为示例，实际需确保客户端能解析额外字段（FastJSON特性）
-                        // 更好做法：创建UserFriendVO或使用JSONObject
-                    }
-                }
-            }
-
-            // 使用JSONObject列表返回，以便包含头像和详细信息
             List<JSONObject> resultList = new java.util.ArrayList<>();
             if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(friends)) {
+                // 批量查询所有好友用户信息，避免 N+1
+                List<Long> friendIdList = friends.stream()
+                        .map(f -> Long.valueOf(f.getFriendId()))
+                        .collect(Collectors.toList());
+                Map<Long, UserDTO> friendInfoMap = getUserService().listByIds(friendIdList);
+
                 for (UserFriendsDTO friend : friends) {
-                    UserDTO friendInfo = getUserService().getById(Long.valueOf(friend.getFriendId()));
+                    UserDTO friendInfo = friendInfoMap.get(Long.valueOf(friend.getFriendId()));
                     if (Objects.isNull(friendInfo)) {
                         continue;
+                    }
+
+                    // 如果没有备注，使用昵称或用户名
+                    if (org.apache.commons.lang.StringUtils.isBlank(friend.getAlias())) {
+                        friend.setAlias(org.apache.commons.lang.StringUtils.isNotBlank(friendInfo.getNickName())
+                                ? friendInfo.getNickName()
+                                : friendInfo.getUserName());
                     }
 
                     JSONObject item = new JSONObject();
@@ -696,16 +691,16 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
                     // 增加当前好友所发送的消息中未读消息数量
                     int unreadCount = getChatMessageService().getUnreadMessageCount(friend.getFriendId(),
-                            Integer.valueOf(userId.toString()));
+                            userId.intValue());
                     item.put("unreadCount", unreadCount);
 
-                    // 增加最新未读消息内容数据（只保留前若干内容片段，如20个字符）
+                    // 增加最新未读消息内容数据（只保留前若干内容片段）
                     UserFriendMessageDO latestMsg = getChatMessageService()
-                            .getLatestUnreadMessage(friend.getFriendId(), Integer.valueOf(userId.toString()));
+                            .getLatestUnreadMessage(friend.getFriendId(), userId.intValue());
                     if (latestMsg != null
                             && org.apache.commons.lang.StringUtils.isNotBlank(latestMsg.getContent())) {
                         String content = latestMsg.getContent();
-                        int snippetLength = 8; // 摘要长度
+                        int snippetLength = 8;
                         if (content.length() > snippetLength) {
                             item.put("latestUnreadMsg", content.substring(0, snippetLength) + "...");
                         } else {
@@ -722,7 +717,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "获取好友列表成功", resultList);
         } catch (Exception e) {
             log.error("获取好友列表失败", e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, "获取好友列表失败: " + e.getMessage(),
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "获取好友列表失败",
                     UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
@@ -740,14 +735,14 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             // 1. 批量查询当前用户的好友列表
             UserFriendsQueryParam friendQuery = new UserFriendsQueryParam();
-            friendQuery.setUserId(Integer.valueOf(currentUserId.toString()));
+            friendQuery.setUserId(currentUserId.intValue());
             List<UserFriendsDTO> friends = getUserFriendsService().query(friendQuery);
             java.util.Set<Integer> friendIds = friends == null ? new java.util.HashSet<>()
                     : friends.stream().map(UserFriendsDTO::getFriendId).collect(Collectors.toSet());
 
             // 2. 批量查询当前用户发出的好友申请
             UserFriendApplyQueryParam applyQuery = new UserFriendApplyQueryParam();
-            applyQuery.setSenderId(Integer.valueOf(currentUserId.toString()));
+            applyQuery.setSenderId(currentUserId.intValue());
             List<UserFriendApplyDTO> myApplies = getUserFriendApplyService().query(applyQuery);
             // Map<ReceiverId, Status> - 如果有多个申请，取最新的状态？这里假设最近的一个。
             // 实际上 query 可能返回列表。为了简化，我们只关心是否有 pending (0) 或 rejected (2) 的记录。
@@ -780,7 +775,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     continue;
                 }
 
-                Integer targetId = Integer.valueOf(user.getId().toString());
+                Integer targetId = user.getId().intValue();
                 if (friendIds.contains(targetId)) {
                     user.setFriendStatus(1);
                     user.setFriendStatusDesc("【已是好友啦，开始聊天吧】");
@@ -825,7 +820,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             // 检查是否已经是好友
             UserFriendsQueryParam friendQuery = new UserFriendsQueryParam();
-            friendQuery.setUserId(Integer.valueOf(currentUserId.toString()));
+            friendQuery.setUserId(currentUserId.intValue());
             friendQuery.setFriendId(receiveUserId);
             List<UserFriendsDTO> friends = getUserFriendsService().query(friendQuery);
             if (friends != null && !friends.isEmpty()) {
@@ -834,7 +829,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             // 检查是否已经申请过且待处理
             UserFriendApplyQueryParam applyQuery = new UserFriendApplyQueryParam();
-            applyQuery.setSenderId(Integer.valueOf(currentUserId.toString()));
+            applyQuery.setSenderId(currentUserId.intValue());
             applyQuery.setReceiverId(receiveUserId);
             applyQuery.setStatus(0); // 待处理
             List<UserFriendApplyDTO> applies = getUserFriendApplyService().query(applyQuery);
@@ -843,7 +838,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
 
             UserFriendApplyCreateParam createParam = new UserFriendApplyCreateParam();
-            createParam.setSenderId(Integer.valueOf(currentUserId.toString()));
+            createParam.setSenderId(currentUserId.intValue());
             createParam.setReceiverId(receiveUserId);
             createParam.setRequestMsg(requestMsg);
             getUserFriendApplyService().create(createParam);
@@ -861,16 +856,21 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         try {
             Long currentUserId = context.getUserDTO().getId();
             UserFriendApplyQueryParam queryParam = new UserFriendApplyQueryParam();
-            queryParam.setReceiverId(Integer.valueOf(currentUserId.toString()));
-            queryParam.setStatus(0); // 只查询待处理的申请，或者查询所有？通常是查询待处理的
+            queryParam.setReceiverId(currentUserId.intValue());
+            queryParam.setStatus(0);
 
             List<UserFriendApplyDTO> applies = getUserFriendApplyService().query(queryParam);
 
-            // 丰富申请信息（发送者头像、昵称）
             List<JSONObject> resultList = new java.util.ArrayList<>();
-            if (applies != null) {
+            if (applies != null && !applies.isEmpty()) {
+                // 批量查询所有申请发送者信息，避免 N+1
+                List<Long> senderIdList = applies.stream()
+                        .map(a -> Long.valueOf(a.getSenderId()))
+                        .collect(Collectors.toList());
+                Map<Long, UserDTO> senderInfoMap = getUserService().listByIds(senderIdList);
+
                 for (UserFriendApplyDTO apply : applies) {
-                    UserDTO senderInfo = getUserService().getById(Long.valueOf(apply.getSenderId()));
+                    UserDTO senderInfo = senderInfoMap.get(Long.valueOf(apply.getSenderId()));
                     if (senderInfo != null) {
                         JSONObject item = new JSONObject();
                         item.put("id", apply.getId());
@@ -935,7 +935,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             // Bad performance but safe.
             Long currentUserId = context.getUserDTO().getId();
             UserFriendApplyQueryParam queryParam = new UserFriendApplyQueryParam();
-            queryParam.setReceiverId(Integer.valueOf(currentUserId.toString()));
+            queryParam.setReceiverId(currentUserId.intValue());
             queryParam.setStatus(0);
             List<UserFriendApplyDTO> pendingApplies = getUserFriendApplyService().query(queryParam);
 
@@ -964,7 +964,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     // 创建双向好友关系
                     // 1. Me -> Sender (with alias)
                     UserFriendsCreateParam friend1 = new UserFriendsCreateParam();
-                    friend1.setUserId(Integer.valueOf(currentUserId.toString()));
+                    friend1.setUserId(currentUserId.intValue());
                     friend1.setFriendId(targetApply.getSenderId());
                     friend1.setAlias(alias);
                     getUserFriendsService().create(friend1);
@@ -972,7 +972,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     // 2. Sender -> Me (no alias default)
                     UserFriendsCreateParam friend2 = new UserFriendsCreateParam();
                     friend2.setUserId(targetApply.getSenderId());
-                    friend2.setFriendId(Integer.valueOf(currentUserId.toString()));
+                    friend2.setFriendId(currentUserId.intValue());
                     friend2.setAlias(null); // 对方看我暂时没备注，或者可以用我的昵称
                     getUserFriendsService().create(friend2);
                 } else {
@@ -986,7 +986,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "处理成功", null);
         } catch (Exception e) {
             log.error("处理好友申请失败", e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, "处理失败: " + e.getMessage(),
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "处理失败，请稍后重试",
                     UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
@@ -1001,9 +1001,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(),
                     DirectoryFrame.ErrorCode.DIR_ROOT_NOT_EXIST);
         } catch (RuntimeException e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);
+            log.error("目录操作系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "操作失败，请稍后重试", DirectoryFrame.ErrorCode.FS_ERROR);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DB_ERROR);
+            log.error("目录操作系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "操作失败，请稍后重试", DirectoryFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -1019,9 +1021,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(),
                     DirectoryFrame.ErrorCode.DIR_NAME_TOO_LONG);
         } catch (RuntimeException e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);
+            log.error("创建目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "创建目录失败，请稍后重试", DirectoryFrame.ErrorCode.FS_ERROR);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DB_ERROR);
+            log.error("创建目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "创建目录失败，请稍后重试", DirectoryFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -1038,9 +1042,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DIR_NOT_FOUND);
         } catch (RuntimeException e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);
+            log.error("删除目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "删除目录失败，请稍后重试", DirectoryFrame.ErrorCode.FS_ERROR);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DB_ERROR);
+            log.error("删除目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "删除目录失败，请稍后重试", DirectoryFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -1057,9 +1063,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     : (e.getMessage().contains("顶层目录") ? DirectoryFrame.ErrorCode.DIR_ROOT_NOT_ALLOW_UPDATE : DirectoryFrame.ErrorCode.DIR_NAME_TOO_LONG);
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), errorCode);
         } catch (RuntimeException e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);
+            log.error("更新目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "更新目录失败，请稍后重试", DirectoryFrame.ErrorCode.FS_ERROR);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DB_ERROR);
+            log.error("更新目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "更新目录失败，请稍后重试", DirectoryFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -1074,9 +1082,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.PARENT_NOT_DIR);
         } catch (RuntimeException e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.FS_ERROR);
+            log.error("移动目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "移动目录失败，请稍后重试", DirectoryFrame.ErrorCode.FS_ERROR);
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(), DirectoryFrame.ErrorCode.DB_ERROR);
+            log.error("移动目录系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "移动目录失败，请稍后重试", DirectoryFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -1085,7 +1095,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleFileList(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Integer userId = Integer.valueOf(String.valueOf(context.getUserDTO().getId()));
+            Integer userId = context.getUserDTO().getId().intValue();
             Long dirId = request.getLong("dirId"); // 所选择的目录id(目录树上点击的目录Id、目录下拉树中选择目录Id)
             String fileName = request.getString("fileName"); //
             int pageNum = request.getIntValue("pageNum");
@@ -1114,7 +1124,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "INVALID_REQUEST");
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "DB_ERROR");
+            log.error("查询文件列表系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "查询失败，请稍后重试", "DB_ERROR");
         }
     }
 
@@ -1128,7 +1139,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "FILE_NOT_FOUND");
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "DB_ERROR");
+            log.error("查询文件详情系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "查询失败，请稍后重试", "DB_ERROR");
         }
     }
 
@@ -1143,9 +1155,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "FILE_NOT_FOUND");
         } catch (RuntimeException e) {
-            sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "FS_ERROR");
+            log.error("删除文件系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "删除文件失败，请稍后重试", "FS_ERROR");
         } catch (Exception e) {
-            sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "DB_ERROR");
+            log.error("删除文件系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "删除文件失败，请稍后重试", "DB_ERROR");
         }
     }
 
@@ -1171,6 +1185,18 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         response.put("errorCode", errorCode);
         sendFrame(context, responseType, response);
         log.warn("发送错误响应: errorCode={}, message={}", errorCode, message);
+    }
+
+    /**
+     * 连接断开时清理该连接对应的帧解析器，防止内存泄露
+     *
+     * @param remoteAddress 客户端远程地址
+     */
+    public static void cleanupConnection(String remoteAddress) {
+        if (remoteAddress != null) {
+            parserMap.remove(remoteAddress);
+            log.debug("TextTransmissionHandler: 清理帧解析器, remoteAddress={}", remoteAddress);
+        }
     }
 
     private void sendFrame(SocketChannelContext context, FrameType type, JSONObject data) {

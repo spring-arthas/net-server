@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Collectors;
 
 /**
  * 用户服务
@@ -245,5 +246,19 @@ public class UserServiceImpl implements UserService {
         List<UserDTO> userDTOList = Lists.newArrayList();
         userDoList.stream().forEach(userDo -> userDTOList.add(this.doToDto(userDo)));
         return userDTOList;
+    }
+
+    @Override
+    public Map<Long, UserDTO> listByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<UserDo> doList = this.userRepository.listByIds(ids);
+        if (doList == null || doList.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return doList.stream()
+                .map(this::doToDto)
+                .collect(Collectors.toMap(UserDTO::getId, dto -> dto));
     }
 }

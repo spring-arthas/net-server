@@ -6,6 +6,7 @@ import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 用户服务
@@ -81,4 +82,12 @@ public interface UserService {
     List<UserDTO> getUserListByName(UserQueryParam userQueryParam);
 
     UserDTO getById(Long id);
+
+    /**
+     * 根据 ID 列表批量查询用户
+     *
+     * @param ids 用户 ID 列表
+     * @return Map，key 为用户 ID，value 为用户信息
+     */
+    Map<Long, UserDTO> listByIds(List<Long> ids);
 }
