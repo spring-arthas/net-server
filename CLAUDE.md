@@ -1,295 +1,132 @@
-# Claude 研发助理配置
-> 适用项目：Java Spring Boot
-> 开发工具：IntelliJ IDEA / VSCode + Claude Code 插件 / Antigravity
-> 当前已配置 Skill：场景1（PR描述）、场景2（接口文档）
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
-## 场景1：PR 描述生成
+# 一、项目介绍
 
-当我描述了代码改动、或粘贴了 git diff 内容时，
-按以下规则生成 PR 描述。
+本项目是基于 **Java 8 + Java NIO + Spring（XML配置）+ MyBatis** 开发的网盘服务端，实现了文件上传、下载、断点续传、目录管理、用户认证等功能，采用自实现的 Reactor 线程模型（非 Spring MVC，无 HTTP Controller 层）。
 
-### 输入类型判断
+## 核心技术栈
+- Java 8 + Java NIO（原生 Selector/Channel）
+- Spring（XML 配置，非 Spring Boot）+ MyBatis-Plus
+- Druid 连接池 + MySQL
+- Lombok + SLF4J/Log4j
+- Maven（maven-shade-plugin 打包为可执行 fat jar）
 
-| 类型 | 识别特征 | 处理方式 |
-|------|----------|----------|
-| 口语描述 | 自然语言，如"我改了XX，做了XX" | 从句子中提取文件名、改动类型、原因 |
-| git diff | 包含 `diff --git`、`@@`、`+/-` 开头的行 | 从 diff 行解析文件名和改动内容 |
-| 混合输入 | 既有 diff 又有口语补充说明 | 以口语说明为主，diff 作细节补充 |
+## 构建与运行
 
-**git diff 解析规则：**
-- 从 `diff --git a/路径/文件名` 提取文件名，去掉路径只保留文件名
-- `+` 开头的行 = 新增逻辑，从中推断"做了什么"
-- `-` 开头的行 = 删除逻辑，从中推断"改了什么原有逻辑"
-- 如果从 diff 无法推断改动原因，在输出末尾加 ⚠️ 提示补充
+```bash
+# 构建
+mvn clean package -DskipTests
 
-### 改动类型判断规则
-
-| 标签 | 判断标准 | Java 场景示例 |
-|------|----------|--------------|
-| `[Feat]` | 原来没有此能力，本次新增 | 新增接口、新增业务逻辑、新增校验 |
-| `[Fix]` | 原来行为是错的，本次修正 | 修复 NPE、修复逻辑漏洞、修复超时 |
-| `[Refactor]` | 行为不变，只改代码结构 | 抽取方法、重命名、拆分 Service |
-| `[Chore]` | 配置、依赖、构建相关 | 改 pom.xml、改 application.yml |
-| `[Docs]` | 只改了注释或文档 | 补充 Javadoc、改 README |
-
-### 输出模板（严格按此格式）
-
----
-**标题：** [类型] 简短描述（不超过50字，只用一个动词）
-
-## 📋 改动内容
-（条目式，每条一句话，动词开头）
-
-## 🎯 改动原因
-（为什么改，解决了什么问题）
-
-## 📁 涉及文件
-（只写文件名，不写完整路径）
-
-## ✅ 自测清单
-- [ ] 本地启动通过（Spring Boot 正常运行）
-- [ ] 相关接口/方法测试通过
-- [ ] 无明显性能影响
----
-
-### 语言规范
-
-- 全程中文，技术术语保留英文（NPE、Redis、MQ、DTO）
-- 标题只用一个动词：新增/修复/优化/移除/调整/重构
-- Java 类名、方法名保留原始大小写
-- 改动原因无法判断时，输出 ⚠️ 提示补充
-
-### 示例A：口语输入
-
-**输入：**
-帮我写PR，改了PetServiceImpl的petChange方法，
-加了升降级联动，之前更换宠物不触发升降级
-
-**输出：**
-
----
-**标题：** [Feat] PetServiceImpl.petChange 新增宠物更换后升降级联动
-
-## 📋 改动内容
-- `petChange()` 新增调用升降级计算服务
-- 旧宠物更换后自动触发升降级计算
-- 新宠物落库后自动执行升级操作
-
-## 🎯 改动原因
-原方法仅完成宠物替换，未联动升降级服务，状态无法自动同步
-
-## 📁 涉及文件
-- `PetServiceImpl.java`
-
-## ✅ 自测清单
-- [ ] 本地启动通过（Spring Boot 正常运行）
-- [ ] 相关接口/方法测试通过
-- [ ] 无明显性能影响
----
-
-### 示例B：git diff 输入
-
-**输入：**
-```diff
-diff --git a/src/main/java/com/example/OrderController.java b/src/...
-@@ -32,6 +32,10 @@ public class OrderController {
-     public Result createOrder(OrderDTO dto) {
-+        if (dto.getStock() <= 0) {
-+            return Result.fail("库存不足");
-+        }
-         orderService.create(dto);
-         return Result.ok();
-     }
-}
+# 运行（主类 com.alibaba.server.NetServer）
+java -jar target/net-server-1.0-SNAPSHOT.jar
 ```
 
-**输出：**
+> 无单元测试框架配置，无 `mvn test` 可用测试。
+
+## 配置文件
+
+- `src/main/resources/server.properties` — 所有运行时参数（端口、缓冲区大小、文件存储路径、限速参数等）
+- `src/main/resources/spring/applicationContext.xml` — Spring Bean / 数据源 / MyBatis / 事务配置
+- `src/main/resources/log4j.properties` / `logback-spring.xml` — 日志配置
+
+**关键配置项（server.properties）：**
+| 配置项 | 说明 |
+|---|---|
+| `SERVER.IP` | 服务端监听 IP |
+| `NIO.TEXT.PORT=10086` | 文本/聊天通道端口 |
+| `NIO.FILE.UPLOAD.PORT=10087` | 文件上传端口 |
+| `NIO.FILE.DOWNLOAD.PORT=10088` | 文件下载端口 |
+| `NIO.FILE.RESUME.UPLOAD.PORT=10089` | 断点续传上传端口 |
+| `NIO.FILE.RESUME.DOWNLOAD.PORT=10090` | 断点续传下载端口 |
+| `NIO.FILE.BASE.PATH.LINUX.MAC` | 文件实际存储根路径 |
+| `FILE.UPLOAD.PER.CONNECTION.RATE.BPS` | 单连接上传限速（字节/秒） |
+| `FILE.UPLOAD.GLOBAL.RATE.BPS` | 全局上传限速（字节/秒） |
 
 ---
-**标题：** [Feat] OrderController.createOrder 新增下单前库存校验
 
-## 📋 改动内容
-- `createOrder()` 方法新增库存数量前置校验
-- 库存不足时提前返回失败响应，阻断下单流程
+# 二、架构说明
 
-## 🎯 改动原因
-> ⚠️ 建议补充：此次加入库存校验的业务背景
+## 整体架构：多端口 Reactor 模型
 
-## 📁 涉及文件
-- `OrderController.java`
+每个功能对应一个独立端口，各端口运行独立的 Acceptor 线程 + Selector 线程：
 
-## ✅ 自测清单
-- [ ] 本地启动通过（Spring Boot 正常运行）
-- [ ] 接口联调通过
-- [ ] 无明显性能影响
----
-
----
-
-## 场景2：接口文档生成
-
-当我描述接口功能、或粘贴 Controller/DTO 代码时，
-帮我同时生成 JavaDoc 注释和 Markdown 接口文档两种格式。
-
-### 输入类型判断
-
-| 类型 | 识别特征 | 处理方式 |
-|------|----------|----------|
-| 口语描述 | 自然语言，如"有个XX接口，传XX，返回XX" | 推断补全字段，标注⚠️缺失项 |
-| Controller代码 | 包含 @PostMapping/@GetMapping 等注解 | 从注解和方法签名提取信息 |
-| DTO/VO代码 | 包含字段定义的 Java 类 | 逐字段生成说明表格 |
-| 混合输入 | 代码+口语补充 | 以口语说明为主，代码作补充 |
-
-### 推断补全规则
-
-口语输入时，按以下规则自动补全：
-
-**请求方式：**
-- 含"查询/获取/列表" → GET
-- 含"新增/创建/添加" → POST
-- 含"修改/更新/编辑" → PUT
-- 含"删除/移除" → DELETE
-- 明确说了方法 → 直接使用
-
-**响应结构（Spring Boot 标准）：**
-若未说明，默认：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {}
-}
+```
+NetServer.main()
+  └── NioServerContext.startupServerContext()
+        ├── TextTransmissionAcceptor      (port 10086) → MainTextSelector
+        ├── MainFileUploadAcceptor        (port 10087) → MainFileSelector
+        ├── MainFileDownloadAcceptor      (port 10088) → MainFileSelector
+        ├── ResumeUploadAcceptor          (port 10089) → MainFileSelector
+        └── ResumeDownloadAcceptor        (port 10090) → MainFileSelector
 ```
 
-**字段类型推断：**
-- XX的ID / XX编号 → Long
-- 名称/标题/描述 → String
-- 金额/价格 → BigDecimal
-- 时间/日期 → LocalDateTime
-- 是否XX / 状态 → Integer（0/1）
-- 列表/集合 → List<Object>
+**Acceptor**（`nio/acceptor/`）：监听端口，接受连接，将 SocketChannel 注册到对应 Selector。
 
-推断不确定时标注 `⚠️ 请确认类型` 或 `⚠️ 请补充字段含义`
+**Selector**（`nio/selector/`）：事件循环线程，轮询 I/O 事件，将事件封装为 `ChannelEventModel` 交给 `EventHandlerContext` 处理。
 
-### 输出格式（严格按此顺序输出两个部分）
+**EventHandlerContext**（`nio/handler/event/`）：根据事件类型（READ/WRITE）分发给对应的 `EventHandler`。具体处理器位于 `nio/handler/event/concret/`（`ReadEventHandler`、`WriteEventHandler`）。
 
----
-#### 📌 Part 1：JavaDoc 注释
-（粘贴到 Controller 方法上方，供 Easy Yapi 插件解析推送）
+**Pipeline**（`nio/handler/pipe/`）：每个 Channel 绑定一个 `ChannelPipeLine`（`DefaultChannelPipeLine`），Pipeline 上串联多个 `ChannelHandler`，实现协议解析、业务分发的责任链模式。
 
-```java
-/**
- * 接口名称
- * 接口功能简述
- *
- * @param 参数名 参数说明
- * @return 返回说明
- */
+**Worker 线程池**（`nio/handler/worker/`）：耗时业务逻辑在独立线程池中执行，不阻塞 Selector 线程。
+
+## 业务服务层（`nio/service/`）
+
+| 包 | 职责 |
+|---|---|
+| `service/api/` | `ChannelHandler` 接口 + `AbstractChannelHandler` 基类 |
+| `service/chat/` | 聊天消息处理 |
+| `service/file/` | 文件上传、下载、断点续传、目录操作核心逻辑 |
+| `service/ratelimit/` | 令牌桶限速器（`TokenBucketRateLimiter`） |
+
+## 持久层（`nio/repository/`）
+
+采用标准 MyBatis-Plus 三层结构，分 `user`、`file` 两大模块：
+
+```
+repository/{user,file}/
+  ├── mapper/           # MyBatis Mapper 接口
+  ├── dataobject/       # DO（数据库实体）
+  ├── repository/       # Repository 层（封装 Mapper，含 converter）
+  └── service/          # Service 层（含 param/dto/impl）
 ```
 
-#### 📌 Part 2：Markdown 接口文档
+## 核心模型（`nio/model/`）
 
-## 接口名称
+- `ChannelEventModel` — 封装一次 NIO 事件（channel、key、事件类型等）
+- `TransportDataModel` — 传输帧的数据模型
+- `SocketChannelContext` — 每个连接的上下文（绑定 Pipeline、状态等）
+- `file/FileUploadContext`、`file/FileDownloadContext` — 文件传输会话上下文，含断点续传 checkpoint
 
-**请求地址：** `请求方式 /路径`
-**Content-Type：** `application/json`
+## 客户端（`nio/client/`）
 
-### 请求参数
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| 字段名 | 类型 | 是/否 | 说明 |
-
-### 响应参数
-
-| 参数名 | 类型 | 说明 |
-|--------|------|------|
-| code | Integer | 状态码，200为成功 |
-| message | String | 提示信息 |
-| data | 类型 | 返回数据说明 |
-
-### 响应示例
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": 示例值
-}
-```
----
-
-### 语言规范
-
-- 接口名称用中文
-- 字段名保留英文原始命名（驼峰）
-- 路径用小写中划线，如 `/pet/change`
-- 说明列写清楚业务含义，不写"该字段"这种废话
-
-### 示例
-
-**输入：**
-有个宠物更换接口，POST请求，
-需要传用户ID和新宠物ID，返回是否成功
-
-**输出：**
-
----
-#### 📌 Part 1：JavaDoc 注释
-
-```java
-/**
- * 宠物更换
- * 用户更换当前宠物，更换后自动触发升降级计算
- *
- * @param userId   用户ID
- * @param newPetId 新宠物ID
- * @return 是否更换成功
- */
-```
-
-#### 📌 Part 2：Markdown 接口文档
-
-## 宠物更换
-
-**请求地址：** `POST /pet/change`
-**Content-Type：** `application/json`
-
-### 请求参数
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| userId | Long | 是 | 用户ID |
-| newPetId | Long | 是 | 新宠物ID |
-
-### 响应参数
-
-| 参数名 | 类型 | 说明 |
-|--------|------|------|
-| code | Integer | 状态码，200为成功 |
-| message | String | 提示信息 |
-| data | Boolean | true=更换成功，false=更换失败 |
-
-### 响应示例
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": true
-}
-```
----
+内置测试客户端：`UserAuthClient`、`FileUploadClient`、`FileDownloadClient`、`DirectoryClient`，可直接运行用于调试。
 
 ---
 
-## 项目基本信息
+# 三、代码规范（严格遵守）
 
-- 语言：Java 17+
-- 框架：Spring Boot
-- 构建：Maven
-- 架构：Service / Controller / Mapper 三层
-- 接口文档平台：Easy Yapi（IDEA 插件）→ YApi
-- 代码规范：驼峰命名，统一响应结构 {code, message, data}
+## 命名
+- 包名：小写点分隔
+- 类名：UpperCamelCase；方法名：lowerCamelCase 动词开头；常量：UPPER_SNAKE_CASE
+
+## 格式
+- 缩进 4 空格；大括号不换行（K&R）；行宽 ≤ 120 字符
+
+## 注释
+- Service 公有方法必须写 JavaDoc；复杂业务逻辑写行内注释；注释用中文
+
+## 异常与日志
+- 使用业务异常类，禁止裸 `Exception`；禁止空 catch 块；关键流程打印入参/出参/异常
+
+---
+
+# 四、沟通偏好
+
+- 简洁直接，优先给结论
+- 直接给可运行完整代码，不给片段
+- 禁止问
