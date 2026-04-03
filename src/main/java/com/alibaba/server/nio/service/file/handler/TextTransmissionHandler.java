@@ -34,6 +34,7 @@ import com.alibaba.server.nio.repository.user.service.dto.UserFriendApplyDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserFriendApplyCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserFriendApplyQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserFriendApplyUpdateParam;
+import com.alibaba.server.nio.repository.dynamic.service.UserDynamicService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -192,6 +193,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     break;
                 case USER_FRIEND_UPDATE_ALIAS_REQ: // 0x57
                     handleUserFriendUpdateAlias(frame, context);
+                    break;
+
+                // ========== 动态帧 ==========
+                case DYNAMIC_CREATE_REQ: // 0x60
+                    handleDynamicCreate(frame, context);
                     break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
@@ -1212,6 +1218,71 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             WriteQueueHelper.submitWrite(context, buffer);
         } catch (Exception e) {
             log.error("发送帧失败: type={}, error={}", type, ExceptionUtils.getStackTrace(e));
+        }
+    }
+
+    private UserDynamicService getUserDynamicService() {
+        return BasicServer.classPathXmlApplicationContext.getBean(UserDynamicService.class);
+    }
+
+    /**
+     * 处理新建动态请求
+     * 请求 JSON: { "content": "...", "imagePaths": "id1,id2,..." }
+     */
+    private void handleDynamicCreate(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "未登录，无法发布动态",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String content = request.getString("content");
+            String imagePaths = request.getString("imagePaths");
+
+            log.info("handleDynamicCreate, userId={}, contentLen={}, imagePaths={}",
+                    userId, content == null ? 0 : content.length(), imagePaths);
+
+            // 校验文字内容
+            if (org.apache.commons.lang.StringUtils.isBlank(content)) {
+                sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "动态内容不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+            if (content.length() > 500) {
+                sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "动态内容不能超过500个字符",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            // 校验图片数量
+            if (org.apache.commons.lang.StringUtils.isNotBlank(imagePaths)) {
+                String[] images = imagePaths.split(",");
+                if (images.length > 9) {
+                    sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "图片不能超过9张",
+                            UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                    return;
+                }
+            }
+
+            // 当前已在 WorkerThreadPool 线程中执行，直接同步调用 Service
+            Long dynamicId = getUserDynamicService().createDynamic(userId, content, imagePaths);
+            JSONObject responseData = new JSONObject();
+            responseData.put("dynamicId", dynamicId);
+            sendSuccessResponse(context, FrameType.DYNAMIC_RESPONSE, "发布动态成功", responseData);
+            log.info("handleDynamicCreate success, userId={}, dynamicId={}", userId, dynamicId);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("handleDynamicCreate 参数非法, userId={}, error={}",
+                    context.getAttribute("loggedInUserId"), e.getMessage());
+            sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
+        } catch (Exception e) {
+            log.error("handleDynamicCreate 系统异常, 帧数据={}, error={}", JSON.toJSONString(frame),
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "发布动态失败，请稍后重试", "DB_ERROR");
         }
     }
 }

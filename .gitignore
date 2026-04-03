@@ -29,3 +29,7 @@ nohup.out
 # Environment variables (do not commit)
 .env
 .env.local
+.trellis/.developer
+.trellis/.current-task
+.trellis/.current-task
+.trellis/workspace

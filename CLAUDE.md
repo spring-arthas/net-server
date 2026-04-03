@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # 一、项目介绍
 
-本项目是基于 **Java 8 + Java NIO + Spring（XML配置）+ MyBatis** 开发的网盘服务端，实现了文件上传、下载、断点续传、目录管理、用户认证等功能，采用自实现的 Reactor 线程模型（非 Spring MVC，无 HTTP Controller 层）。
+本项目是基于 **Java 8 + Java NIO + Spring（XML配置）+ MyBatis** 开发的云盘服务端，实现了文件上传、下载、断点续传、目录管理、用户认证等功能，采用自实现的 Reactor 线程模型（非 Spring MVC，无 HTTP Controller 层）。
 
 ## 核心技术栈
 - Java 8 + Java NIO（原生 Selector/Channel）
@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 mvn clean package -DskipTests
 
 # 运行（主类 com.alibaba.server.NetServer）
-java -jar target/net-server-1.0-SNAPSHOT.jar
+java -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=18181 -jar target/net-server-1.0-SNAPSHOT.jar
 ```
 
 > 无单元测试框架配置，无 `mvn test` 可用测试。
@@ -127,6 +127,7 @@ repository/{user,file}/
 
 # 四、沟通偏好
 
+- **所有回复必须使用中文**，包括 trellis slash commands 执行后的输出
 - 简洁直接，优先给结论
 - 直接给可运行完整代码，不给片段
 - 禁止问

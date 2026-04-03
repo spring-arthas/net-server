@@ -16,3 +16,14 @@ Use `@/.trellis/` to learn:
 Keep this managed block so 'trellis update' can refresh the instructions.
 
 <!-- TRELLIS:END -->
+
+## Codex CLI Compatibility
+
+For Codex CLI sessions, the Trellis workflow in this repository is supported via
+the local scripts under `.trellis/scripts/`.
+
+- Treat `/trellis:start` as `python3 ./.trellis/scripts/codex_start.py --scope backend`
+- If developer identity is missing, initialize it with `python3 ./.trellis/scripts/init_developer.py <name>`
+- Use `python3 ./.trellis/scripts/get_context.py` to inspect session context
+- Use `python3 ./.trellis/scripts/task.py` to manage Trellis tasks
+- Read `.trellis/spec/guides/codex-cli-trellis-guide.md` for command mapping details

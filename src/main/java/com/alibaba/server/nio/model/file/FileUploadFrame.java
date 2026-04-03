@@ -200,7 +200,18 @@ public class FileUploadFrame {
         /**
          * 更新好友别名回执
          */
-        USER_FRIEND_UPDATE_ALIAS_RESPONSE(0x58, "更新好友别名回执");
+        USER_FRIEND_UPDATE_ALIAS_RESPONSE(0x58, "更新好友别名回执"),
+
+        // ========== 动态帧 (0x60-0x6F) ==========
+        /**
+         * 新建动态请求
+         */
+        DYNAMIC_CREATE_REQ(0x60, "新建动态请求"),
+
+        /**
+         * 动态操作响应
+         */
+        DYNAMIC_RESPONSE(0x61, "动态操作响应");
 
         private final int code;
         private final String description;
