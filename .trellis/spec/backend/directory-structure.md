@@ -118,3 +118,17 @@ src/main/resources/
 ├── log4j.properties            # 日志配置
 └── logback-spring.xml          # 日志配置（备用）
 ```
+
+**关键配置项（server.properties）：**
+
+| 配置项 | 说明 |
+|---|---|
+| `SERVER.IP` | 服务端监听 IP |
+| `NIO.TEXT.PORT=10086` | 文本/聊天通道端口 |
+| `NIO.FILE.UPLOAD.PORT=10087` | 文件上传端口 |
+| `NIO.FILE.DOWNLOAD.PORT=10088` | 文件下载端口 |
+| `NIO.FILE.RESUME.UPLOAD.PORT=10089` | 断点续传上传端口 |
+| `NIO.FILE.RESUME.DOWNLOAD.PORT=10090` | 断点续传下载端口 |
+| `NIO.FILE.BASE.PATH.LINUX.MAC` | 文件实际存储根路径 |
+| `FILE.UPLOAD.PER.CONNECTION.RATE.BPS` | 单连接上传限速（字节/秒） |
+| `FILE.UPLOAD.GLOBAL.RATE.BPS` | 全局上传限速（字节/秒） |

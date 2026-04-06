@@ -180,6 +180,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case FILE_DETAIL_REQ:
                     handleFileDetail(frame, context);
                     break;
+                case FILE_RENAME_REQ:
+                    handleFileRename(frame, context);
+                    break;
 
                 // ========== 聊天消息帧 ==========
                 case CHAT_MSG_SEND_REQ: // 0x50
@@ -1144,6 +1147,36 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("查询文件详情系统异常", e);
             sendErrorResponse(context, FrameType.FILE_RESPONSE, "查询失败，请稍后重试", "DB_ERROR");
+        }
+    }
+
+    private void handleFileRename(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            if (context.getUserDTO() == null) {
+                sendErrorResponse(context, FrameType.FILE_RESPONSE, "未登录，无法修改文件名", "NOT_LOGGED_IN");
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Long fileId = request.getLong("fileId");
+            String newFileName = request.getString("newFileName");
+
+            if (fileId == null || org.apache.commons.lang.StringUtils.isBlank(newFileName)) {
+                sendErrorResponse(context, FrameType.FILE_RESPONSE, "fileId 和 newFileName 不能为空", "INVALID_REQUEST");
+                return;
+            }
+
+            FileDto result = getFileService().renameFile(fileId, newFileName);
+            sendSuccessResponse(context, FrameType.FILE_RESPONSE, "文件重命名成功", result);
+            log.info("文件重命名成功: fileId={}, newFileName={}", fileId, newFileName);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "FILE_NOT_FOUND");
+        } catch (RuntimeException e) {
+            log.error("文件重命名文件系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "文件重命名失败，请稍后重试", "FS_ERROR");
+        } catch (Exception e) {
+            log.error("文件重命名系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "文件重命名失败，请稍后重试", "DB_ERROR");
         }
     }
 

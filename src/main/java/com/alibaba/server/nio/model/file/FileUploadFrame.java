@@ -158,6 +158,10 @@ public class FileUploadFrame {
          * 文件操作响应
          */
         FILE_RESPONSE(0x43, "文件操作响应"),
+        /**
+         * 文件重命名请求
+         */
+        FILE_RENAME_REQ(0x44, "文件重命名请求"),
 
         // ========== 聊天消息帧 (0x50-0x5F) ==========
         /**

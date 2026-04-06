@@ -10,6 +10,12 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 ---
 
+## 项目简介
+
+本项目是基于 **Java 8 + Java NIO + Spring（XML配置）+ MyBatis** 开发的云盘服务端，实现了文件上传、下载、断点续传、目录管理、用户认证等功能，采用自实现的 Reactor 线程模型（非 Spring MVC，无 HTTP Controller 层）。
+
+---
+
 ## 技术栈概览
 
 - Java 8 + Java NIO（原生 Selector/Channel）

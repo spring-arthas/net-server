@@ -9,6 +9,9 @@
 ```bash
 # 构建（无测试框架，跳过测试）
 mvn clean package -DskipTests
+
+# 运行（主类 com.alibaba.server.NetServer，含远程调试端口 18181）
+java -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=18181 -jar target/net-server-1.0-SNAPSHOT.jar
 ```
 
 > 无 `mvn test` 可用测试。提交前须手动验证核心流程。

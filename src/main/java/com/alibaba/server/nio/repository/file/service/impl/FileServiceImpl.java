@@ -897,6 +897,57 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    public FileDto renameFile(Long fileId, String newFileName) {
+        log.info("重命名文件，入参: fileId={}, newFileName={}", fileId, newFileName);
+        if (fileId == null) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        if (StringUtils.isBlank(newFileName)) {
+            throw new IllegalArgumentException("新文件名不能为空");
+        }
+
+        try {
+            FileDo fileDo = this.fileRepository.get(fileId);
+            if (fileDo == null) {
+                throw new IllegalArgumentException("文件不存在");
+            }
+            if (!YesOrNoEnum.Y.name().equals(fileDo.getIsFile())) {
+                throw new IllegalArgumentException("只能对文件进行重命名，不支持目录");
+            }
+
+            // 同名校验：DB 中同一目录下是否已存在同名文件（排除自身）
+            FileDalQueryParam sameNameCheck = new FileDalQueryParam();
+            sameNameCheck.setParentId(fileDo.getParentId());
+            sameNameCheck.setFileName(newFileName);
+            sameNameCheck.setIsFile(YesOrNoEnum.Y.name());
+            sameNameCheck.setDel(YesOrNoEnum.N.name());
+            List<FileDo> sameNameList = this.fileRepository.getAssignFiles(sameNameCheck);
+            boolean dbConflict = !CollectionUtils.isEmpty(sameNameList)
+                    && sameNameList.stream().anyMatch(f -> !f.getId().equals(fileId));
+            if (dbConflict) {
+                throw new IllegalArgumentException("该目录下已存在同名文件: " + newFileName);
+            }
+
+            // 只更新 DB 展示名称，filePath 保持不变
+            // 物理文件名含唯一 taskId 前缀，不执行文件系统重命名，确保删除操作始终能通过 filePath 定位物理文件
+            FileDo updateDo = new FileDo();
+            updateDo.setId(fileId);
+            updateDo.setFileName(newFileName);
+            updateDo.setGmtModified(new Date());
+            this.fileRepository.updateSelective(updateDo);
+
+            log.info("重命名文件成功: fileId={}, oldName={}, newName={}", fileId, fileDo.getFileName(), newFileName);
+            return getFileDetail(fileId);
+        } catch (IllegalArgumentException e) {
+            log.warn("重命名文件参数校验失败，fileId={}, newFileName={}, 原因: {}", fileId, newFileName, e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            log.error("重命名文件失败，fileId={}, newFileName={}, 原因: {}", fileId, newFileName, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Override
     public String validateDirectory(Long dirId) {
         if (dirId == null) {
             return null;
