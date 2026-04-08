@@ -137,3 +137,10 @@ log.error("操作失败，userId={}, 原因：{}", userId, e.getMessage(), e);
 // 错误：只打印 message，丢失堆栈
 log.error("操作失败：" + e.getMessage());
 ```
+
+
+## Java Rules Overlay - Logging and Sensitive Data
+
+- 日志中禁止输出密码、token、密钥、完整个人敏感信息；必要时仅打印脱敏标识与主键。
+- 错误日志最少包含：方法/链路名、关键业务 ID、失败原因；可定位优先于“仅一句失败”。
+- 远程调用失败需记录：接口名、请求摘要、返回码/异常摘要；但不得落库敏感载荷全文。

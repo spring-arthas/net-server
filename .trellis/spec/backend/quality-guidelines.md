@@ -170,3 +170,12 @@ perf(TextTransmissionHandler): 优化好友列表N+1查询
 - [ ] 未在 Selector 线程执行耗时操作
 - [ ] Service 层未直接调用 Mapper
 - [ ] 行宽 ≤ 120 字符，缩进 4 空格
+
+
+## Java Rules Overlay - Coding Style and Patterns
+
+- 值对象优先使用 `record`（JDK 16+）；字段默认 `final`，公开集合返回防御性拷贝（`List.copyOf` / `Map.copyOf`）。
+- Service/Repository 坚持分层：Controller 只做入参和出参边界，业务编排放 Service，持久化细节封装在 Repository/DAO。
+- 依赖注入优先构造器注入，禁止字段注入（如 `@Autowired` 字段注入）。
+- `Optional` 仅用于返回值，禁止作为字段或方法入参；禁止无判空直接 `get()`。
+- Stream 管道保持短小（建议不超过 3-4 步），复杂逻辑优先显式循环，避免可读性下降。

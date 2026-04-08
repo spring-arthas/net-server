@@ -137,3 +137,10 @@ workerExecutor.submit(() -> {
 | `DirectoryClient` | 测试目录操作 |
 
 这些客户端**仅用于调试**，不参与生产逻辑。
+
+
+## Java Rules Overlay - API Envelope
+
+- 建议统一响应包裹结构（如 `success/data/error`），减少多端分支判断成本。
+- DTO 映射放在边界层（Controller/Service 出口），避免内部领域对象直接透传到 API 层。
+- 错误信息对外保持通用、可读，不暴露内部实现细节；详细信息保留在服务端日志。

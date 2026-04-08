@@ -160,6 +160,8 @@ public class AbstractAcceptor {
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
         socketChannelContext.getChannelPipeLine().addHandler(
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRangePullHandler()); // Pull-Range 在线流处理器
+        socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
         return socketChannelContext;
     }

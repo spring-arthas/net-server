@@ -126,3 +126,11 @@ channelContext.closeChannel();
 - 将底层 `IOException` 直接暴露给业务层
 - 在 Selector 线程内抛出未捕获异常（导致整个 Selector 崩溃）
 - 异常信息不带上下文（如 fileId、userId），导致排查困难
+
+
+## Java Rules Overlay - Exception Strategy
+
+- 领域异常优先使用自定义 `RuntimeException`（带关键业务上下文），避免到处传播通用异常。
+- 禁止宽泛 `catch (Exception e)`（除顶层兜底）；禁止吞异常或只记录“失败”而不带主键上下文。
+- 对外错误响应禁止泄漏堆栈、SQL 细节、内部路径；内部日志保留完整异常堆栈用于排查。
+- 需要返回可空结果时优先 `Optional.orElseThrow(...)` 或显式分支，避免“空值继续流转”。

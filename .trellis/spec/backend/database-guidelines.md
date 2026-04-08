@@ -165,3 +165,11 @@ public void moveFile(FileMoveParam param) {
 - DO 类中写业务方法
 - 事务方法内 catch 异常后不重新抛出（导致事务不回滚）
 - 未使用批量操作处理大数据集（应使用 `insertBatchSomeColumn` 或分批处理）
+
+
+## Java Rules Overlay - Database and Security
+
+- 严禁字符串拼接 SQL；必须使用参数化查询（`PreparedStatement` / MyBatis 参数绑定 / 框架参数化 API）。
+- 所有边界输入先校验再入库：必填、长度、枚举取值、数值范围；校验失败返回可读错误，不写脏数据。
+- 多表联动写入必须显式事务边界；批量写入优先批处理，禁止可批量场景下循环逐条写库。
+- 定期执行依赖安全扫描（如 OWASP Dependency-Check / Snyk）并修复高危漏洞。

@@ -78,7 +78,7 @@ public class WriteQueueHelper {
 
                 // 2. 队列空了，尝试直接写入新数据
                 int written = socketChannel.write(buffer);
-                log.debug("直接写入: {} 字节", written);
+                //log.debug("直接写入: {} 字节", written);
 
                 // 3. 如果没写完，加入队列并注册 OP_WRITE
                 if (buffer.hasRemaining()) {

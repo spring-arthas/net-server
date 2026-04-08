@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.service.file.task;
 
 import com.alibaba.server.nio.service.file.handler.FileDownloadHandler;
+import com.alibaba.server.nio.service.file.handler.FileRangePullHandler;
 import com.alibaba.server.nio.service.file.handler.FileUploadHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,6 +24,9 @@ public class FileTransferTaskCleaner {
 
             // Clean downloads
             FileDownloadHandler.checkAndFreezeIdleTasks(IDLE_THRESHOLD);
+
+            // Clean pull-range sessions
+            FileRangePullHandler.checkAndFreezeIdleTasks(IDLE_THRESHOLD);
         } catch (Exception e) {
             log.error("文件传输任务清理失败", e);
         }
