@@ -661,19 +661,20 @@ public class FileUploadHandler extends AbstractChannelHandler {
             // 3. 发送完成 ACK 文件结束上传，uploadContext内部已经设置了fileId和taskId
             uploadContext.setFileId(fileDo.getId());
             sendAckFrame(socketChannelContext, uploadContext, "success", null);
-            log.info("=> 文件上传完成: taskId={}, fileName={}, size={}, 耗时={}ms",
-                    uploadContext.getRemoteAddress(),
-                    uploadContext.getFileName(),
-                    uploadContext.getBytesWritten(),
-                    System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
-                            .toInstant().toEpochMilli());
-            // 3.5 删除断点记录（上传完成）
+            // 4. 删除断点记录（上传完成）
             if (StringUtils.isNotBlank(uploadContext.getMd5())) {
                 CheckpointManager.removeCheckpoint(uploadContext.getMd5());
                 log.debug("上传完成，删除断点记录: MD5={}", uploadContext.getMd5());
             }
-            // 4. 释放资源
+            // 5. 释放资源
             this.realeaseResource(uploadContext, socketChannelContext);
+            log.info("=> 文件上传完成，当前上传任务所有资源均已释放完毕: taskId={}, fileId={}, fileName={}, size={}, 耗时={}ms",
+                uploadContext.getRemoteAddress(),
+                uploadContext.getFileId(),
+                uploadContext.getFileName(),
+                uploadContext.getBytesWritten(),
+                System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
+                        .toInstant().toEpochMilli());
             // 5. 终止后续 Handler
             simpleChannelContext.setNeedStop(Boolean.TRUE);
         } catch (Exception e) {
