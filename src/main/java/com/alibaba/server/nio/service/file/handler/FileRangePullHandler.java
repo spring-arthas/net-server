@@ -3,6 +3,7 @@ package com.alibaba.server.nio.service.file.handler;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.server.nio.core.server.BasicServer;
+import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.handler.event.concret.WriteQueueHelper;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
@@ -16,7 +17,12 @@ import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.file.adaptive.AdaptiveThrottlePolicy;
+import com.alibaba.server.nio.service.file.adaptive.ServerResourceMonitor;
 import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
+import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
+import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
+import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 
@@ -152,9 +158,22 @@ public class FileRangePullHandler extends AbstractChannelHandler {
             sendAckError(socketChannelContext, taskId, requestId, 40410, "file not found");
             return;
         }
+        TransferTokenService.ValidationResult identity = TransferTokenFactory.getInstance()
+                .validateToken(request.getString("transferToken"));
+        if (!identity.isValid()) {
+            sendAckError(socketChannelContext, taskId, requestId, 40310, identity.getMessage());
+            return;
+        }
+        try {
+            new FileTransferAccessAuthorizer().requireDownloadAccess(fileDto, identity);
+        } catch (SecurityException e) {
+            sendAckError(socketChannelContext, taskId, requestId, 40310, e.getMessage());
+            return;
+        }
         // 查询文件是否在文件系统存在
-        File file = new File(fileDto.getFilePath());
-        if (!file.exists() || !file.isFile()) {
+        String storageRoot = String.valueOf(BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC));
+        File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
+        if (file == null || !file.exists() || !file.isFile()) {
             sendAckError(socketChannelContext, taskId, requestId, 40410, "file not found");
             return;
         }
@@ -180,6 +199,17 @@ public class FileRangePullHandler extends AbstractChannelHandler {
             sendEndSuccess(socketChannelContext, taskId, requestId, startOffset + session.getWindowSentBytes(),
                     session.getWindowSentBytes(), startOffset + session.getWindowSentBytes() >= fileSize);
             session.touch();
+            return;
+        }
+
+        // [修改] 自适应并发上限检查：拉流为随机读，对磁盘 IO 损耗最重，优先收紧
+        int adaptiveMax = AdaptiveThrottlePolicy.rangePullMaxConcurrent();
+        int currentStreams = 5 - STREAM_SEMAPHORE.availablePermits();
+        if (currentStreams >= adaptiveMax) {
+            log.warn("拉流并发已达自适应上限: current={}/{}, 压力等级={}",
+                    currentStreams, adaptiveMax, ServerResourceMonitor.getInstance().getCurrentLevel());
+            sendAckError(socketChannelContext, taskId, requestId, 42910,
+                    "server busy, pressure=" + ServerResourceMonitor.getInstance().getCurrentLevel());
             return;
         }
 

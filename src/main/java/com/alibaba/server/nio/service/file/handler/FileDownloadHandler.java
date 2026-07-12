@@ -3,6 +3,7 @@ package com.alibaba.server.nio.service.file.handler;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.server.nio.core.server.BasicServer;
+import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.concret.WriteQueueHelper;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
@@ -21,7 +22,12 @@ import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.common.FileTaskStatusEnum;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.file.adaptive.AdaptiveThrottlePolicy;
+import com.alibaba.server.nio.service.file.adaptive.ServerResourceMonitor;
 import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
+import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
+import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
+import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -179,8 +185,6 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             Long fileId = request.getLong("fileId");
             // 客户端生成的任务ID，用于标识本次下载会话
             String taskId = request.getString("taskId");
-            // 起始偏移量（断点续传）
-            long startOffset = request.getLongValue("startOffset");
             log.info("【接收到客户端文件传输请求】入参 = {}", jsonData);
             if (org.apache.commons.lang.StringUtils.isBlank(taskId)) {
                 sendErrorFrame(socketChannelContext, "taskId不能为空");
@@ -195,13 +199,24 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 sendErrorFrame(socketChannelContext, "文件不存在");
                 return;
             }
-            // 3. 校验文件系统中文件是否存在
-            File file = new File(fileDto.getFilePath());
-            if (!file.exists() || !file.isFile()) {
+            TransferTokenService.ValidationResult identity = TransferTokenFactory.getInstance()
+                    .validateToken(request.getString("transferToken"));
+            if (!identity.isValid()) {
+                sendErrorFrame(socketChannelContext, taskId, identity.getMessage());
+                return;
+            }
+            new FileTransferAccessAuthorizer().requireDownloadAccess(fileDto, identity);
+
+            // 3. 路径只能由数据库记录和服务端存储根目录解析，不能信任客户端路径
+            String storageRoot = String.valueOf(BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC));
+            File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
+            if (file == null || !file.exists() || !file.isFile()) {
                 log.warn("文件系统中文件不存在: path={}", fileDto.getFilePath());
                 sendErrorFrame(socketChannelContext, "文件不存在");
                 return;
             }
+            DownloadTransferSpec transferSpec = DownloadTransferSpec.from(request, file.length());
+            long startOffset = transferSpec.getStartOffset();
             // 4. 创建/更新上下文
             FileDownloadContext context = new FileDownloadContext();
             context.setTaskId(taskId);
@@ -211,6 +226,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             context.setFileSize(file.length());
             context.setStartOffset(startOffset);
             context.setCurrentOffset(startOffset); // 从指定位置开始
+            context.setTransferLength(transferSpec.getTransferLength());
+            context.setEndOffset(startOffset + transferSpec.getTransferLength());
             context.setRemoteAddress(socketChannelContext.getRemoteAddress());
 
             // 5. 当前传输任务放入缓存
@@ -224,6 +241,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             fileInfo.put("fileType", fileDto.getFileType());
             fileInfo.put("taskId", taskId); // 回传taskId
             fileInfo.put("startOffset", startOffset); // 确认起始位置
+            fileInfo.put("length", transferSpec.getTransferLength());
             sendFrame(socketChannelContext, FrameType.ACK_FRAME, fileInfo.toJSONString());
 
             log.info("【接收到客户端文件传输请求】服务端已成功确认文件合法性: fileName={}, size={}, startOffset={}",
@@ -267,6 +285,18 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             }
             log.info("【接收到客户端文件传输请求确认】服务端即将开始传输流数据: fileName={}, 传输起始偏移={}",
                 context.getFileName(), context.getCurrentOffset());
+
+            // [修改] 自适应并发上限检查：资源压力高时提前拒绝，不占用 Semaphore 配额
+            int adaptiveMax = AdaptiveThrottlePolicy.downloadMaxConcurrent();
+            int currentDownloads = 5 - DOWNLOAD_SEMAPHORE.availablePermits();
+            if (currentDownloads >= adaptiveMax) {
+                log.warn("下载并发已达自适应上限: current={}/{}, 压力等级={}",
+                        currentDownloads, adaptiveMax, ServerResourceMonitor.getInstance().getCurrentLevel());
+                sendErrorFrame(socketChannelContext, "服务器繁忙，请稍后重试");
+                contextMap.remove(taskId);
+                closeConnection(socketChannelContext, simpleChannelContext);
+                return;
+            }
 
             // 3. 获取下载许可（限制并发下载数）
             boolean acquired = false;
@@ -401,6 +431,9 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             endJson.put("status", "success");
             endJson.put("totalBytes", context.getFileSize());
             endJson.put("taskId", context.getTaskId());
+            endJson.put("sentBytes", context.getCurrentOffset() - context.getStartOffset());
+            endJson.put("endOffset", context.getCurrentOffset());
+            endJson.put("fileSize", context.getFileSize());
             sendFrame(socketChannelContext, FrameType.END_FRAME, endJson.toJSONString());
             // 等待 END_FRAME 发送完成
             WriteQueueHelper.waitForQueueDrain(socketChannelContext, 10000); // 10秒无进展超时
@@ -457,9 +490,14 @@ public class FileDownloadHandler extends AbstractChannelHandler {
      * 发送错误帧
      */
     private void sendErrorFrame(SocketChannelContext socketChannelContext, String message) throws IOException {
+        sendErrorFrame(socketChannelContext, null, message);
+    }
+
+    private void sendErrorFrame(SocketChannelContext socketChannelContext, String taskId, String message) throws IOException {
         JSONObject errorJson = new JSONObject();
         errorJson.put("status", "error");
         errorJson.put("message", message);
+        errorJson.put("taskId", taskId);
         sendFrame(socketChannelContext, FrameType.ACK_FRAME, errorJson.toJSONString());
     }
 

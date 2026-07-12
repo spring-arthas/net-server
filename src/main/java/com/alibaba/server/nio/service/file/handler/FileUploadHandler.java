@@ -22,9 +22,14 @@ import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
+import com.alibaba.server.nio.service.file.adaptive.AdaptiveThrottlePolicy;
+import com.alibaba.server.nio.service.file.adaptive.ResourcePressureLevel;
+import com.alibaba.server.nio.service.file.adaptive.ServerResourceMonitor;
 import com.alibaba.server.nio.service.file.checkpoint.CheckpointManager;
 import com.alibaba.server.nio.service.file.config.FileUploadConfig;
 import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
+import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
+import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -211,6 +216,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
                 return;
             }
+            applyAuthenticatedIdentity(fileUploadRequest);
             log.info("=> 接收到断点检查帧: 入参信息={}", JSON.toJSONString(fileUploadRequest));
 
             // 2. 检查是否有断点记录
@@ -371,9 +377,28 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setBasePath(dirPath);
         }
         // 7. 获取并发许可
+        // [修改] 自适应并发上限检查：资源压力高时提前拒绝，保护 CPU/磁盘/内存
+        int adaptiveMax = AdaptiveThrottlePolicy.uploadMaxConcurrent();
+        int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
+        if (currentUploads >= adaptiveMax) {
+            ResourcePressureLevel pressureLevel = ServerResourceMonitor.getInstance().getCurrentLevel();
+            log.warn("上传并发已达自适应上限: current={}/{}, 压力等级={}", currentUploads, adaptiveMax, pressureLevel);
+            if (Objects.nonNull(fileTaskId)) {
+                try {
+                    FileTaskDto fileTaskDto = new FileTaskDto();
+                    fileTaskDto.setId(fileTaskId);
+                    fileTaskDto.setDel(YesOrNoEnum.Y.name());
+                    fileTaskDto.setGmtModified(new Date());
+                    fileTaskService.update(fileTaskDto);
+                } catch (Exception e) {
+                    log.error("自适应拒绝时删除数据库记录失败", e);
+                }
+            }
+            return null;
+        }
         if (!uploadSemaphore.tryAcquire()) {
-            int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
-            log.warn("上传并发数已达上限: 当前并发={}/{}", currentUploads, config.getMaxConcurrentUploads());
+            currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
+            log.warn("上传并发数已达配置上限: 当前并发={}/{}", currentUploads, config.getMaxConcurrentUploads());
             // 删除刚创建的数据库记录（如果有）
             if (Objects.nonNull(fileTaskId)) {
                 try {
@@ -415,9 +440,12 @@ public class FileUploadHandler extends AbstractChannelHandler {
         // 10. 设置限流器
         long rateLimitBps = config.getPerConnectionRateBps();
         if (config.isEnableDynamicRateAdjustment()) {
-            int currentUploads = uploadContextMap.size();
+            currentUploads = uploadContextMap.size();
             rateLimitBps = config.calculateDynamicRate(currentUploads);
         }
+        // [修改] 在原有速率基础上叠加资源压力系数，不替换原有动态调整逻辑
+        double rateMultiplier = AdaptiveThrottlePolicy.uploadRateMultiplier();
+        rateLimitBps = (long) (rateLimitBps * rateMultiplier);
         socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
                 rateLimitBps,
                 rateLimitBps * config.getBucketCapacityMultiplier()));
@@ -445,6 +473,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             // 1. 解析 JSON 元数据
             String jsonData = frame.getDataAsString();
             FileUploadRequest fileUploadRequest = JSONObject.parseObject(jsonData, FileUploadRequest.class);
+            applyAuthenticatedIdentity(fileUploadRequest);
             log.info("=> 文件上传接收到元数据帧: 入参数据={}", JSON.toJSONString(fileUploadRequest));
             // 2. 使用通用方法创建上传上下文（全新上传模式，isResume=false）
             FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest, socketChannelContext,
@@ -749,7 +778,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
     private void sendResumeAck(SocketChannelContext ctx, FileUploadContext uploadContext,
             String status, long uploadedSize, String message) throws IOException {
         JSONObject ackJson = new JSONObject();
-        ackJson.put("taskId", uploadContext.getRequestTaskId());
+        // [修改] uploadContext 为 null 时（压力拒绝场景）安全取值，避免 NPE
+        ackJson.put("taskId", uploadContext != null ? uploadContext.getRequestTaskId() : null);
         // 文件Id在断点应答帧先不传
         // ackJson.put("fileId", uploadContext.getFileId());
         ackJson.put("status", status);
@@ -785,8 +815,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
             // 构建 ACK 响应 JSON
             JSONObject ackJson = new JSONObject();
-            ackJson.put("taskId", uploadContext.getRequestTaskId());
-            ackJson.put("fileId", uploadContext.getFileId());
+            // [修改] uploadContext 为 null 时（压力拒绝场景）安全取值，避免 NPE
+            ackJson.put("taskId", uploadContext != null ? uploadContext.getRequestTaskId() : null);
+            ackJson.put("fileId",  uploadContext != null ? uploadContext.getFileId() : null);
             ackJson.put("status", status);
             if (StringUtils.isNotBlank(message)) {
                 ackJson.put("message", message);
@@ -956,5 +987,25 @@ public class FileUploadHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("清理上下文失败: taskId={}", ctx.getRequestTaskId(), e);
         }
+    }
+
+    private void applyAuthenticatedIdentity(FileUploadRequest request) {
+        if (request == null) {
+            throw new SecurityException("上传请求不能为空");
+        }
+        TransferTokenService.ValidationResult identity = TransferTokenFactory.getInstance()
+                .validateToken(request.getTransferToken());
+        if (!identity.isValid()) {
+            throw new SecurityException(identity.getMessage());
+        }
+        if (request.getUserId() != null && !identity.getUserId().equals(request.getUserId().longValue())) {
+            throw new SecurityException("上传用户身份不一致");
+        }
+        if (StringUtils.isNotBlank(request.getUserName())
+                && !StringUtils.equals(identity.getUserName(), request.getUserName())) {
+            throw new SecurityException("上传用户身份不一致");
+        }
+        request.setUserId(identity.getUserId().intValue());
+        request.setUserName(identity.getUserName());
     }
 }

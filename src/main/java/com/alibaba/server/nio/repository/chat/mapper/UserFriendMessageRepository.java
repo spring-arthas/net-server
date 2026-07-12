@@ -32,4 +32,10 @@ public interface UserFriendMessageRepository
 
         @Update("UPDATE user_friend_message SET status = 1 WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N'")
         int updateMessageStatusRead(@Param("senderId") Integer senderId, @Param("receiverId") Integer receiverId);
+
+        @Select("SELECT COUNT(1) FROM user_friend_message "
+                        + "WHERE del = 'N' AND (sender_id = #{userId} OR receiver_id = #{userId}) "
+                        + "AND content REGEXP CONCAT('\\\"(fileId|previewFileId)\\\"[[:space:]]*:[[:space:]]*', "
+                        + "#{fileId}, '([^0-9]|$)')")
+        int countAttachmentReferencesForUser(@Param("userId") Long userId, @Param("fileId") Long fileId);
 }

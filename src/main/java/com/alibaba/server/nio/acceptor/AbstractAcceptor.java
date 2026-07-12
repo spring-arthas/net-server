@@ -77,7 +77,10 @@ public class AbstractAcceptor {
      * @throws UnknownHostException
      */
     private InetSocketAddress create(String assign) throws UnknownHostException {
-        String ip = NioServerContext.getValue(BasicConstant.SERVER_IP);
+        String ip = NioServerContext.getValue(BasicConstant.NIO_BIND_IP);
+        if (StringUtils.isBlank(ip)) {
+            ip = NioServerContext.getValue(BasicConstant.SERVER_IP);
+        }
         if (StringUtils.isBlank(ip) || StringUtils.isEmpty(ip)) {
             throw new RuntimeException("ServerSocektChannle Listener Ip is empty or blank");
         }

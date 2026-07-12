@@ -3,6 +3,7 @@ package com.alibaba.server.nio.service.file.task;
 import com.alibaba.server.common.FileTaskStatusEnum;
 import com.alibaba.server.nio.repository.file.service.FileTaskService;
 import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
+import com.alibaba.server.nio.service.file.adaptive.ServerResourceMonitor;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
@@ -23,6 +24,8 @@ public class FileTaskStartupRunner implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() throws Exception {
+        // [修改] 预热资源监控器，确保服务启动后立即开始采样，不等第一个请求触发
+        ServerResourceMonitor.getInstance();
         log.info("执行启动恢复任务: 将异常中断的任务标记为 PAUSED...");
         try {
             // 1. 应用重启后查询file_task表如果存在状态为【上传中】的任务时需要将其更新为暂停状态

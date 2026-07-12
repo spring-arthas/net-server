@@ -17,4 +17,5 @@ public class FileUploadRequest {
 	private Integer userId;
 	private String userName;
 	private String taskId;
+	private String transferToken;
 }

@@ -61,6 +61,12 @@ public class FileDownloadContext {
      */
     private long currentOffset;
 
+    /** 本次请求实际需要发送的字节数。 */
+    private long transferLength;
+
+    /** 本次请求的排他结束偏移。 */
+    private long endOffset;
+
     /**
      * 客户端远程地址
      */
@@ -144,6 +150,13 @@ public class FileDownloadContext {
             fileChannel.position(currentOffset);
         }
 
+        long remaining = endOffset > 0 ? endOffset - currentOffset : fileSize - currentOffset;
+        if (remaining <= 0) {
+            return -1;
+        }
+        if (remaining < buffer.remaining()) {
+            buffer.limit(buffer.position() + (int) remaining);
+        }
         int bytesRead = fileChannel.read(buffer);
         if (bytesRead > 0) {
             currentOffset += bytesRead;

@@ -14,6 +14,7 @@ import com.alibaba.server.nio.model.file.DirectoryFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.model.user.UserAuthFrame;
+import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
 import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
 import com.alibaba.server.nio.repository.file.service.FileService;
@@ -595,7 +596,10 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
             JSONObject data = new JSONObject();
             data.put("userId", Integer.valueOf(String.valueOf(userDTO.getId())));
-            data.put("token", "后期引入");
+            String transferToken = TransferTokenFactory.getInstance()
+                    .generateToken(userDTO.getId(), userDTO.getUserName());
+            data.put("token", transferToken);
+            data.put("transferToken", transferToken);
             data.put("userName", userDTO.getUserName());
             data.put("phone", userDTO.getPhone());
             data.put("mail", userDTO.getMail());
