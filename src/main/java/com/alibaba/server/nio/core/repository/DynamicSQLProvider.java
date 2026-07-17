@@ -215,7 +215,8 @@ public class DynamicSQLProvider {
             EXCLUDE_QUERY_METHOD = Arrays.asList(
                     DalPageQueryParam.class.getMethod("getCurrentPage"),
                     DalPageQueryParam.class.getMethod("getPageSize"),
-                    DalPageQueryParam.class.getMethod("getOrderBy"));
+                    DalPageQueryParam.class.getMethod("getOrderBy"),
+                    DalPageQueryParam.class.getMethod("getOffset"));
             DEL_QUERY_METHOD = DalPageQueryParam.class.getMethod("getDel");
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);

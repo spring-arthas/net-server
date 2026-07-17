@@ -10,11 +10,13 @@ import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
+import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Collectors;
 
 /**
@@ -36,9 +38,10 @@ public class UserServiceImpl implements UserService {
         try {
             UserDalQueryParam userDalQueryParam = new UserDalQueryParam();
             userDalQueryParam.setUserName(userQueryParam.getUserName());
-            List<UserDo> list = this.userRepository.query(userDalQueryParam);
-            if (Optional.ofNullable(list).isPresent() && !list.isEmpty()) {
-                return this.doToDto(list.get(0));
+            // Use queryFuzzy to search by userName OR nickName
+            List<UserDo> userDoList = this.userRepository.queryFuzzy(userDalQueryParam);
+            if (Optional.ofNullable(userDoList).isPresent() && !userDoList.isEmpty()) {
+                return this.doToDto(userDoList.get(0));
             }
         } catch (Exception e) {
             log.error(e.getMessage());
@@ -73,9 +76,11 @@ public class UserServiceImpl implements UserService {
     private UserDo createParamToDo(UserCreateParam param) {
         UserDo userDo = new UserDo();
         userDo.setUserName(param.getUserName());
+        userDo.setNickName(param.getNickName());
         userDo.setPassword(param.getPassword());
         userDo.setPhone(param.getPhone());
         userDo.setMail(param.getMail());
+        userDo.setAvatar(param.getAvatar());
         userDo.setLastLoginDate(param.getLastLoginDate());
         userDo.setRegisterDate(param.getRegisterDate());
         userDo.setGmtCreated(param.getRegisterDate());
@@ -88,6 +93,7 @@ public class UserServiceImpl implements UserService {
         UserDo userDo = new UserDo();
         userDo.setId(param.getId());
         userDo.setUserName(param.getUserName());
+        userDo.setNickName(param.getNickName());
         userDo.setPassword(param.getPassword());
         userDo.setPhone(param.getPhone());
         userDo.setMail(param.getMail());
@@ -101,8 +107,10 @@ public class UserServiceImpl implements UserService {
         UserDTO userDto = new UserDTO();
         userDto.setId(userDo.getId());
         userDto.setUserName(userDo.getUserName());
+        userDto.setNickName(userDo.getNickName());
         userDto.setPassword(userDo.getPassword());
         userDto.setMail(userDo.getMail());
+        userDto.setAvatar(userDo.getAvatar());
         userDto.setLastLoginDate(userDo.getLastLoginDate());
         userDto.setRegisterDate(userDo.getRegisterDate());
         return userDto;
@@ -116,7 +124,7 @@ public class UserServiceImpl implements UserService {
     private static final int MAX_USERNAME_LENGTH = 64;
 
     @Override
-    public UserDTO register(String userName, String password, String mail) {
+    public UserDTO register(String userName, String password, String mail, String nickName, String avatar) {
         // 1. 校验参数
         if (userName == null || userName.trim().isEmpty()) {
             throw new IllegalArgumentException("用户名不能为空");
@@ -145,8 +153,9 @@ public class UserServiceImpl implements UserService {
         createParam.setUserName(userName);
         createParam.setPassword(password);
         createParam.setMail(mail);
+        createParam.setAvatar(avatar);
+        createParam.setNickName(nickName);
         createParam.setRegisterDate(new Date());
-        createParam.setStatus("ACTIVE");
 
         return this.create(createParam);
     }
@@ -218,5 +227,38 @@ public class UserServiceImpl implements UserService {
         this.userRepository.updateSelective(updateDo);
 
         log.info("用户修改密码成功: userId={}", userId);
+    }
+
+    @Override
+    public UserDTO getById(Long id) {
+        if (id == null) {
+            return null;
+        }
+        return this.doToDto(this.userRepository.get(id));
+    }
+
+    @Override
+    public List<UserDTO> getUserListByName(UserQueryParam userQueryParam) {
+        UserDalQueryParam userDalQueryParam = new UserDalQueryParam();
+        userDalQueryParam.setUserName(userQueryParam.getUserName());
+        userDalQueryParam.setNickName(userQueryParam.getUserName());
+        List<UserDo> userDoList = this.userRepository.queryFuzzy(userDalQueryParam);
+        List<UserDTO> userDTOList = Lists.newArrayList();
+        userDoList.stream().forEach(userDo -> userDTOList.add(this.doToDto(userDo)));
+        return userDTOList;
+    }
+
+    @Override
+    public Map<Long, UserDTO> listByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<UserDo> doList = this.userRepository.listByIds(ids);
+        if (doList == null || doList.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return doList.stream()
+                .map(this::doToDto)
+                .collect(Collectors.toMap(UserDTO::getId, dto -> dto));
     }
 }

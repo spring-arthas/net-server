@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.repository.file.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.YesOrNoEnum;
@@ -12,6 +13,7 @@ import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
+import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.file.service.param.FileCreateParam;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
@@ -19,6 +21,7 @@ import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.util.LocalTime;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,6 +30,7 @@ import org.springframework.util.CollectionUtils;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -72,7 +76,7 @@ public class FileServiceImpl implements FileService {
 
             // 查询当前节点下一节点信息
             FileQueryParam childFileQueryParam = new FileQueryParam();
-            childFileQueryParam.setPId(rootFileDto.getId());
+            childFileQueryParam.setParentId(rootFileDto.getId());
             List<FileDo> childFileDos = this.getAssignFiles(childFileQueryParam);
             if (!CollectionUtils.isEmpty(childFileDos)) {
                 List<FileDto> childFileList = Lists.newArrayList();
@@ -94,7 +98,7 @@ public class FileServiceImpl implements FileService {
             }
 
             FileCreateParam fileCreateParam = new FileCreateParam();
-            fileCreateParam.setPId(-1L);
+            fileCreateParam.setParentId(-1L);
             fileCreateParam.setFileName(fileQueryParam.getFileName());
             fileCreateParam.setUserName(fileQueryParam.getUserName());
             // 保存相对路径
@@ -120,7 +124,7 @@ public class FileServiceImpl implements FileService {
      */
     private PageResult<FileDo> queryFilesBelongCurrentFolder(Long id, Integer currentPage, Integer pageSize) {
         FileDalQueryParam fileDalQueryParam = new FileDalQueryParam();
-        fileDalQueryParam.setPId(id);
+        fileDalQueryParam.setParentId(id);
         fileDalQueryParam.setIsExist(YesOrNoEnum.Y.name());
         fileDalQueryParam.setIsFile(YesOrNoEnum.Y.name());
         fileDalQueryParam.setDel(YesOrNoEnum.N.name());
@@ -142,7 +146,7 @@ public class FileServiceImpl implements FileService {
 
         // 2、判断当前文件夹是否含有文件，含有则不能在当前文件夹路径下创建子文件夹
         FileQueryParam newFileQueryParam = new FileQueryParam();
-        newFileQueryParam.setPId(fileQueryParam.getPId());
+        newFileQueryParam.setParentId(fileQueryParam.getParentId());
         newFileQueryParam.setFileType("FILE");
         newFileQueryParam.setIsFile(YesOrNoEnum.Y.name());
         newFileQueryParam.setIsExist(YesOrNoEnum.Y.name());
@@ -151,7 +155,7 @@ public class FileServiceImpl implements FileService {
         PageResult<FileDo> pageResult = this.fileRepository.queryPage(this.createDalParam(newFileQueryParam));
         if (null != pageResult && pageResult.getTotalCount() > 0) {
             FileDto fileDto = new FileDto();
-            fileDto.setId(fileQueryParam.getPId());
+            fileDto.setId(fileQueryParam.getParentId());
             fileDto.setFileName(fileQueryParam.getFilePath());
             fileDto.setFileCount(pageResult.getTotalCount());
             return fileDto;
@@ -166,7 +170,7 @@ public class FileServiceImpl implements FileService {
 
         // 创建新的文件夹节点
         FileCreateParam fileCreateParam = new FileCreateParam();
-        fileCreateParam.setPId(fileQueryParam.getPId());
+        fileCreateParam.setParentId(fileQueryParam.getParentId());
         fileCreateParam.setUserName(fileQueryParam.getUserName());
         fileCreateParam.setFileName(fileQueryParam.getFileName());
         fileCreateParam.setFilePath(fileQueryParam.getFilePath());
@@ -180,7 +184,7 @@ public class FileServiceImpl implements FileService {
 
         // 更新父节点的hasChild状态为true
         fileDo = new FileDo();
-        fileDo.setId(fileQueryParam.getPId());
+        fileDo.setId(fileQueryParam.getParentId());
         fileDo.setHasChild(YesOrNoEnum.Y.name());
         this.fileRepository.updateSelective(fileDo);
         FileDto fileDto = this.doToDto(fileDo);
@@ -207,7 +211,7 @@ public class FileServiceImpl implements FileService {
         List<FileDo> fileDos = this.getAssignFiles(fileQueryParam);
         if (CollectionUtils.isEmpty(fileDos)) {
             FileCreateParam fileCreateParam = new FileCreateParam();
-            fileCreateParam.setPId(fileQueryParam.getPId());
+            fileCreateParam.setParentId(fileQueryParam.getParentId());
             fileCreateParam.setFileName(fileQueryParam.getFileName());
             fileCreateParam.setFileSize(fileQueryParam.getFileSize());
             fileCreateParam.setUserName(fileQueryParam.getUserName());
@@ -276,7 +280,7 @@ public class FileServiceImpl implements FileService {
     private FileDo createParamToDo(FileCreateParam param) {
         FileDo fileDo = new FileDo();
         fileDo.setId(SnowflakeIdWorkerUtil.generateId());
-        fileDo.setPId(param.getPId());
+        fileDo.setParentId(param.getParentId());
         fileDo.setUserName(param.getUserName());
         fileDo.setUserId(param.getUserId());
         fileDo.setFileName(param.getFileName());
@@ -297,7 +301,7 @@ public class FileServiceImpl implements FileService {
     private FileDo updateParamToDo(FileUpdateParam param) {
         FileDo fileDo = new FileDo();
         fileDo.setId(param.getId());
-        fileDo.setPId(param.getPId());
+        fileDo.setParentId(param.getParentId());
         fileDo.setUserName(param.getUserName());
         fileDo.setFileName(param.getFileName());
         fileDo.setFilePath(param.getFilePath());
@@ -314,10 +318,12 @@ public class FileServiceImpl implements FileService {
 
     private FileDalQueryParam createDalParam(FileQueryParam fileQueryParam) {
         FileDalQueryParam fileDalQueryParam = new FileDalQueryParam();
-        fileDalQueryParam.setPId(fileQueryParam.getPId());
+        fileDalQueryParam.setParentId(fileQueryParam.getParentId());
         fileDalQueryParam.setUserId(fileQueryParam.getUserId());
         fileDalQueryParam.setUserName(fileQueryParam.getUserName());
-        fileDalQueryParam.setFileName(fileQueryParam.getFileName());
+        if (StringUtils.isNotBlank(fileQueryParam.getFileName())) {
+            fileDalQueryParam.setFileName(fileQueryParam.getFileName());
+        }
         fileDalQueryParam.setFilePath(fileQueryParam.getFilePath());
         fileDalQueryParam.setFileSize(fileQueryParam.getFileSize());
         fileDalQueryParam.setFileType(fileQueryParam.getFileType());
@@ -334,7 +340,7 @@ public class FileServiceImpl implements FileService {
     private FileDto doToDto(FileDo fileDo) {
         FileDto fileDto = new FileDto();
         fileDto.setId(fileDo.getId());
-        fileDto.setPId(fileDo.getPId());
+        fileDto.setParentId(fileDo.getParentId());
         fileDto.setUserName(fileDo.getUserName());
         fileDto.setFileName(fileDo.getFileName());
         fileDto.setFilePath(fileDo.getFilePath());
@@ -401,7 +407,7 @@ public class FileServiceImpl implements FileService {
 
             // 获取所有目录列表
             List<FileDo> allDirs = this.getAssignFiles(queryParam);
-            
+
             if (CollectionUtils.isEmpty(allDirs)) {
                 log.warn("handleUserTwoLevelDirectory: 用户 {} 未查询到任何目录", userDTO.getUserName());
                 throw new IllegalArgumentException("用户目录数据为空");
@@ -409,27 +415,27 @@ public class FileServiceImpl implements FileService {
 
             // 2. 找到根目录 (pId = -1)
             FileDo rootDirDo = allDirs.stream()
-                .filter(file -> file.getPId() == -1L)
-                .findFirst()
-                .orElse(null);
+                    .filter(file -> file.getParentId() == -1L)
+                    .findFirst()
+                    .orElse(null);
 
             if (rootDirDo == null) {
                 log.warn("handleUserTwoLevelDirectory: 用户 {} 根目录不存在", userDTO.getUserName());
                 throw new IllegalArgumentException("用户顶层目录不存在");
             }
-            
+
             // 3. 将所有目录转为 Map<ParentId, List<FileDto>> 以便快速构建树
             // 排除根目录，只处理子节点
             Map<Long, List<FileDto>> parentIdToChildrenMap = allDirs.stream()
-                .filter(file -> file.getPId() != -1L)
-                .map(this::doToDto)
-                .collect(Collectors.groupingBy(FileDto::getPId));
+                    .filter(file -> file.getParentId() != -1L)
+                    .map(this::doToDto)
+                    .collect(Collectors.groupingBy(FileDto::getParentId));
 
             // 4. 构建树形结构
             FileDto rootDto = this.doToDto(rootDirDo);
             buildDirectoryTree(rootDto, parentIdToChildrenMap);
 
-            log.info("handleUserTwoLevelDirectory: 用户 {} 完整目录树查询成功，根目录ID={}", 
+            log.info("handleUserTwoLevelDirectory: 用户 {} 完整目录树查询成功，根目录ID={}",
                     userDTO.getUserName(), rootDto.getId());
 
             return rootDto;
@@ -440,20 +446,46 @@ public class FileServiceImpl implements FileService {
         }
     }
 
+    @Override
+    public FileDo createByTask(FileTaskDto fileTaskDto) {
+        if (Objects.isNull(fileTaskDto)) {
+            return null;
+        }
+        FileDo fileDo = new FileDo();
+        fileDo.setParentId(fileTaskDto.getParentId());
+        fileDo.setFileName(fileTaskDto.getFileName());
+        fileDo.setFilePath(fileTaskDto.getFilePath());
+        fileDo.setFileSize(fileTaskDto.getFileSize());
+        fileDo.setFileType(fileTaskDto.getFileType());
+        fileDo.setUserId(fileTaskDto.getUserId());
+        fileDo.setUserName(fileTaskDto.getUserName());
+        fileDo.setIsFile(YesOrNoEnum.Y.name());
+        fileDo.setIsExist(YesOrNoEnum.Y.name());
+        fileDo.setHasChild(YesOrNoEnum.N.name());
+        fileDo.setDel(YesOrNoEnum.N.name());
+        fileDo.setDelTime(fileDo.getGmtModified());
+        fileDo.setGmtCreated(new Date());
+        fileDo.setGmtModified(fileDo.getGmtCreated());
+        fileDo.setId(SnowflakeIdWorkerUtil.generateId());
+        this.fileRepository.insertSelective(fileDo);
+        return fileDo;
+    }
+
     /**
      * 递归构建目录树
-     * @param currentDir 当前目录节点
+     * 
+     * @param currentDir            当前目录节点
      * @param parentIdToChildrenMap 父ID与子节点列表的映射
      */
     private void buildDirectoryTree(FileDto currentDir, Map<Long, List<FileDto>> parentIdToChildrenMap) {
         // 获取当前目录的子节点列表
         List<FileDto> children = parentIdToChildrenMap.get(currentDir.getId());
-        
+
         if (CollectionUtils.isEmpty(children)) {
             // 没有子节点，设置为空列表
             currentDir.setChildFileList(Lists.newArrayList());
             // 确保 hasChild 状态正确 (虽然数据库可能有值，但在内存树中最终确认一下也无妨，或者保持数据库原值)
-            // currentDir.setHasChild(YesOrNoEnum.N.name()); 
+            // currentDir.setHasChild(YesOrNoEnum.N.name());
             return;
         }
 
@@ -474,7 +506,7 @@ public class FileServiceImpl implements FileService {
             throw new IllegalArgumentException("参数无效");
         }
         dirName = dirName.trim();
-        
+
         // 特殊处理：如果是根目录（parentId = -1），允许较长的目录名
         boolean isRootDirectory = (parentId == -1L);
         if (!isRootDirectory && dirName.length() > MAX_DIR_NAME_LENGTH) {
@@ -496,17 +528,16 @@ public class FileServiceImpl implements FileService {
         if (isRootDirectory) {
             // 根目录：使用配置文件中的完整路径
             String basePath = NioServerContext.getValue(
-                com.alibaba.server.common.OSinfo.isWindows() 
-                    ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS 
-                    : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC
-            );
+                    com.alibaba.server.common.OSinfo.isWindows()
+                            ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS
+                            : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC);
             newDirPath = basePath != null ? basePath.trim() + File.separator + dirName : "";
         } else {
             // 非根目录：拼接父路径
             String parentPath = buildDirectoryPath(parentId);
             newDirPath = parentPath + File.separator + dirName;
         }
-        
+
         File newDir = new File(newDirPath);
         if (!newDir.exists()) {
             if (!newDir.mkdirs()) {
@@ -516,7 +547,7 @@ public class FileServiceImpl implements FileService {
 
         // 5. 创建DB记录
         FileCreateParam createParam = new FileCreateParam();
-        createParam.setPId(parentId);
+        createParam.setParentId(parentId);
         createParam.setFileName(dirName);
         createParam.setFilePath(newDirPath);
         createParam.setFileType("NOT_FILE");
@@ -536,7 +567,7 @@ public class FileServiceImpl implements FileService {
             this.fileRepository.updateSelective(parentUpdate);
         }
 
-        log.info("创建目录成功: id={}, name={}, path={}, isRoot={}", 
+        log.info("创建目录成功: id={}, name={}, path={}, isRoot={}",
                 fileDo.getId(), dirName, newDirPath, isRootDirectory);
         return this.doToDto(fileDo);
     }
@@ -551,7 +582,7 @@ public class FileServiceImpl implements FileService {
 
         // 2. 检查是否有子项
         FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setPId(dirId);
+        queryParam.setParentId(dirId);
         queryParam.setDel(YesOrNoEnum.N.name());
         List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
         if (!CollectionUtils.isEmpty(children)) {
@@ -596,8 +627,12 @@ public class FileServiceImpl implements FileService {
             throw new IllegalArgumentException("目录不存在");
         }
 
+        if (dirDo.getParentId() != null && dirDo.getParentId() == -1L) {
+            throw new IllegalArgumentException("顶层目录名称不允许修改");
+        }
+
         // 3. 检查同级重名（排除自身）
-        if (existsSameName(dirDo.getPId(), newName, dirId)) {
+        if (existsSameName(dirDo.getParentId(), newName, dirId)) {
             throw new IllegalArgumentException("同级目录已存在同名目录");
         }
 
@@ -620,6 +655,34 @@ public class FileServiceImpl implements FileService {
         updateDo.setFilePath(newPath);
         updateDo.setGmtModified(new Date());
         this.fileRepository.updateSelective(updateDo);
+
+        // 6. 异步批量更新所有子节点的 filePath（替换路径前缀，不阻塞接口响应）
+        final String oldPathFinal = oldPath;
+        final String newPathFinal = newPath;
+        CompletableFuture.runAsync(() -> {
+            try {
+                List<FileDo> descendants = collectAllDescendants(dirId);
+                if (!descendants.isEmpty()) {
+                    Date now = new Date();
+                    List<FileDo> updates = new ArrayList<>(descendants.size());
+                    for (FileDo desc : descendants) {
+                        if (desc.getFilePath() != null && desc.getFilePath().startsWith(oldPathFinal)) {
+                            FileDo up = new FileDo();
+                            up.setId(desc.getId());
+                            up.setFilePath(newPathFinal + desc.getFilePath().substring(oldPathFinal.length()));
+                            up.setGmtModified(now);
+                            updates.add(up);
+                        }
+                    }
+                    if (!updates.isEmpty()) {
+                        fileRepository.batchUpdateSelective(updates);
+                        log.info("异步更新子节点filePath完成: dirId={}, 更新数量={}", dirId, updates.size());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("异步更新子节点filePath失败: dirId={}", dirId, e);
+            }
+        });
 
         log.info("更新目录成功: id={}, newName={}", dirId, newName);
         return this.doToDto(this.fileRepository.get(dirId));
@@ -658,7 +721,7 @@ public class FileServiceImpl implements FileService {
         // 5. 更新DB记录
         FileDo updateDo = new FileDo();
         updateDo.setId(dirId);
-        updateDo.setPId(targetParentId);
+        updateDo.setParentId(targetParentId);
         updateDo.setFilePath(newPath);
         updateDo.setGmtModified(new Date());
         this.fileRepository.updateSelective(updateDo);
@@ -671,6 +734,24 @@ public class FileServiceImpl implements FileService {
 
         log.info("移动目录成功: id={}, targetParentId={}", dirId, targetParentId);
         return this.doToDto(this.fileRepository.get(dirId));
+    }
+
+    /**
+     * 递归收集指定目录下的所有子孙节点（目录+文件）
+     */
+    private List<FileDo> collectAllDescendants(Long parentId) {
+        List<FileDo> result = new ArrayList<>();
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setParentId(parentId);
+        queryParam.setDel(YesOrNoEnum.N.name());
+        List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
+        if (!CollectionUtils.isEmpty(children)) {
+            result.addAll(children);
+            for (FileDo child : children) {
+                result.addAll(collectAllDescendants(child.getId()));
+            }
+        }
+        return result;
     }
 
     @Override
@@ -692,18 +773,18 @@ public class FileServiceImpl implements FileService {
             return "";
         }
         // 如果是顶层目录，直接返回其路径
-        if (fileDo.getPId() == null || fileDo.getPId() == -1L) {
+        if (fileDo.getParentId() == null || fileDo.getParentId() == -1L) {
             return fileDo.getFilePath();
         }
         // 递归构建路径
-        String parentPath = buildDirectoryPath(fileDo.getPId());
+        String parentPath = buildDirectoryPath(fileDo.getParentId());
         return parentPath + File.separator + fileDo.getFileName();
     }
 
     @Override
     public boolean existsSameName(Long parentId, String dirName, Long excludeId) {
         FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setPId(parentId);
+        queryParam.setParentId(parentId);
         queryParam.setFileName(dirName);
         queryParam.setIsFile(YesOrNoEnum.N.name());
         queryParam.setDel(YesOrNoEnum.N.name());
@@ -739,16 +820,28 @@ public class FileServiceImpl implements FileService {
         orderBy.setProperty("gmtCreated");
         orderBy.setDirection(PageQueryParam.Direction.DESC);
         fileQueryParam.setOrderBy(Lists.newArrayList(orderBy));
-        PageResult<FileDo> pageResult = this.fileRepository.queryPage(this.createDalParam(fileQueryParam));
+        FileDalQueryParam fileDalQueryParam = this.createDalParam(fileQueryParam);
+        log.info("=>【文件分页列表查询】入参={}", JSON.toJSONString(fileDalQueryParam));
+        long count = this.fileRepository.count(fileDalQueryParam);
+        List<FileDo> fileDoS = new ArrayList<>();
+        if (count > 0) {
+            fileDoS = this.fileRepository.page(fileDalQueryParam);
+        }
+        PageResult<FileDo> pageResult = new PageResult<>();
+        pageResult.setTotalCount((int) count);
+        pageResult.setModelList(fileDoS);
+        pageResult.setPageSize(fileDalQueryParam.getPageSize());
+        pageResult.setCurrentPage(fileDalQueryParam.getCurrentPage());
+        log.info("=>【文件分页列表查询】查询结果={}, 入参={}", JSON.toJSONString(pageResult), JSON.toJSONString(fileDalQueryParam));
         // 转换结果
         List<FileDto> fileDtoList = Collections.emptyList();
         if (pageResult.getModelList() != null) {
             fileDtoList = pageResult.getModelList().stream()
-                .map(this::doToDto)
-                .collect(Collectors.toList());
+                    .map(this::doToDto)
+                    .collect(Collectors.toList());
         }
-        return FilePageDto.of(fileDtoList, pageResult.getTotalCount(), 
-            pageResult.getCurrentPage(), pageResult.getPageSize());
+        return FilePageDto.of(fileDtoList, pageResult.getTotalCount(),
+                pageResult.getCurrentPage(), pageResult.getPageSize());
     }
 
     @Override
@@ -762,8 +855,8 @@ public class FileServiceImpl implements FileService {
         }
         FileDto fileDto = this.doToDto(fileDo);
         // 查询所属目录名称
-        if (fileDo.getPId() != null && fileDo.getPId() > 0) {
-            FileDo parentDir = this.fileRepository.get(fileDo.getPId());
+        if (fileDo.getParentId() != null && fileDo.getParentId() > 0) {
+            FileDo parentDir = this.fileRepository.get(fileDo.getParentId());
             if (parentDir != null) {
                 fileDto.setParentDirName(parentDir.getFileName());
             }
@@ -798,9 +891,60 @@ public class FileServiceImpl implements FileService {
         }
 
         // 2. 删除DB记录
-        this.fileRepository.delete(fileId);
+        this.fileRepository.logicDelete(fileId);
         log.info("文件删除成功: fileId={}, fileName={}", fileId, fileDo.getFileName());
         return true;
+    }
+
+    @Override
+    public FileDto renameFile(Long fileId, String newFileName) {
+        log.info("重命名文件，入参: fileId={}, newFileName={}", fileId, newFileName);
+        if (fileId == null) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        if (StringUtils.isBlank(newFileName)) {
+            throw new IllegalArgumentException("新文件名不能为空");
+        }
+
+        try {
+            FileDo fileDo = this.fileRepository.get(fileId);
+            if (fileDo == null) {
+                throw new IllegalArgumentException("文件不存在");
+            }
+            if (!YesOrNoEnum.Y.name().equals(fileDo.getIsFile())) {
+                throw new IllegalArgumentException("只能对文件进行重命名，不支持目录");
+            }
+
+            // 同名校验：DB 中同一目录下是否已存在同名文件（排除自身）
+            FileDalQueryParam sameNameCheck = new FileDalQueryParam();
+            sameNameCheck.setParentId(fileDo.getParentId());
+            sameNameCheck.setFileName(newFileName);
+            sameNameCheck.setIsFile(YesOrNoEnum.Y.name());
+            sameNameCheck.setDel(YesOrNoEnum.N.name());
+            List<FileDo> sameNameList = this.fileRepository.getAssignFiles(sameNameCheck);
+            boolean dbConflict = !CollectionUtils.isEmpty(sameNameList)
+                    && sameNameList.stream().anyMatch(f -> !f.getId().equals(fileId));
+            if (dbConflict) {
+                throw new IllegalArgumentException("该目录下已存在同名文件: " + newFileName);
+            }
+
+            // 只更新 DB 展示名称，filePath 保持不变
+            // 物理文件名含唯一 taskId 前缀，不执行文件系统重命名，确保删除操作始终能通过 filePath 定位物理文件
+            FileDo updateDo = new FileDo();
+            updateDo.setId(fileId);
+            updateDo.setFileName(newFileName);
+            updateDo.setGmtModified(new Date());
+            this.fileRepository.updateSelective(updateDo);
+
+            log.info("重命名文件成功: fileId={}, oldName={}, newName={}", fileId, fileDo.getFileName(), newFileName);
+            return getFileDetail(fileId);
+        } catch (IllegalArgumentException e) {
+            log.warn("重命名文件参数校验失败，fileId={}, newFileName={}, 原因: {}", fileId, newFileName, e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            log.error("重命名文件失败，fileId={}, newFileName={}, 原因: {}", fileId, newFileName, e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override

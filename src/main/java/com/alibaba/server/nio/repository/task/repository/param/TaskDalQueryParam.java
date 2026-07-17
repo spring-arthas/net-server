@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.repository.task.repository.param;
 
+import com.alibaba.server.nio.core.annotation.QueryOperator;
 import com.alibaba.server.nio.core.param.DalPageQueryParam;
 import lombok.Data;
 
@@ -14,6 +15,7 @@ import java.util.Date;
 @Data
 public class TaskDalQueryParam extends DalPageQueryParam {
 
+    @QueryOperator("LIKE")
     private String userName;
 
     private String password;

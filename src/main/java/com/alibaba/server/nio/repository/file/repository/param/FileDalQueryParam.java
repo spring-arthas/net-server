@@ -1,20 +1,25 @@
 package com.alibaba.server.nio.repository.file.repository.param;
 
+import com.alibaba.server.nio.core.annotation.Column;
 import com.alibaba.server.nio.core.annotation.QueryOperator;
 import com.alibaba.server.nio.core.param.DalPageQueryParam;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 文件查询dal param
+ * 
  * @author spring
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 public class FileDalQueryParam extends DalPageQueryParam {
 
     /**
      * 父id
-     * */
-    private Long pId;
+     */
+    @Column(value = "parent_id")
+    private Long parentId;
 
     /**
      * 文件名
@@ -39,7 +44,7 @@ public class FileDalQueryParam extends DalPageQueryParam {
 
     /**
      * 是否存在
-     * */
+     */
     private String isExist;
 
     /**
@@ -54,10 +59,8 @@ public class FileDalQueryParam extends DalPageQueryParam {
 
     /**
      * 所属用户
-     * */
+     */
     private String userName;
 
     private Integer userId;
-
-    private String del;
 }

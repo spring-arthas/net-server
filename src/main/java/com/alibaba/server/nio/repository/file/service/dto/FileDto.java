@@ -16,7 +16,7 @@ public class FileDto extends BaseDTO {
     /**
      * 父id
      */
-    private Long pId;
+    private Long parentId;
     /**
      * 如果hasChild为true，则将字节点文件信息最佳到该List中
      */

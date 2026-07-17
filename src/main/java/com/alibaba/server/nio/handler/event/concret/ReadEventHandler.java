@@ -176,7 +176,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 long perConnectionTokens = perConnectionLimiter.getAvailableTokens();
                 if (perConnectionTokens <= 0) {
                     // 2.1 单连接令牌不足，暂停读取
-                    log.warn("ReadEventHandler: 单连接上传带宽速率已达到上限，将暂停读取: 涉及到的远程地址: remote={}", context.getRemoteAddress());
+                    //log.warn("ReadEventHandler: 单连接上传带宽速率已达到上限，将暂停读取: 涉及到的远程地址: remote={}", context.getRemoteAddress());
                     pauseRead(channelEventModel, context, perConnectionLimiter);
                     break; // 退出读取循环
                 }
@@ -187,7 +187,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 long globalTokens = globalLimiter.getAvailableTokens();
                 if (globalTokens <= 0) {
                     // 全局令牌不足，暂停读取
-                    log.warn("ReadEventHandler: 全局上传带宽速率已达到上限，将暂停读取: 涉及到的远程地址: remote={}", context.getRemoteAddress());
+                    //log.warn("ReadEventHandler: 全局上传带宽速率已达到上限，将暂停读取: 涉及到的远程地址: remote={}", context.getRemoteAddress());
                     pauseRead(channelEventModel, context, globalLimiter);
                     break; // 退出读取循环
                 }
@@ -263,7 +263,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             if (waitMs < 10) waitMs = 10;       // 最小等待 10ms
             if (waitMs > 5000) waitMs = 5000;   // 最大等待 5s（超时保护）
             
-            log.debug("触发限速，暂停读取 {} ms, remote={}", waitMs, context.getRemoteAddress());
+            //log.debug("触发限速，暂停读取 {} ms, remote={}", waitMs, context.getRemoteAddress());
             
             // 提交恢复任务并保存引用
             final long finalWaitMs = waitMs;
@@ -276,7 +276,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                             key.selector().wakeup();
                             context.setReadPaused(false);
                             context.setPendingResumeTask(null);
-                            log.debug("恢复读取, remote={}, waitMs={}", context.getRemoteAddress(), finalWaitMs);
+                            //log.debug("恢复读取, remote={}, waitMs={}", context.getRemoteAddress(), finalWaitMs);
                         }
                     } catch (java.nio.channels.CancelledKeyException e) {
                         log.debug("恢复读取时 SelectionKey 已取消: {}", context.getRemoteAddress());

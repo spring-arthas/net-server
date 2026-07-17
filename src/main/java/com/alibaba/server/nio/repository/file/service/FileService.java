@@ -1,7 +1,9 @@
 package com.alibaba.server.nio.repository.file.service;
 
+import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
+import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
@@ -182,4 +184,19 @@ public interface FileService {
      * @param userDTO
      * */
     FileDto handleUserTwoLevelDirectory(UserDTO userDTO) throws Exception;
+    /**
+     * 根据文件传输任务对象创建文件数据
+     * */
+    FileDo createByTask(FileTaskDto fileTaskDto);
+
+    /**
+     * 重命名文件（DB + 文件系统）
+     *
+     * @param fileId      文件ID
+     * @param newFileName 新文件名（含扩展名）
+     * @return 更新后的文件信息
+     * @throws IllegalArgumentException 参数非法或文件不存在
+     * @throws RuntimeException         文件系统重命名失败
+     */
+    FileDto renameFile(Long fileId, String newFileName);
 }

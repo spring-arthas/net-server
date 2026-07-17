@@ -11,6 +11,7 @@ import com.alibaba.server.nio.handler.event.concret.ConnectEventHandler;
 import com.alibaba.server.nio.handler.event.concret.ReadEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteEventHandler;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
+import com.alibaba.server.nio.media.MediaStreamServer;
 import com.alibaba.server.nio.selector.TextTransmissionSelector;
 import com.alibaba.server.nio.selector.MainFileSelector;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,7 @@ public class CoreServer {
         startupSelector();
         // 创建聊天、文件上传和下载的Acceptor线程，即用于监听客户端连接
         startupMainAcceptor();
+        MediaStreamServer.startup();
     }
 
     /**

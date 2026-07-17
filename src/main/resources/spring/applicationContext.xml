@@ -2,32 +2,38 @@
 <beans xmlns="http://www.springframework.org/schema/beans"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+    xmlns:tx="http://www.springframework.org/schema/tx"
+    xmlns:task="http://www.springframework.org/schema/task"
     xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
-                        http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc-3.1.xsd">
+                        http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc-3.1.xsd
+                        http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+                        http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-3.0.xsd">
 
     <!-- 配置使Spring采用CGLIB代理（编程式事务不需要，已注释）-->
     <!--<aop:aspectj-autoproxy
     proxy-target-class="true" />-->
 
     <!-- 启用对事务注解的支持 -->
-    <!--<tx:annotation-driven transaction-manager="transactionManager" />-->
+    <tx:annotation-driven transaction-manager="transactionManager" />
 
     <!--创建jdbc数据源 -->
     <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init"
         destroy-method="close">
-        <property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
+        <!--<property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
         <property name="url"
             value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
         <property name="username" value="jxgy" />
-        <property name="password" value="Fbhu0359" />
-        <!--<property name="url"
-                  value="jdbc:mysql://localhost:3306/net-server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
+        <property name="password" value="Fbhu0359" />-->
+        <property
+        name="url"
+        value="jdbc:mysql://localhost:3306/net_server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;"
+        />
         <property name="username" value="root" />
-        <property name="password" value="spring" />-->
+        <property name="password" value="911025pfz" />
         <!-- 配置初始化大小、最小、最大 -->
         <property name="initialSize" value="1" />
         <property name="minIdle" value="1" />
-        <property name="maxActive" value="10" />
+        <property name="maxActive" value="50" />
         <!-- 配置获取连接等待超时的时间 -->
         <property name="maxWait" value="10000" />
         <!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->
@@ -71,7 +77,7 @@
         <property name="mapUnderscoreToCamelCase" value="true" />
         <property name="objectFactory" ref="paginatedListObjFactory" />
         <property name="objectWrapperFactory" ref="paginatedListWrapperFactory" />
-        <property name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl"/>
+        <property name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl" />
     </bean>
     <bean id="paginatedListObjFactory"
         class="com.alibaba.server.nio.core.page.PaginatedListObjFactory" />
@@ -91,14 +97,26 @@
     </bean>
 
     <!-- 事务管理器 -->
-    <!--<bean id="transactionManager"
+    <bean id="transactionManager"
         class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
         <property name="dataSource" ref="dataSource" />
-    </bean>-->
+    </bean>
 
     <bean id="userService"
         class="com.alibaba.server.nio.repository.user.service.impl.UserServiceImpl"
         scope="singleton" />
+
+    <bean id="userFriendsService"
+          class="com.alibaba.server.nio.repository.user.service.impl.UserFriendsServiceImpl"
+          scope="singleton" />
+
+    <bean id="userFriendApplyService"
+          class="com.alibaba.server.nio.repository.user.service.impl.UserFriendApplyServiceImpl"
+          scope="singleton" />
+
+    <bean id="userFriendMessageService"
+          class=" com.alibaba.server.nio.repository.chat.service.impl.UserFriendMessageServiceImpl"
+          scope="singleton" />
 
     <bean id="taskService"
         class="com.alibaba.server.nio.repository.task.service.impl.TaskServiceImpl"
@@ -106,5 +124,9 @@
 
     <bean id="fileService"
         class="com.alibaba.server.nio.repository.file.service.impl.FileServiceImpl"
+        scope="singleton" />
+
+    <bean id="fileTaskService"
+        class="com.alibaba.server.nio.repository.file.service.impl.FileTaskServiceImpl"
         scope="singleton" />
 </beans>

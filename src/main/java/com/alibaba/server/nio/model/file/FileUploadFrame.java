@@ -120,6 +120,26 @@ public class FileUploadFrame {
          * 用户操作响应
          */
         USER_RESPONSE(0x34, "用户操作响应"),
+        /**
+         * 用户好友列表
+         */
+        USER_FRIEND_LIST_REQ(0x35, "用户好友列表"),
+        /**
+         * 好友搜索
+         */
+        USER_FRIEND_QUERY_REQ(0x36, "好友搜索"),
+        /**
+         * 用户添加好友请求
+         */
+        USER_FRIEND_ADD_REQ(0x37, "用户添加好友请求"),
+        /**
+         * 获取好友申请列表
+         */
+        USER_FRIEND_APPLY_REQ(0x38, "获取好友申请列表"),
+        /**
+         * 处理好友申请
+         */
+        USER_FRIEND_APPLY_HANDLE_REQ(0x39, "处理好友申请"),
 
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
@@ -127,17 +147,75 @@ public class FileUploadFrame {
          */
         FILE_LIST_REQ(0x40, "文件列表请求"),
         /**
-         * 文件详情请求
-         */
-        FILE_DETAIL_REQ(0x41, "文件详情请求"),
-        /**
          * 文件删除请求
          */
-        FILE_DELETE_REQ(0x42, "文件删除请求"),
+        FILE_DELETE_REQ(0x41, "文件删除请求"),
+        /**
+         * 文件详情请求
+         */
+        FILE_DETAIL_REQ(0x42, "文件详情请求"),
         /**
          * 文件操作响应
          */
-        FILE_RESPONSE(0x43, "文件操作响应");
+        FILE_RESPONSE(0x43, "文件操作响应"),
+        /**
+         * 文件重命名请求
+         */
+        FILE_RENAME_REQ(0x44, "文件重命名请求"),
+
+        // ========== 聊天消息帧 (0x50-0x5F) ==========
+        /**
+         * 发送聊天消息请求
+         */
+        CHAT_MSG_SEND_REQ(0x50, "发送聊天消息请求"),
+        /**
+         * 推送聊天消息
+         */
+        CHAT_MSG_PUSH(0x51, "推送聊天消息"),
+        /**
+         * 聊天消息回执
+         */
+        CHAT_MSG_RESPONSE(0x52, "聊天消息回执"),
+        /**
+         * 查询聊天历史记录请求
+         */
+        CHAT_MSG_HISTORY_REQ(0x53, "查询聊天历史记录请求"),
+
+        /**
+         * 查询聊天历史记录回执
+         */
+        CHAT_MSG_HISTORY_RESPONSE(0x54, "查询聊天历史记录回执"),
+
+        /**
+         * 聊天消息已读上报
+         */
+        CHAT_MSG_READ_REQ(0x55, "聊天消息已读上报"),
+
+        /**
+         * 聊天消息已读重回执
+         */
+        CHAT_MSG_READ_RESPONSE(0x56, "聊天消息已读回执"),
+
+        /**
+         * 更新好友别名请求
+         */
+        USER_FRIEND_UPDATE_ALIAS_REQ(0x57, "更新好友别名请求"),
+
+        /**
+         * 更新好友别名回执
+         */
+        USER_FRIEND_UPDATE_ALIAS_RESPONSE(0x58, "更新好友别名回执"),
+
+        // ========== 动态帧 (0x60-0x6F) ==========
+        /**
+         * 新建动态请求
+         */
+        DYNAMIC_CREATE_REQ(0x60, "新建动态请求"),
+
+        /**
+         * 动态操作响应
+         */
+        DYNAMIC_RESPONSE(0x61, "动态操作响应");
 
         private final int code;
         private final String description;

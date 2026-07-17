@@ -47,28 +47,30 @@ public class WorkerThreadPool {
      */
     private static final ConcurrentHashMap<String, ChannelWorker> channelWorkerMap = new ConcurrentHashMap<>();
 
+    // private static final ExecutorService textExecutor =
+    // Executors.newSingleThreadExecutor();
     private static final ExecutorService executorService = new ThreadPoolExecutor(
-        Runtime.getRuntime().availableProcessors(), Runtime.getRuntime().availableProcessors(), 3000,
-        TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1000),
-        new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                return new Thread(r, "WORKER_THREAD_POOL_" + atomicInteger.incrementAndGet());
-            }
-        }, new RejectedExecutionHandler() {
-            @Override
-            public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
-                if (!executor.isShutdown()) {
-                    try {
-                        log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
-                                + " ] WorkerThreadPool | --> 工作线程池待处理任务数已到峰值，将阻塞直至任务提交至线程池");
-                        executor.getQueue().put(r);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+            Runtime.getRuntime().availableProcessors(), Runtime.getRuntime().availableProcessors(), 3000,
+            TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1000),
+            new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    return new Thread(r, "WORKER_THREAD_POOL_" + atomicInteger.incrementAndGet());
+                }
+            }, new RejectedExecutionHandler() {
+                @Override
+                public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                    if (!executor.isShutdown()) {
+                        try {
+                            log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
+                                    + " ] WorkerThreadPool | --> 工作线程池待处理任务数已到峰值，将阻塞直至任务提交至线程池");
+                            executor.getQueue().put(r);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
-            }
-        });
+            });
 
     /**
      * 提交读事件任务
@@ -89,24 +91,30 @@ public class WorkerThreadPool {
         }
         // 深拷贝 TransportDataModel，避免原始数据被清空后影响处理
         TransportDataModel transportDataModelCopy = new TransportDataModel();
-        transportDataModelCopy.setDataType(socketChannelContext.getTransportDataModel().getDataType());
-        transportDataModelCopy.setWaitHandleDataList(Lists.newArrayList(socketChannelContext.getTransportDataModel().getWaitHandleDataList()));
+        transportDataModelCopy.setDataType(dataType);
+        transportDataModelCopy.setWaitHandleDataList(
+                Lists.newArrayList(socketChannelContext.getTransportDataModel().getWaitHandleDataList()));
+
         // 获取或创建 ChannelWorker
         ChannelWorker worker = channelWorkerMap.computeIfAbsent(channelKey, key -> {
             ChannelWorker newWorker = new ChannelWorker(socketChannelContext, channelKey);
             // 首次创建时提交到线程池
             executorService.submit(newWorker);
-            log.info("WorkerThreadPool为通道 {} 创建新的 ChannelWorker 并提交到线程池", channelKey);
+            log.info("WorkerThreadPool为通道 {} 创建新的 file-transport-ChannelWorker 并提交到线程池", channelKey);
             return newWorker;
         });
+
         // 向 ChannelWorker 的队列中添加待处理数据
         // offerData 使用阻塞式等待，背压会自动传递到 Socket 层
-        worker.offerData(transportDataModelCopy);
+        if (Objects.nonNull(worker)) {
+            worker.offerData(transportDataModelCopy);
+        }
     }
 
     /**
      * 移除指定通道的 ChannelWorker
      * 应在 SocketChannel 关闭时调用，用于清理资源
+     * 
      * @param channelKey 通道的唯一标识（远程地址）
      */
     public static void remove(String channelKey) {
@@ -165,9 +173,9 @@ public class WorkerThreadPool {
          */
         private static boolean isFileTransferType(String handlerType) {
             return "UPLOAD".equals(handlerType)
-                || "DOWNLOAD".equals(handlerType)
-                || "RESUME_UPLOAD".equals(handlerType)
-                || "RESUME_DOWNLOAD".equals(handlerType);
+                    || "DOWNLOAD".equals(handlerType)
+                    || "RESUME_UPLOAD".equals(handlerType)
+                    || "RESUME_DOWNLOAD".equals(handlerType);
         }
 
         /**
@@ -283,29 +291,34 @@ public class WorkerThreadPool {
                 }
             }
 
-            // 初始化事务同步机制（让 @Transactional 在非 Spring 线程中生效）
-            boolean synchronizationActive = org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive();
-            if (!synchronizationActive) {
-                org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
-            }
+            // 初始化事务同步机制（已移除：由 Spring @Transactional 自动管理）
+            // boolean synchronizationActive =
+            // org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive();
+            // if (!synchronizationActive) {
+            // org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+            // }
             try {
                 // 更新 socketChannelContext 中的待处理数据
                 // 使用防御性副本避免并发修改异常
-                /*this.socketChannelContext.getTransportDataModel().setWaitHandleDataList(
-                    new java.util.ArrayList<>(data.getWaitHandleDataList()));*/
+                /*
+                 * this.socketChannelContext.getTransportDataModel().setWaitHandleDataList(
+                 * new java.util.ArrayList<>(data.getWaitHandleDataList()));
+                 */
                 // 执行处理管道
-                DefaultChannelPipeLine defaultChannelPipeLine = (DefaultChannelPipeLine) this.socketChannelContext.getChannelPipeLine();
+                DefaultChannelPipeLine defaultChannelPipeLine = (DefaultChannelPipeLine) this.socketChannelContext
+                        .getChannelPipeLine();
                 defaultChannelPipeLine.executeHandler(data, this.socketChannelContext);
             } finally {
                 // 释放锁（如果获取了锁）
                 if (needLock) {
                     BasicServer.fileLock.unlock();
                 }
-                // 清理事务同步状态（如果是我们初始化的）
-                if (!synchronizationActive && org.springframework.transaction.support.TransactionSynchronizationManager
-                        .isSynchronizationActive()) {
-                    org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
-                }
+                // 清理事务同步状态（已移除）
+                // if (!synchronizationActive &&
+                // org.springframework.transaction.support.TransactionSynchronizationManager
+                // .isSynchronizationActive()) {
+                // org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+                // }
             }
         }
 

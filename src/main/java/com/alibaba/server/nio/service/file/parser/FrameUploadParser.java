@@ -23,7 +23,7 @@ import java.util.List;
  * @author YSFY
  */
 @Slf4j
-public class FrameParser {
+public class FrameUploadParser {
 
     /**
      * 解析状态枚举
@@ -91,11 +91,12 @@ public class FrameParser {
 
         // 检查缓冲区大小限制，防止内存泄漏
         if (buffer.size() + data.length > MAX_BUFFER_SIZE) {
-            log.error("FrameParser 缓冲区超过限制 {}MB，当前大小：{}，待追加：{}", 
+            log.error("FrameParser 缓冲区超过限制 {}MB，当前大小：{}，待追加：{}",
                     MAX_BUFFER_SIZE / 1024 / 1024, buffer.size(), data.length);
             // 重置解析器，丢弃积压数据
             reset();
-            throw new RuntimeException("FrameParser buffer overflow: " + buffer.size() + " + " + data.length + " > " + MAX_BUFFER_SIZE);
+            throw new RuntimeException(
+                    "FrameParser buffer overflow: " + buffer.size() + " + " + data.length + " > " + MAX_BUFFER_SIZE);
         }
 
         // 将新数据追加到缓存
@@ -155,7 +156,7 @@ public class FrameParser {
             if (buf[position] == MAGIC[0] && buf[position + 1] == MAGIC[1]) {
                 // 找到魔数，进入头部解析状态
                 state = ParseState.PARSE_HEADER;
-                log.debug("找到魔数，位置: {}", position);
+                // log.debug("找到魔数，位置: {}", position);
                 return true;
             }
             position++; // 跳过无效字节
@@ -173,6 +174,21 @@ public class FrameParser {
             return false; // 需要更多数据
         }
 
+        // *** 严格校验 MAGIC：仅检查当前 position 处，不向前扫描 ***
+        // 这样即使视频原始数据中包含 MAGIC 字节，也不会被误判为帧起始
+        if (buf[position] != MAGIC[0] || buf[position + 1] != MAGIC[1]) {
+            // *** BUG FIX: 不再 reset() 清空整个缓冲区 ***
+            // 原来的 reset() 会丢弃所有未处理数据，导致后续帧全部丢失，文件严重损坏。
+            // 正确做法：position 前进 1 字节后回到 WAIT_MAGIC 继续扫描，保留 buffer 剩余数据。
+            log.error("协议帧同步错误：偏移 {} 处期望 MAGIC [0x{} 0x{}]，实际 [0x{} 0x{}]，跳过1字节继续扫描",
+                    position,
+                    String.format("%02X", MAGIC[0] & 0xFF), String.format("%02X", MAGIC[1] & 0xFF),
+                    String.format("%02X", buf[position] & 0xFF), String.format("%02X", buf[position + 1] & 0xFF));
+            position++; // 跳过1字节，回 WAIT_MAGIC 继续扫描
+            state = ParseState.WAIT_MAGIC;
+            return true;
+        }
+
         // 跳过魔数（2字节）
         int headerStart = position + 2;
 
@@ -180,8 +196,11 @@ public class FrameParser {
         byte typeCode = buf[headerStart];
         FrameType frameType = FrameType.fromCode(typeCode);
         if (frameType == null) {
-            log.warn("无效的帧类型: 0x{}", String.format("%02X", typeCode));
-            position += 2; // 跳过这个魔数，继续寻找
+            // *** BUG FIX: 只跳过1字节（前进到 position+1）而非2字节 ***
+            // 跳过2字节会越过下一个真实 MAGIC 的第一个字节，导致无法对齐。
+            log.warn("无效的帧类型: 0x{}，当前 position={}，跳过1字节继续扫描",
+                    String.format("%02X", typeCode), position);
+            position++; // 跳过1字节，继续让 WAIT_MAGIC 搜索真实帧头
             state = ParseState.WAIT_MAGIC;
             return true;
         }
@@ -194,8 +213,9 @@ public class FrameParser {
 
         // 验证数据长度合理性
         if (dataLength < 0 || dataLength > 100 * 1024 * 1024) { // 最大100MB
-            log.warn("无效的数据长度: {}", dataLength);
-            position += 2;
+            // *** BUG FIX: 只跳过1字节而非2字节，理由同上 ***
+            log.warn("无效的数据长度: {}，当前 position={}，跳过1字节继续扫描", dataLength, position);
+            position++; // 跳过1字节，回 WAIT_MAGIC 重新扫描
             state = ParseState.WAIT_MAGIC;
             return true;
         }
@@ -216,9 +236,6 @@ public class FrameParser {
         } else {
             state = ParseState.FRAME_COMPLETE;
         }
-
-        log.debug("解析帧头: type={}, flags={}, dataLength={}",
-                frameType, flags, dataLength);
 
         return true;
     }
@@ -244,7 +261,7 @@ public class FrameParser {
         // 进入帧完成状态
         state = ParseState.FRAME_COMPLETE;
 
-        log.debug("解析数据: {} 字节", currentDataLength);
+        // log.debug("解析数据: {} 字节", currentDataLength);
 
         return true;
     }
@@ -256,16 +273,20 @@ public class FrameParser {
         // 添加到完成列表
         completeFrames.add(currentFrame);
 
-        log.debug("帧解析完成: {}", currentFrame);
-
-        // 重置状态，准备解析下一帧
+        // 重置当前帧状态
         currentFrame = null;
         currentDataLength = 0;
-        state = ParseState.WAIT_MAGIC;
 
-        // 检查是否还有数据可以继续解析
+        // *** 关键修复：帧完成后直接进入 PARSE_HEADER，而不是回到 WAIT_MAGIC ***
+        // WAIT_MAGIC 会向前扫描寻找魔数，在视频等二进制数据中，源文件的原始字节可能包含
+        // 与 MAGIC 相同的字节序列，导致解析器误判帧边界，产生数据错乱。
+        // 帧结束后，下一个字节序列必然是下一帧的 MAGIC（由协议保证），直接进入 PARSE_HEADER
+        // 严格在当前 position 处验证 MAGIC，不扫描、不跳过任何字节。
+        state = ParseState.PARSE_HEADER;
+
+        // 检查是否还有足够数据开始解析下一帧头
         byte[] buf = buffer.toByteArray();
-        return buf.length - position >= 2; // 至少需要2字节才能开始解析下一帧
+        return buf.length - position >= HEADER_LENGTH;
     }
 
     /**
@@ -285,7 +306,7 @@ public class FrameParser {
                 buffer.reset();
                 buffer.write(remaining, 0, remaining.length);
                 position = 0;
-                log.debug("压缩缓存: 剩余 {} 字节", remaining.length);
+                // log.debug("压缩缓存: 剩余 {} 字节", remaining.length);
             }
         }
     }

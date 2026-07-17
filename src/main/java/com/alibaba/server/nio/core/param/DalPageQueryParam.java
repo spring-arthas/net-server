@@ -39,7 +39,6 @@ public class DalPageQueryParam implements CloneableSupport {
     @Column(ignore = true)
     private List<PageQueryParam.OrderBy> orderBy;
 
-
     public DalPageQueryParam() {
         this.currentPage = 1;
         this.pageSize = 1000;
@@ -55,6 +54,10 @@ public class DalPageQueryParam implements CloneableSupport {
     public DalPageQueryParam andOrderBy(String property, PageQueryParam.Direction direction) {
         this.orderBy.add(new PageQueryParam.OrderBy(property, direction));
         return this;
+    }
+
+    public int getOffset() {
+        return (currentPage - 1) * pageSize;
     }
 
     /**

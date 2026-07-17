@@ -5,6 +5,7 @@ import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.model.SocketChannelContext;
 import com.alibaba.server.nio.repository.file.service.FileService;
+import com.alibaba.server.nio.repository.file.service.FileTaskService;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
@@ -32,9 +33,11 @@ import java.util.concurrent.*;
 public abstract class AbstractChannelHandler implements ChannelHandler {
     public static UserService userService = null;
     public static FileService fileService = null;
+    public static FileTaskService fileTaskService = null;
     static {
         userService = BasicServer.classPathXmlApplicationContext.getBean(UserService.class);
         fileService = BasicServer.classPathXmlApplicationContext.getBean(FileService.class);
+        fileTaskService = BasicServer.classPathXmlApplicationContext.getBean(FileTaskService.class);
     }
 
     /**

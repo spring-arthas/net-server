@@ -16,7 +16,7 @@ public class FileDo extends BaseDO implements Identity, CloneableSupport {
     /**
      * 父id
      */
-    private Long pId;
+    private Long parentId;
 
     /**
      * 文件名

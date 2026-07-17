@@ -1,0 +1,44 @@
+{
+  "id": "dynamic-create",
+  "name": "dynamic-create",
+  "title": "帮我新增一个帧，用于处理客户端用户新建的动态",
+  "description": "实现新建动态，包含文字(不超过500个字， 支持上传图片(不超过9张))",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P1",
+  "creator": "veneno",
+  "assignee": "veneno",
+  "createdAt": "2026-03-30",
+  "completedAt": "2026-04-08",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

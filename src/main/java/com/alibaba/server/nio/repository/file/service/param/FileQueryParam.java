@@ -17,7 +17,7 @@ public class FileQueryParam extends PageQueryParam {
     /**
      * 父节点
      */
-    private Long pId;
+    private Long parentId;
 
     /**
      * 文件名

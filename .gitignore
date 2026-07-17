@@ -25,3 +25,11 @@ target/
 test_upload.txt
 nohup.out
 .DS_Store
+
+# Environment variables (do not commit)
+.env
+.env.local
+.trellis/.developer
+.trellis/.current-task
+.trellis/.current-task
+.trellis/workspace

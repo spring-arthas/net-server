@@ -16,23 +16,27 @@ public class UserDTO extends BaseDTO {
 
     private String userName;
 
+    private String nickName;
+
     private String password;
-
-    private Date lastLoginDate;
-
-    private Date registerDate;
 
     private String phone;
 
     private String mail;
 
-    /**
-     * 上传的文件信息
-     * */
-    private Map<String, Map<String, Object>> uploadFileMap;
+    private String avatar;
+
+    private Date lastLoginDate;
+
+    private Date registerDate;
 
     /**
-     * 下载的文件信息
-     * */
-    private Map<String, Map<String, Object>> downloadFileMap;
+     * 好友状态描述 (e.g. "已是好友", "已申请", "添加")
+     */
+    private String friendStatusDesc;
+
+    /**
+     * 好友状态: 0-已申请, 1-已是好友, 2-已拒绝, 3-未添加
+     */
+    private Integer friendStatus;
 }

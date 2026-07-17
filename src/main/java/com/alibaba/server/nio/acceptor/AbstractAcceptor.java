@@ -77,7 +77,10 @@ public class AbstractAcceptor {
      * @throws UnknownHostException
      */
     private InetSocketAddress create(String assign) throws UnknownHostException {
-        String ip = NioServerContext.getValue(BasicConstant.SERVER_IP);
+        String ip = NioServerContext.getValue(BasicConstant.NIO_BIND_IP);
+        if (StringUtils.isBlank(ip)) {
+            ip = NioServerContext.getValue(BasicConstant.SERVER_IP);
+        }
         if (StringUtils.isBlank(ip) || StringUtils.isEmpty(ip)) {
             throw new RuntimeException("ServerSocektChannle Listener Ip is empty or blank");
         }
@@ -159,6 +162,8 @@ public class AbstractAcceptor {
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new TextTransmissionHandler()); // 文本传输处理器（用户认证+目录操作）
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileUploadHandler()); // 文件上传处理器
+        socketChannelContext.getChannelPipeLine().addHandler(
+                new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileRangePullHandler()); // Pull-Range 在线流处理器
         socketChannelContext.getChannelPipeLine().addHandler(
                 new SimpleChannelContext(socketChannelContext.getChannelPipeLine()), new FileDownloadHandler()); // 文件下载处理器
         return socketChannelContext;
