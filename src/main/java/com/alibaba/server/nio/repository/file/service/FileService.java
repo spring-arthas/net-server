@@ -80,6 +80,9 @@ public interface FileService {
      */
     void deleteFileById(Long fileId);
 
+    /** 按用户和完整路径查询有效文件记录。 */
+    FileDo findFileByPath(String filePath, Integer userId);
+
     // ========== 目录操作接口 ==========
 
     /**
@@ -178,6 +181,30 @@ public interface FileService {
      * @return 目录的文件系统路径，若不存在则返回null
      */
     String validateDirectory(Long dirId);
+
+    /**
+     * 校验并准备上传目标目录。
+     *
+     * 数据库目录链完整且属于当前认证用户时，自动恢复缺失的物理目录并校正目录路径；
+     * 数据库链无效时直接拒绝，不根据客户端路径补建数据库记录。
+     *
+     * @param dirId    目标目录ID
+     * @param userId   当前认证用户ID
+     * @param userName 当前认证用户名
+     * @return 可用于上传的规范目录路径
+     * @throws IllegalArgumentException 目录链或用户信息无效
+     * @throws IllegalStateException    文件系统目录无法安全创建
+     */
+    String ensureUploadDirectory(Long dirId, Integer userId, String userName);
+
+    /**
+     * 获取或创建当前认证用户的服务端聊天附件目录。
+     *
+     * @param userId   当前认证用户ID
+     * @param userName 当前认证用户名
+     * @return 隐藏附件目录信息
+     */
+    FileDto ensureChatAttachmentDirectory(Integer userId, String userName);
 
     /**
      * 获取当前用户顶层和第二层目录数据

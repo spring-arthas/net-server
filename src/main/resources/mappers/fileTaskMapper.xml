@@ -17,6 +17,7 @@
         <if
             test="fileName != null and fileName != ''"> AND file_name LIKE CONCAT('%', #{fileName},
         '%') </if>
+        <if test="filePath != null and filePath != ''"> AND file_path = #{filePath} </if>
         <if test="status != null"> AND status = #{status} </if>
         <if
             test="md5 != null and md5 != ''"> AND md5 = #{md5} </if>
@@ -33,6 +34,7 @@
         <if
             test="fileName != null and fileName != ''"> AND file_name LIKE CONCAT('%', #{fileName},
         '%') </if>
+        <if test="filePath != null and filePath != ''"> AND file_path = #{filePath} </if>
         <if test="status != null"> AND status = #{status} </if>
         <if
             test="md5 != null and md5 != ''"> AND md5 = #{md5} </if>

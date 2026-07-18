@@ -18,4 +18,5 @@ public class FileUploadRequest {
 	private String userName;
 	private String taskId;
 	private String transferToken;
+	private String uploadPurpose;
 }

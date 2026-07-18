@@ -251,6 +251,7 @@ public class FileUploadFrame {
      */
     public static final byte FLAG_LAST_FRAME = 0x01; // bit0: 是否最后一帧
     public static final byte FLAG_NEED_ACK = 0x02; // bit1: 是否需要确认
+    public static final byte FLAG_HAS_OFFSET = 0x04; // bit2: 数据前8字节为大端序文件偏移量
 
     /**
      * 帧类型
@@ -308,6 +309,13 @@ public class FileUploadFrame {
      */
     public boolean needAck() {
         return (flags & FLAG_NEED_ACK) != 0;
+    }
+
+    /**
+     * 数据帧是否携带文件偏移量
+     */
+    public boolean hasOffset() {
+        return (flags & FLAG_HAS_OFFSET) != 0;
     }
 
     /**

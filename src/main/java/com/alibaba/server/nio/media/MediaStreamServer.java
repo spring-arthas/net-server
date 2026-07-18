@@ -34,6 +34,7 @@ public final class MediaStreamServer {
         MediaStreamHandler handler = new MediaStreamHandler(accessService, tokenService, bufferSize);
         httpServer.createContext("/media/play-url", handler);
         httpServer.createContext("/media/stream", handler);
+        httpServer.createContext("/media/seek", handler);
         httpServer.setExecutor(Executors.newFixedThreadPool(maxThreads));
         httpServer.start();
         server = httpServer;

@@ -81,7 +81,7 @@ public class SocketChannelContext {
     /**
      * 当前连接持有限速器（用于上传速率控制）
      */
-    private RateLimiter rateLimiter;
+    private volatile RateLimiter rateLimiter;
 
     /**
      * 是否处于读暂停状态

@@ -96,6 +96,7 @@ public class FileUploadContext {
     public enum UploadStatus {
         INITIALIZED, // 已初始化
         UPLOADING, // 上传中
+        FINALIZING, // 数据已接收，正在校验并入库
         COMPLETED, // 已完成
         FAILED // 失败
     }
@@ -152,6 +153,12 @@ public class FileUploadContext {
      * 是否已记录第一次写入日志（用于诊断续传偏移正确性）
      */
     private boolean firstWriteLogged = false;
+
+    /** 当前 ACK 窗口累计写入字节数。 */
+    private long windowBytesWritten = 0L;
+
+    /** 当前 ACK 窗口累计写盘耗时，单位纳秒。 */
+    private long windowWriteNanos = 0L;
 
     /**
      * 更新最后活跃时间
@@ -354,6 +361,35 @@ public class FileUploadContext {
     }
 
     /**
+     * 记录当前 ACK 窗口的一次写盘指标。
+     *
+     * @param writtenBytes 实际写入字节数
+     * @param writeNanos 写盘耗时，单位纳秒
+     */
+    public synchronized void recordWindowWrite(long writtenBytes, long writeNanos) {
+        if (writtenBytes > 0L) {
+            windowBytesWritten += writtenBytes;
+        }
+        if (writeNanos > 0L) {
+            windowWriteNanos += writeNanos;
+        }
+    }
+
+    public synchronized long getWindowBytesWritten() {
+        return windowBytesWritten;
+    }
+
+    public synchronized long getWindowWriteMillis() {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(windowWriteNanos);
+    }
+
+    /** 重置当前 ACK 窗口指标。 */
+    public synchronized void resetWindowMetrics() {
+        windowBytesWritten = 0L;
+        windowWriteNanos = 0L;
+    }
+
+    /**
      * 获取当前上传速率（字节/秒）
      */
     public long getCurrentSpeed() {
@@ -398,6 +434,12 @@ public class FileUploadContext {
         log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", requestTaskId, fileName,
                 fileSize,
                 bytesWritten, fileSize);
+    }
+
+    /** 标记为完成校验中，断连清理不得再将任务回写为暂停。 */
+    public void markFinalizing() {
+        this.status = UploadStatus.FINALIZING;
+        closeFileChannel();
     }
 
     /**

@@ -28,9 +28,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -45,6 +54,8 @@ public class FileServiceImpl implements FileService {
 
     @Autowired
     private FileRepository fileRepository;
+
+    private final ConcurrentMap<Long, UploadDirectoryLock> uploadDirectoryLocks = new ConcurrentHashMap<>();
 
     /**
      * @param fileQueryParam   文件查询param
@@ -370,6 +381,19 @@ public class FileServiceImpl implements FileService {
         }
     }
 
+    @Override
+    public FileDo findFileByPath(String filePath, Integer userId) {
+        if (StringUtils.isBlank(filePath) || userId == null) {
+            return null;
+        }
+        FileDalQueryParam param = new FileDalQueryParam();
+        param.setFilePath(filePath);
+        param.setUserId(userId);
+        param.setDel(YesOrNoEnum.N.name());
+        List<FileDo> files = fileRepository.getAssignFiles(param);
+        return CollectionUtils.isEmpty(files) ? null : files.get(0);
+    }
+
     // ========== 目录操作实现 ==========
 
     /**
@@ -381,6 +405,8 @@ public class FileServiceImpl implements FileService {
      * 目录名最大长度
      */
     private static final int MAX_DIR_NAME_LENGTH = 20;
+
+    private static final String CHAT_ATTACHMENT_DIRECTORY_NAME = ".chat-attachments";
 
     /**
      * 查询用户的完整目录树结构（递归）
@@ -428,6 +454,7 @@ public class FileServiceImpl implements FileService {
             // 排除根目录，只处理子节点
             Map<Long, List<FileDto>> parentIdToChildrenMap = allDirs.stream()
                     .filter(file -> file.getParentId() != -1L)
+                    .filter(file -> !isChatAttachmentDirectory(file))
                     .map(this::doToDto)
                     .collect(Collectors.groupingBy(FileDto::getParentId));
 
@@ -507,6 +534,10 @@ public class FileServiceImpl implements FileService {
         }
         dirName = dirName.trim();
 
+        if (CHAT_ATTACHMENT_DIRECTORY_NAME.equals(dirName)) {
+            throw new IllegalArgumentException("系统目录名称不可使用");
+        }
+
         // 特殊处理：如果是根目录（parentId = -1），允许较长的目录名
         boolean isRootDirectory = (parentId == -1L);
         if (!isRootDirectory && dirName.length() > MAX_DIR_NAME_LENGTH) {
@@ -579,6 +610,7 @@ public class FileServiceImpl implements FileService {
         if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
             throw new IllegalArgumentException("目录不存在");
         }
+        rejectChatAttachmentDirectoryMutation(dirDo);
 
         // 2. 检查是否有子项
         FileDalQueryParam queryParam = new FileDalQueryParam();
@@ -626,6 +658,7 @@ public class FileServiceImpl implements FileService {
         if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
             throw new IllegalArgumentException("目录不存在");
         }
+        rejectChatAttachmentDirectoryMutation(dirDo);
 
         if (dirDo.getParentId() != null && dirDo.getParentId() == -1L) {
             throw new IllegalArgumentException("顶层目录名称不允许修改");
@@ -700,6 +733,7 @@ public class FileServiceImpl implements FileService {
         if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
             throw new IllegalArgumentException("目录不存在");
         }
+        rejectChatAttachmentDirectoryMutation(dirDo);
 
         // 3. 检查目标目录下是否有同名
         if (existsSameName(targetParentId, dirDo.getFileName(), null)) {
@@ -839,9 +873,35 @@ public class FileServiceImpl implements FileService {
             fileDtoList = pageResult.getModelList().stream()
                     .map(this::doToDto)
                     .collect(Collectors.toList());
+            applyParentDirectoryNames(fileDtoList, loadParentDirectoryNames(fileDtoList));
         }
         return FilePageDto.of(fileDtoList, pageResult.getTotalCount(),
                 pageResult.getCurrentPage(), pageResult.getPageSize());
+    }
+
+    private Map<Long, String> loadParentDirectoryNames(List<FileDto> fileDtoList) {
+        Set<Long> parentIds = fileDtoList.stream()
+                .map(FileDto::getParentId)
+                .filter(Objects::nonNull)
+                .filter(parentId -> parentId > 0)
+                .collect(Collectors.toSet());
+        Map<Long, String> parentNames = new HashMap<>();
+        for (Long parentId : parentIds) {
+            FileDo parentDirectory = this.fileRepository.get(parentId);
+            if (parentDirectory != null && YesOrNoEnum.N.name().equals(parentDirectory.getIsFile())) {
+                parentNames.put(parentId, parentDirectory.getFileName());
+            }
+        }
+        return parentNames;
+    }
+
+    static void applyParentDirectoryNames(List<FileDto> fileDtoList, Map<Long, String> parentNames) {
+        if (CollectionUtils.isEmpty(fileDtoList) || CollectionUtils.isEmpty(parentNames)) {
+            return;
+        }
+        for (FileDto fileDto : fileDtoList) {
+            fileDto.setParentDirName(parentNames.get(fileDto.getParentId()));
+        }
     }
 
     @Override
@@ -967,6 +1027,341 @@ public class FileServiceImpl implements FileService {
         if (!dir.exists() || !dir.isDirectory()) {
             return null;
         }
-        return path;
+        try {
+            // 统一存储文件系统规范路径，避免 macOS 目录大小写兼容但媒体安全校验不一致。
+            return dir.getCanonicalPath();
+        } catch (java.io.IOException e) {
+            log.error("规范化上传目录失败: dirId={}, path={}", dirId, path, e);
+            return null;
+        }
+    }
+
+    @Override
+    public String ensureUploadDirectory(Long dirId, Integer userId, String userName) {
+        if (dirId == null) {
+            throw new IllegalArgumentException("上传目录ID不能为空");
+        }
+        if (userId == null || StringUtils.isBlank(userName)) {
+            throw new IllegalArgumentException("当前用户信息无效");
+        }
+
+        UploadDirectoryLock directoryLock = acquireUploadDirectoryLock(dirId);
+        directoryLock.lock.lock();
+        try {
+            return ensureUploadDirectoryLocked(dirId, userId, userName.trim());
+        } finally {
+            directoryLock.lock.unlock();
+            releaseUploadDirectoryLock(dirId, directoryLock);
+        }
+    }
+
+    @Override
+    public FileDto ensureChatAttachmentDirectory(Integer userId, String userName) {
+        if (userId == null || StringUtils.isBlank(userName)) {
+            throw new IllegalArgumentException("当前用户信息无效");
+        }
+        String normalizedUserName = userName.trim();
+        FileDo rootDirectory = findUserRootDirectory(userId, normalizedUserName);
+
+        UploadDirectoryLock directoryLock = acquireUploadDirectoryLock(rootDirectory.getId());
+        directoryLock.lock.lock();
+        try {
+            FileDo existing = findChatAttachmentDirectory(rootDirectory.getId(), userId);
+            if (existing != null) {
+                ensureUploadDirectoryLocked(existing.getId(), userId, normalizedUserName);
+                return doToDto(fileRepository.get(existing.getId()));
+            }
+
+            String rootPath = ensureUploadDirectoryLocked(rootDirectory.getId(), userId, normalizedUserName);
+            Path attachmentPath = resolveSafeChild(Paths.get(rootPath), CHAT_ATTACHMENT_DIRECTORY_NAME);
+            validateExistingDirectoryComponents(Collections.singletonList(attachmentPath));
+            try {
+                Files.createDirectories(attachmentPath);
+                if (Files.isSymbolicLink(attachmentPath)
+                        || !Files.isDirectory(attachmentPath, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalArgumentException("聊天附件目录路径无效");
+                }
+
+                FileCreateParam createParam = new FileCreateParam();
+                createParam.setParentId(rootDirectory.getId());
+                createParam.setFileName(CHAT_ATTACHMENT_DIRECTORY_NAME);
+                createParam.setFilePath(attachmentPath.toRealPath().toString());
+                createParam.setFileType("NOT_FILE");
+                createParam.setIsFile(YesOrNoEnum.N.name());
+                createParam.setIsExist(YesOrNoEnum.Y.name());
+                createParam.setHasChild(YesOrNoEnum.N.name());
+                createParam.setUserId(userId);
+                createParam.setUserName(normalizedUserName);
+                FileDo created = createParamToDo(createParam);
+                fileRepository.insertSelective(created);
+
+                FileDo rootUpdate = new FileDo();
+                rootUpdate.setId(rootDirectory.getId());
+                rootUpdate.setHasChild(YesOrNoEnum.Y.name());
+                rootUpdate.setGmtModified(new Date());
+                fileRepository.updateSelective(rootUpdate);
+                log.info("聊天附件目录创建完成: userId={}, dirId={}, path={}",
+                        userId, created.getId(), created.getFilePath());
+                return doToDto(created);
+            } catch (IOException e) {
+                throw new IllegalStateException("聊天附件目录创建失败: " + e.getMessage(), e);
+            }
+        } finally {
+            directoryLock.lock.unlock();
+            releaseUploadDirectoryLock(rootDirectory.getId(), directoryLock);
+        }
+    }
+
+    private FileDo findUserRootDirectory(Integer userId, String userName) {
+        FileDalQueryParam query = new FileDalQueryParam();
+        query.setParentId(-1L);
+        query.setUserId(userId);
+        query.setIsFile(YesOrNoEnum.N.name());
+        query.setIsExist(YesOrNoEnum.Y.name());
+        query.setDel(YesOrNoEnum.N.name());
+        List<FileDo> roots = fileRepository.getAssignFiles(query);
+        if (CollectionUtils.isEmpty(roots)) {
+            throw new IllegalArgumentException("用户根目录不存在");
+        }
+        return roots.stream()
+                .filter(root -> userName.equals(root.getFileName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("目录根节点与当前用户不匹配"));
+    }
+
+    private FileDo findChatAttachmentDirectory(Long rootDirectoryId, Integer userId) {
+        FileDalQueryParam query = new FileDalQueryParam();
+        query.setParentId(rootDirectoryId);
+        query.setFileName(CHAT_ATTACHMENT_DIRECTORY_NAME);
+        query.setUserId(userId);
+        query.setIsFile(YesOrNoEnum.N.name());
+        query.setIsExist(YesOrNoEnum.Y.name());
+        query.setDel(YesOrNoEnum.N.name());
+        List<FileDo> directories = fileRepository.getAssignFiles(query);
+        if (CollectionUtils.isEmpty(directories)) {
+            return null;
+        }
+        if (directories.size() > 1) {
+            throw new IllegalStateException("聊天附件目录数据重复");
+        }
+        return directories.get(0);
+    }
+
+    private static boolean isChatAttachmentDirectory(FileDo directory) {
+        return directory != null
+                && YesOrNoEnum.N.name().equals(directory.getIsFile())
+                && CHAT_ATTACHMENT_DIRECTORY_NAME.equals(directory.getFileName());
+    }
+
+    private void rejectChatAttachmentDirectoryMutation(FileDo directory) {
+        if (isChatAttachmentDirectory(directory)) {
+            throw new IllegalArgumentException("聊天附件系统目录不允许修改");
+        }
+    }
+
+    private String ensureUploadDirectoryLocked(Long dirId, Integer userId, String userName) {
+        List<FileDo> directoryChain = loadAndValidateUploadDirectoryChain(dirId, userId, userName);
+        Path storageRoot = resolveStorageRoot();
+        Path currentPath = resolveSafeChild(storageRoot, userName);
+        List<Path> expectedPaths = new ArrayList<>(directoryChain.size());
+        expectedPaths.add(currentPath);
+
+        for (int index = 1; index < directoryChain.size(); index++) {
+            currentPath = resolveSafeChild(currentPath, directoryChain.get(index).getFileName());
+            ensureContained(storageRoot, currentPath);
+            expectedPaths.add(currentPath);
+        }
+
+        validateExistingDirectoryComponents(expectedPaths);
+        Path targetPath = expectedPaths.get(expectedPaths.size() - 1);
+        try {
+            Files.createDirectories(targetPath);
+            validateExistingDirectoryComponents(expectedPaths);
+
+            Path realStorageRoot = storageRoot.toRealPath();
+            Path realTargetPath = targetPath.toRealPath();
+            if (!realTargetPath.startsWith(realStorageRoot)) {
+                throw new IllegalArgumentException("上传目录超出当前存储根目录");
+            }
+
+            repairDirectoryMetadata(directoryChain, expectedPaths, userName);
+            log.info("上传目录准备完成: dirId={}, userName={}, path={}", dirId, userName, realTargetPath);
+            return realTargetPath.toString();
+        } catch (IOException e) {
+            throw new IllegalStateException("上传目录创建失败: " + e.getMessage(), e);
+        }
+    }
+
+    private List<FileDo> loadAndValidateUploadDirectoryChain(Long dirId, Integer userId, String userName) {
+        List<FileDo> reversedChain = new ArrayList<>();
+        Set<Long> visitedIds = new HashSet<>();
+        Long currentId = dirId;
+
+        while (currentId != null && currentId != -1L) {
+            if (!visitedIds.add(currentId)) {
+                throw new IllegalArgumentException("目录层级存在循环引用");
+            }
+
+            FileDo directory = fileRepository.get(currentId);
+            if (directory == null) {
+                throw new IllegalArgumentException("目录层级数据不完整: 缺少目录ID=" + currentId);
+            }
+            validateUploadDirectoryRecord(directory, userId, userName);
+            reversedChain.add(directory);
+
+            Long parentId = directory.getParentId();
+            if (parentId == null) {
+                throw new IllegalArgumentException("目录层级数据不完整: 父目录ID为空");
+            }
+            currentId = parentId;
+        }
+
+        if (currentId == null || reversedChain.isEmpty()) {
+            throw new IllegalArgumentException("目录层级数据不完整: 未找到用户根目录");
+        }
+
+        Collections.reverse(reversedChain);
+        FileDo rootDirectory = reversedChain.get(0);
+        if (!Long.valueOf(-1L).equals(rootDirectory.getParentId())
+                || !userName.equals(rootDirectory.getFileName())) {
+            throw new IllegalArgumentException("目录根节点与当前用户不匹配");
+        }
+        return reversedChain;
+    }
+
+    private void validateUploadDirectoryRecord(FileDo directory, Integer userId, String userName) {
+        if (!YesOrNoEnum.N.name().equals(directory.getIsFile())
+                || !YesOrNoEnum.Y.name().equals(directory.getIsExist())
+                || !YesOrNoEnum.N.name().equals(directory.getDel())) {
+            throw new IllegalArgumentException("目录状态无效: dirId=" + directory.getId());
+        }
+        boolean legacySystemRoot = Long.valueOf(-1L).equals(directory.getParentId())
+                && "system".equals(directory.getUserName())
+                && userName.equals(directory.getFileName());
+        if (!userId.equals(directory.getUserId())
+                || (!userName.equals(directory.getUserName()) && !legacySystemRoot)) {
+            throw new IllegalArgumentException("目录不属于当前用户: dirId=" + directory.getId());
+        }
+        validatePathSegment(directory.getFileName());
+    }
+
+    private Path resolveStorageRoot() {
+        String configuredRoot = NioServerContext.getValue(
+                com.alibaba.server.common.OSinfo.isWindows()
+                        ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS
+                        : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC);
+        if (StringUtils.isBlank(configuredRoot)) {
+            throw new IllegalStateException("文件存储根目录未配置");
+        }
+
+        Path storageRoot = Paths.get(configuredRoot.trim()).toAbsolutePath().normalize();
+        try {
+            if (Files.exists(storageRoot, LinkOption.NOFOLLOW_LINKS)) {
+                if (Files.isSymbolicLink(storageRoot)) {
+                    throw new IllegalArgumentException("文件存储根目录不允许是符号链接");
+                }
+                if (!Files.isDirectory(storageRoot, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalStateException("文件存储根路径被文件占用");
+                }
+            } else {
+                Files.createDirectories(storageRoot);
+            }
+            return storageRoot.toRealPath();
+        } catch (IOException e) {
+            throw new IllegalStateException("文件存储根目录不可用: " + e.getMessage(), e);
+        }
+    }
+
+    private Path resolveSafeChild(Path parent, String childName) {
+        validatePathSegment(childName);
+        Path child = parent.resolve(childName).normalize();
+        ensureContained(parent, child);
+        return child;
+    }
+
+    private void validatePathSegment(String pathSegment) {
+        if (StringUtils.isBlank(pathSegment)
+                || ".".equals(pathSegment)
+                || "..".equals(pathSegment)
+                || pathSegment.indexOf('/') >= 0
+                || pathSegment.indexOf('\\') >= 0
+                || pathSegment.indexOf('\0') >= 0
+                || Paths.get(pathSegment).isAbsolute()
+                || Paths.get(pathSegment).getNameCount() != 1) {
+            throw new IllegalArgumentException("目录名称不安全: " + pathSegment);
+        }
+    }
+
+    private void ensureContained(Path parent, Path child) {
+        if (!child.toAbsolutePath().normalize().startsWith(parent.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException("上传目录超出当前存储根目录");
+        }
+    }
+
+    private void validateExistingDirectoryComponents(List<Path> expectedPaths) {
+        for (Path expectedPath : expectedPaths) {
+            if (!Files.exists(expectedPath, LinkOption.NOFOLLOW_LINKS)) {
+                continue;
+            }
+            if (Files.isSymbolicLink(expectedPath)) {
+                throw new IllegalArgumentException("目录路径不允许包含符号链接: " + expectedPath);
+            }
+            if (!Files.isDirectory(expectedPath, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalArgumentException("目录路径被文件占用: " + expectedPath);
+            }
+        }
+    }
+
+    private void repairDirectoryMetadata(
+            List<FileDo> directoryChain,
+            List<Path> expectedPaths,
+            String userName) throws IOException {
+        for (int index = 0; index < directoryChain.size(); index++) {
+            FileDo directory = directoryChain.get(index);
+            String expectedPath = expectedPaths.get(index).toRealPath().toString();
+            boolean repairPath = !expectedPath.equals(directory.getFilePath());
+            boolean repairLegacyRootOwner = Long.valueOf(-1L).equals(directory.getParentId())
+                    && "system".equals(directory.getUserName());
+            if (repairPath || repairLegacyRootOwner) {
+                FileDo update = new FileDo();
+                update.setId(directory.getId());
+                if (repairPath) {
+                    update.setFilePath(expectedPath);
+                }
+                if (repairLegacyRootOwner) {
+                    update.setUserName(userName);
+                }
+                update.setGmtModified(new Date());
+                fileRepository.updateSelective(update);
+                if (repairPath) {
+                    directory.setFilePath(expectedPath);
+                }
+                if (repairLegacyRootOwner) {
+                    directory.setUserName(userName);
+                }
+            }
+        }
+    }
+
+    private UploadDirectoryLock acquireUploadDirectoryLock(Long dirId) {
+        return uploadDirectoryLocks.compute(dirId, (id, current) -> {
+            UploadDirectoryLock result = current == null ? new UploadDirectoryLock() : current;
+            result.users.incrementAndGet();
+            return result;
+        });
+    }
+
+    private void releaseUploadDirectoryLock(Long dirId, UploadDirectoryLock directoryLock) {
+        uploadDirectoryLocks.compute(dirId, (id, current) -> {
+            if (current != directoryLock) {
+                return current;
+            }
+            return directoryLock.users.decrementAndGet() == 0 ? null : directoryLock;
+        });
+    }
+
+    private static final class UploadDirectoryLock {
+        private final ReentrantLock lock = new ReentrantLock();
+        private final AtomicInteger users = new AtomicInteger();
     }
 }

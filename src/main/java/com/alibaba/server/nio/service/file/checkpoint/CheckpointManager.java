@@ -22,8 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CheckpointManager {
     
     /**
-     * 断点信息存储：MD5 -> UploadCheckpoint
-     * 使用 MD5 作为 key，确保同一文件在不同连接下能够续传
+     * 断点信息存储：userId + MD5 -> UploadCheckpoint。
+     * 同一文件可能被不同用户上传，断点必须按用户隔离。
      */
     private static final ConcurrentHashMap<String, UploadCheckpoint> checkpoints = new ConcurrentHashMap<>();
     
@@ -39,7 +39,7 @@ public class CheckpointManager {
      * @param checkpoint 断点信息
      */
     public static void saveCheckpoint(UploadCheckpoint checkpoint) {
-        if (checkpoint == null || checkpoint.getMd5() == null) {
+        if (checkpoint == null || checkpoint.getMd5() == null || checkpoint.getUserId() == null) {
             log.warn("无效的断点信息，无法保存");
             return;
         }
@@ -49,7 +49,7 @@ public class CheckpointManager {
             checkpoint.setCreateTime(LocalDateTime.now());
         }
         
-        checkpoints.put(checkpoint.getMd5(), checkpoint);
+        checkpoints.put(buildKey(checkpoint.getMd5(), checkpoint.getUserId()), checkpoint);
         
         log.info("保存断点 - MD5: {}, 文件: {}, 进度: {}/{} ({:.2f}%)",
                 checkpoint.getMd5(),
@@ -65,11 +65,11 @@ public class CheckpointManager {
      * @param md5 文件MD5值
      * @return 断点信息，如果不存在则返回 null
      */
-    public static UploadCheckpoint getCheckpoint(String md5) {
-        if (md5 == null) {
+    public static UploadCheckpoint getCheckpoint(String md5, Integer userId) {
+        if (md5 == null || userId == null) {
             return null;
         }
-        return checkpoints.get(md5);
+        return checkpoints.get(buildKey(md5, userId));
     }
     
     /**
@@ -78,12 +78,12 @@ public class CheckpointManager {
      * @param md5 文件MD5值
      * @return 被删除的断点信息，如果不存在则返回 null
      */
-    public static UploadCheckpoint removeCheckpoint(String md5) {
-        if (md5 == null) {
+    public static UploadCheckpoint removeCheckpoint(String md5, Integer userId) {
+        if (md5 == null || userId == null) {
             return null;
         }
         
-        UploadCheckpoint removed = checkpoints.remove(md5);
+        UploadCheckpoint removed = checkpoints.remove(buildKey(md5, userId));
         if (removed != null) {
             log.info("删除断点 - MD5: {}, 文件: {}", md5, removed.getFileName());
         }
@@ -96,12 +96,12 @@ public class CheckpointManager {
      * @param md5 文件MD5值
      * @param uploadedSize 已上传字节数
      */
-    public static void updateCheckpoint(String md5, long uploadedSize) {
-        if (md5 == null) {
+    public static void updateCheckpoint(String md5, Integer userId, long uploadedSize) {
+        if (md5 == null || userId == null) {
             return;
         }
         
-        UploadCheckpoint checkpoint = checkpoints.get(md5);
+        UploadCheckpoint checkpoint = checkpoints.get(buildKey(md5, userId));
         if (checkpoint != null) {
             checkpoint.setUploadedSize(uploadedSize);
             checkpoint.setUpdateTime(LocalDateTime.now());
@@ -166,7 +166,11 @@ public class CheckpointManager {
     /**
      * 检查断点是否存在
      */
-    public static boolean hasCheckpoint(String md5) {
-        return md5 != null && checkpoints.containsKey(md5);
+    public static boolean hasCheckpoint(String md5, Integer userId) {
+        return md5 != null && userId != null && checkpoints.containsKey(buildKey(md5, userId));
+    }
+
+    private static String buildKey(String md5, Integer userId) {
+        return userId + ":" + md5;
     }
 }

@@ -137,6 +137,17 @@ public class WorkerThreadPool {
     }
 
     /**
+     * 获取指定通道 Worker 队列占用率。
+     *
+     * @param channelKey 通道远程地址
+     * @return 0到1之间的队列占用率，Worker不存在时返回0
+     */
+    public static double getQueueUtilization(String channelKey) {
+        ChannelWorker worker = channelWorkerMap.get(channelKey);
+        return worker == null ? 0D : worker.getQueueUtilization();
+    }
+
+    /**
      * ChannelWorker：每个 SocketChannel 对应的持久化任务
      * 
      * 核心机制：
@@ -207,6 +218,12 @@ public class WorkerThreadPool {
          */
         public void stop() {
             running.set(false);
+        }
+
+        private double getQueueUtilization() {
+            int size = dataQueue.size();
+            int capacity = size + dataQueue.remainingCapacity();
+            return capacity <= 0 ? 1D : (double) size / capacity;
         }
 
         /**

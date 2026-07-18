@@ -29,6 +29,10 @@ public class MediaAccessService {
     }
 
     public MediaPlayUrl createPlayUrl(Long fileId, String userName) throws MediaAccessException {
+        return createPlayUrl(fileId, userName, null);
+    }
+
+    public MediaPlayUrl createPlayUrl(Long fileId, String userName, String sessionId) throws MediaAccessException {
         FileDto fileDto = requireAccessibleFile(fileId, userName);
         if (!MediaContentTypeResolver.isPlayableVideo(fileDto.getFileName())) {
             throw new MediaAccessException(400, "该文件暂不支持在线播放，请下载后播放");
@@ -39,6 +43,9 @@ public class MediaAccessService {
         try {
             String encodedToken = URLEncoder.encode(token, "UTF-8");
             String url = "http://" + publicHost + ":" + publicPort + "/media/stream/" + fileId + "?token=" + encodedToken;
+            if (StringUtils.isNotBlank(sessionId)) {
+                url += "&sessionId=" + URLEncoder.encode(sessionId, "UTF-8");
+            }
             return new MediaPlayUrl(
                     fileId,
                     url,

@@ -33,6 +33,7 @@ import java.util.concurrent.Future;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class MediaStreamHandlerIntegrationTest {
     private static final long FILE_ID = 1001L;
@@ -63,8 +64,10 @@ public class MediaStreamHandlerIntegrationTest {
                 tokenService,
                 "127.0.0.1",
                 port);
-        server.createContext("/media/play-url", new MediaStreamHandler(accessService, tokenService, 256));
-        server.createContext("/media/stream", new MediaStreamHandler(accessService, tokenService, 256));
+        MediaStreamHandler handler = new MediaStreamHandler(accessService, tokenService, 256);
+        server.createContext("/media/play-url", handler);
+        server.createContext("/media/stream", handler);
+        server.createContext("/media/seek", handler);
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.start();
 
@@ -158,6 +161,31 @@ public class MediaStreamHandlerIntegrationTest {
         HttpResult result = request("GET", "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID + "?userName=bob", null);
 
         assertEquals(403, result.status);
+    }
+
+    @Test
+    public void registersPlaybackSessionAndAcceptsSeekNotification() throws Exception {
+        int port = server.getAddress().getPort();
+        String sessionId = "playback-session-1";
+        HttpResult playResult = request(
+                "GET",
+                "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID
+                        + "?userName=" + USER_NAME + "&sessionId=" + sessionId,
+                null);
+
+        assertEquals(200, playResult.status);
+        JSONObject body = JSON.parseObject(new String(playResult.body, "UTF-8"));
+        String sessionPlayUrl = body.getJSONObject("data").getString("playUrl");
+        assertTrue(sessionPlayUrl.contains("sessionId=" + sessionId));
+
+        HttpResult seekResult = request(
+                "POST",
+                "http://127.0.0.1:" + port + "/media/seek/" + FILE_ID
+                        + "?userName=" + USER_NAME + "&sessionId=" + sessionId + "&targetSeconds=12.5",
+                null);
+
+        assertEquals(204, seekResult.status);
+        assertEquals(0, seekResult.body.length);
     }
 
     @Test
@@ -282,6 +310,11 @@ public class MediaStreamHandlerIntegrationTest {
             throw new UnsupportedOperationException();
         }
 
+        @Override
+        public FileDo findFileByPath(String filePath, Integer userId) {
+            throw new UnsupportedOperationException();
+        }
+
         @Override public FileDto createDirectory(Long parentId, String dirName, UserDTO userDTO) { throw new UnsupportedOperationException(); }
         @Override public boolean deleteDirectory(Long dirId) { throw new UnsupportedOperationException(); }
         @Override public FileDto updateDirectory(Long dirId, String newName) { throw new UnsupportedOperationException(); }
@@ -293,6 +326,8 @@ public class MediaStreamHandlerIntegrationTest {
         @Override public FileDto getFileDetail(Long fileId) { throw new UnsupportedOperationException(); }
         @Override public boolean deleteFileWithFs(Long fileId) { throw new UnsupportedOperationException(); }
         @Override public String validateDirectory(Long dirId) { throw new UnsupportedOperationException(); }
+        @Override public String ensureUploadDirectory(Long dirId, Integer userId, String userName) { throw new UnsupportedOperationException(); }
+        @Override public FileDto ensureChatAttachmentDirectory(Integer userId, String userName) { throw new UnsupportedOperationException(); }
         @Override public FileDto handleUserTwoLevelDirectory(UserDTO userDTO) { throw new UnsupportedOperationException(); }
         @Override public FileDo createByTask(FileTaskDto fileTaskDto) { throw new UnsupportedOperationException(); }
         @Override public FileDto renameFile(Long fileId, String newFileName) { throw new UnsupportedOperationException(); }

@@ -62,6 +62,16 @@ public class FileUploadConfig {
      */
     private int bucketCapacityMultiplier;
 
+    private int adaptiveChunkMinBytes;
+
+    private int adaptiveChunkInitialBytes;
+
+    private int adaptiveChunkMaxBytes;
+
+    private int adaptiveAckInitialBytes;
+
+    private int adaptiveAckMaxBytes;
+
     /**
      * 构造函数：从 server.properties 加载配置
      */
@@ -73,20 +83,31 @@ public class FileUploadConfig {
      * 从 PropertiesUtil 加载配置
      */
     private void loadConfig() {
-        // 单连接速率限制，默认 2MB/s
-        this.perConnectionRateBps = getLongProperty("FILE.UPLOAD.PER.CONNECTION.RATE.BPS", 2 * 1024 * 1024);
+        long legacyPerConnectionRate = getLongProperty(
+                "FILE.UPLOAD.PER.CONNECTION.RATE.BPS", 50L * 1024 * 1024);
+        this.perConnectionRateBps = getLongProperty(
+                "FILE.UPLOAD.PER.CONNECTION.MAX.RATE.BPS", legacyPerConnectionRate);
         
-        // 全局速率限制，默认 20MB/s
-        this.globalRateBps = getLongProperty("FILE.UPLOAD.GLOBAL.RATE.BPS", 20 * 1024 * 1024);
+        this.globalRateBps = getLongProperty("FILE.UPLOAD.GLOBAL.RATE.BPS", 100L * 1024 * 1024);
         
         // 最大并发上传数，默认 30
         this.maxConcurrentUploads = getIntProperty("FILE.UPLOAD.MAX.CONCURRENT.UPLOADS", 30);
         
-        // 是否启用动态速率调整，默认 false
-        this.enableDynamicRateAdjustment = getBooleanProperty("FILE.UPLOAD.ENABLE.DYNAMIC.RATE.ADJUSTMENT", false);
+        this.enableDynamicRateAdjustment = getBooleanProperty("FILE.UPLOAD.ENABLE.DYNAMIC.RATE.ADJUSTMENT", true);
         
         // 令牌桶容量倍数，默认 2
         this.bucketCapacityMultiplier = getIntProperty("FILE.UPLOAD.BUCKET.CAPACITY.MULTIPLIER", 2);
+
+        this.adaptiveChunkMinBytes = getIntProperty(
+                "FILE.UPLOAD.ADAPTIVE.CHUNK.MIN.BYTES", 32 * 1024);
+        this.adaptiveChunkInitialBytes = getIntProperty(
+                "FILE.UPLOAD.ADAPTIVE.CHUNK.INITIAL.BYTES", 64 * 1024);
+        this.adaptiveChunkMaxBytes = getIntProperty(
+                "FILE.UPLOAD.ADAPTIVE.CHUNK.MAX.BYTES", 512 * 1024);
+        this.adaptiveAckInitialBytes = getIntProperty(
+                "FILE.UPLOAD.ADAPTIVE.ACK.INITIAL.BYTES", 1024 * 1024);
+        this.adaptiveAckMaxBytes = getIntProperty(
+                "FILE.UPLOAD.ADAPTIVE.ACK.MAX.BYTES", 8 * 1024 * 1024);
 
         log.info("文件上传配置加载完成 - 单连接速率: {} B/s ({} MB/s), 全局速率: {} B/s ({} MB/s), 最大并发: {}, 动态调整: {}, 桶容量倍数: {}",
                 perConnectionRateBps, perConnectionRateBps / 1024 / 1024,
@@ -162,14 +183,9 @@ public class FileUploadConfig {
      * @return 调整后的速率
      */
     public long calculateDynamicRate(int currentUploads) {
-        if (!enableDynamicRateAdjustment || currentUploads <= 0) {
+        if (currentUploads <= 0) {
             return perConnectionRateBps;
         }
-        
-        // 确保总速率不超过全局限制，同时保证单连接最低速率 512KB/s
-        long dynamicRate = globalRateBps / currentUploads;
-        long minRate = 512 * 1024; // 512KB/s
-        
-        return Math.max(minRate, Math.min(perConnectionRateBps, dynamicRate));
+        return Math.min(perConnectionRateBps, globalRateBps / currentUploads);
     }
 }

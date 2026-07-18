@@ -7,6 +7,7 @@ import com.alibaba.server.common.YesOrNoEnum;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.handler.event.AbstractEventHandler;
 import com.alibaba.server.nio.handler.event.concret.WriteQueueHelper;
+import com.alibaba.server.nio.handler.worker.WorkerThreadPool;
 import com.alibaba.server.nio.handler.pipe.ChannelContext;
 import com.alibaba.server.nio.handler.pipe.standard.SimpleChannelContext;
 import com.alibaba.server.nio.model.ChannelEventModel;
@@ -19,12 +20,15 @@ import com.alibaba.server.nio.model.file.UploadCheckpoint;
 import com.alibaba.server.nio.model.file.request.FileUploadRequest;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.service.FileService;
+import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.adaptive.AdaptiveThrottlePolicy;
 import com.alibaba.server.nio.service.file.adaptive.ResourcePressureLevel;
 import com.alibaba.server.nio.service.file.adaptive.ServerResourceMonitor;
+import com.alibaba.server.nio.service.file.adaptive.UploadBackpressureController;
+import com.alibaba.server.nio.service.file.adaptive.UploadBackpressureDecision;
 import com.alibaba.server.nio.service.file.checkpoint.CheckpointManager;
 import com.alibaba.server.nio.service.file.config.FileUploadConfig;
 import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
@@ -41,6 +45,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
@@ -61,6 +67,7 @@ import java.util.concurrent.Semaphore;
 @Slf4j
 @SuppressWarnings("all")
 public class FileUploadHandler extends AbstractChannelHandler {
+    private static final String UPLOAD_PURPOSE_CHAT_ATTACHMENT = "CHAT_ATTACHMENT";
     /**
      * 文件上传配置
      */
@@ -73,10 +80,16 @@ public class FileUploadHandler extends AbstractChannelHandler {
      * 并发控制信号量（限制最大同时上传数）
      */
     private static Semaphore uploadSemaphore;
+
+    private static UploadBackpressureController uploadBackpressureController;
     /**
      * 上传上下文缓存: 一个taskId对应一个文件上传上下文对象
      */
     private static final ConcurrentHashMap<String, FileUploadContext> uploadContextMap = new ConcurrentHashMap<>();
+
+    /** 活跃上传任务对应的通道，用于并发变化时重新分配公平带宽。 */
+    private static final ConcurrentHashMap<String, SocketChannelContext> uploadChannelContextMap =
+            new ConcurrentHashMap<>();
     /**
      * 帧解析器缓存：一个remoteAddress对应一个帧解析器
      */
@@ -91,6 +104,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         // 构建全局限流器
         globalRateLimiter = new TokenBucketRateLimiter(config.getGlobalRateBps(), config.getGlobalBucketCapacity());
         uploadSemaphore = new Semaphore(config.getMaxConcurrentUploads());
+        uploadBackpressureController = new UploadBackpressureController(config);
         log.info("文件上传控制器初始化完成 - 全局速率: {}, 单连接速率: {}, 最大并发: {}",
                 formatRate(config.getGlobalRateBps()),
                 formatRate(config.getPerConnectionRateBps()),
@@ -208,23 +222,34 @@ public class FileUploadHandler extends AbstractChannelHandler {
     private void handleResumeCheck(FileUploadFrame frame,
             SocketChannelContext socketChannelContext,
             SimpleChannelContext simpleChannelContext) throws IOException {
+        String requestTaskId = null;
         try {
             // 1. 解析 JSON 元数据
             String jsonData = frame.getDataAsString();
             FileUploadRequest fileUploadRequest = JSONObject.parseObject(jsonData, FileUploadRequest.class);
             if (Objects.isNull(fileUploadRequest)) {
-                sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
+                sendResumeAck(socketChannelContext, null, requestTaskId, "error", 0, "服务器繁忙或目录错误");
                 return;
             }
+            requestTaskId = fileUploadRequest.getTaskId();
             applyAuthenticatedIdentity(fileUploadRequest);
             log.info("=> 接收到断点检查帧: 入参信息={}", JSON.toJSONString(fileUploadRequest));
 
+            String targetDirectory = resolveUploadDirectory(fileUploadRequest);
+            String targetFilePath = targetDirectory + File.separator
+                    + fileUploadRequest.getTaskId() + "_" + fileUploadRequest.getFileName();
+
             // 2. 检查是否有断点记录
-            UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(fileUploadRequest.getMd5());
+            UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(
+                    fileUploadRequest.getMd5(), fileUploadRequest.getUserId());
+            if (checkpoint != null && !targetFilePath.equals(checkpoint.getFilePath())) {
+                checkpoint = null;
+            }
             // 2.1 如果内存中没有，尝试从数据库查找 PAUSED 状态的任务，如果内存有，说明服务端没宕机还保留数据，此时直接按照内存中的进行使用
             if (checkpoint == null) {
-                FileTaskDto pausedTask = fileTaskService.findPausedTask(fileUploadRequest.getMd5(),
-                        fileUploadRequest.getUserId());
+                FileTaskDto pausedTask = fileTaskService.findPausedTask(
+                        fileUploadRequest.getMd5(), fileUploadRequest.getUserId(),
+                        fileUploadRequest.getDirId(), targetFilePath);
                 if (pausedTask != null) {
                     // 构造 Checkpoint 对象
                     checkpoint = new UploadCheckpoint();
@@ -242,6 +267,27 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     log.info("从数据库恢复断点信息: taskId={}, offset={}", pausedTask.getId(), pausedTask.getCurrentOffset());
                 }
             }
+            if (checkpoint == null) {
+                FileTaskDto successfulTask = fileTaskService.findSuccessfulTask(
+                        fileUploadRequest.getMd5(), fileUploadRequest.getUserId(),
+                        fileUploadRequest.getDirId(), targetFilePath);
+                if (successfulTask != null
+                        && StringUtils.isNotBlank(successfulTask.getFilePath())
+                        && Files.isRegularFile(Paths.get(successfulTask.getFilePath()))
+                        && Files.size(Paths.get(successfulTask.getFilePath())) == successfulTask.getFileSize()) {
+                    FileDo completedFile = fileService.findFileByPath(
+                            successfulTask.getFilePath(), fileUploadRequest.getUserId());
+                    if (completedFile != null) {
+                        FileUploadContext completedContext = new FileUploadContext();
+                        completedContext.setRequestTaskId(fileUploadRequest.getTaskId());
+                        completedContext.setFileId(completedFile.getId());
+                        completedContext.setUserId(fileUploadRequest.getUserId());
+                        sendResumeAck(socketChannelContext, completedContext,
+                                "complete", successfulTask.getFileSize(), "上传已完成");
+                        return;
+                    }
+                }
+            }
             // 2.2 断点续传帧查到了当前上传任务的断点数据，则按照断点进行恢复传输
             if (Objects.nonNull(checkpoint) && new File(checkpoint.getFilePath()).exists()) {
                 // ==== 断点续传模式 ====
@@ -249,7 +295,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest,
                         socketChannelContext, true, checkpoint);
                 if (uploadContext == null) {
-                    sendResumeAck(socketChannelContext, null, "error", 0, "服务器繁忙或目录错误");
+                    sendResumeAck(socketChannelContext, null, requestTaskId, "error", 0, "服务器繁忙或目录错误");
                     return;
                 }
                 // *** 关键：以服务端确定的实际磁盘偏移为准发给客户端 ***
@@ -274,7 +320,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
         } catch (Exception e) {
             log.error("处理断点检查帧失败, error={}", ExceptionUtils.getStackTrace(e));
-            sendResumeAck(socketChannelContext, null, "error", 0, e.getMessage());
+            sendResumeAck(socketChannelContext, null, requestTaskId, "error", 0, e.getMessage());
         }
     }
 
@@ -296,13 +342,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         // 1. 文件上传校验所属目录（如果指定了dirId）
         String dirPath = null;
         Long fileTaskId = null;
-        if (Objects.nonNull(request.getDirId())) {
-            dirPath = fileService.validateDirectory(request.getDirId());
-            if (dirPath == null) {
-                log.error("目录不存在或类型错误: dirId={}，上传文件时dirId必须是目录Id", request.getDirId());
-                return null;
-            }
-        }
+        dirPath = resolveUploadDirectory(request);
         // 3. 创建数据库记录（仅全新上传需要）
         if (!isResume) {
             FileTaskDto fileTaskDto = new FileTaskDto();
@@ -437,18 +477,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
         // 9. 保存上下文到Map(使用的是客户端生成的taskId)
         uploadContextMap.put(uploadContext.getRequestTaskId(), uploadContext);
-        // 10. 设置限流器
-        long rateLimitBps = config.getPerConnectionRateBps();
-        if (config.isEnableDynamicRateAdjustment()) {
-            currentUploads = uploadContextMap.size();
-            rateLimitBps = config.calculateDynamicRate(currentUploads);
-        }
-        // [修改] 在原有速率基础上叠加资源压力系数，不替换原有动态调整逻辑
-        double rateMultiplier = AdaptiveThrottlePolicy.uploadRateMultiplier();
-        rateLimitBps = (long) (rateLimitBps * rateMultiplier);
-        socketChannelContext.setRateLimiter(new TokenBucketRateLimiter(
-                rateLimitBps,
-                rateLimitBps * config.getBucketCapacityMultiplier()));
+        uploadChannelContextMap.put(uploadContext.getRequestTaskId(), socketChannelContext);
+        // 10. 每次活跃连接数变化都重新计算所有上传连接的公平预算。
+        rebalanceUploadRateLimiters();
 
         // 将成功创建或恢复的任务 ID 绑定到当前的信道上下文
         // 防止后续 DATA_FRAME 纯靠 remoteAddress 匹配失效
@@ -469,17 +500,21 @@ public class FileUploadHandler extends AbstractChannelHandler {
     private void handleMetaFrame(FileUploadFrame frame,
             SocketChannelContext socketChannelContext,
             SimpleChannelContext simpleChannelContext) throws IOException {
+        String requestTaskId = null;
         try {
             // 1. 解析 JSON 元数据
             String jsonData = frame.getDataAsString();
             FileUploadRequest fileUploadRequest = JSONObject.parseObject(jsonData, FileUploadRequest.class);
+            if (fileUploadRequest != null) {
+                requestTaskId = fileUploadRequest.getTaskId();
+            }
             applyAuthenticatedIdentity(fileUploadRequest);
             log.info("=> 文件上传接收到元数据帧: 入参数据={}", JSON.toJSONString(fileUploadRequest));
             // 2. 使用通用方法创建上传上下文（全新上传模式，isResume=false）
             FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest, socketChannelContext,
                     false, null);
             if (Objects.isNull(uploadContext)) {
-                sendAckFrame(socketChannelContext, null, "error", "服务器繁忙或目录错误");
+                sendAckFrame(socketChannelContext, null, requestTaskId, "error", "服务器繁忙或目录错误");
                 return;
             }
             // 3. 发送 ACK 给客户t
@@ -493,7 +528,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     config.getMaxConcurrentUploads());
         } catch (Exception e) {
             log.error("处理元数据帧失败, error={}", ExceptionUtils.getStackTrace(e));
-            sendAckFrame(socketChannelContext, null, "error", e.getMessage());
+            sendAckFrame(socketChannelContext, null, requestTaskId, "error", e.getMessage());
         }
     }
 
@@ -502,19 +537,25 @@ public class FileUploadHandler extends AbstractChannelHandler {
      * 将文件字节数据写入本地文件
      */
     private void handleDataFrame(FileUploadFrame frame, SocketChannelContext socketChannelContext) {
+        FileUploadContext uploadContext = null;
         try {
             // 从帧数据中解析 taskId（假设数据格式：taskId + 实际数据）
             // 简化处理：这里假设每个连接只有一个活跃的上传任务
-            FileUploadContext uploadContext = getActiveUploadContext(socketChannelContext);
+            uploadContext = getActiveUploadContext(socketChannelContext);
             if (Objects.isNull(uploadContext)) {
                 log.error("未找到活跃的上传上下文，remoteAddress={}", socketChannelContext.getRemoteAddress());
+                if (frame.needAck()) {
+                    sendAckFrame(socketChannelContext, null, null, "error", "上传任务上下文不存在", null);
+                }
                 return;
             }
 
             // 写入文件数据
-            byte[] fileData = frame.getData();
+            byte[] fileData = UploadDataFramePayloadDecoder.decode(frame, uploadContext.getBytesWritten());
             if (fileData != null && fileData.length > 0) {
-                uploadContext.writeData(fileData);
+                long writeStartedNanos = System.nanoTime();
+                int writtenBytes = uploadContext.writeData(fileData);
+                uploadContext.recordWindowWrite(writtenBytes, System.nanoTime() - writeStartedNanos);
                 // 更新速率统计
                 uploadContext.updateSpeed();
 
@@ -571,10 +612,23 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 }
             }
 
-        } catch (
+            if (frame.needAck()) {
+                UploadBackpressureDecision decision = createBackpressureDecision(
+                        socketChannelContext, uploadContext);
+                sendAckFrame(socketChannelContext, uploadContext, null, "progress", null,
+                        uploadContext.getBytesWritten(), decision);
+                uploadContext.resetWindowMetrics();
+            }
 
-        Exception e) {
+        } catch (Exception e) {
             log.error("处理数据帧失败, error={}", ExceptionUtils.getStackTrace(e));
+            if (frame.needAck()) {
+                try {
+                    sendAckFrame(socketChannelContext, uploadContext, null, "error", e.getMessage(), null);
+                } catch (IOException ackError) {
+                    log.error("发送上传数据帧错误应答失败", ackError);
+                }
+            }
         }
     }
 
@@ -671,43 +725,121 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 return;
             }
 
-            // 关闭文件通道
+            // 完成前先刷盘关闭，大小和 MD5 校验交给专用线程池，避免阻塞通用文件 Worker。
+            uploadContext.markFinalizing();
+            simpleChannelContext.setNeedStop(Boolean.TRUE);
+            final FileUploadContext finalUploadContext = uploadContext;
+            UploadFinalizeExecutor.submit(() -> finalizeUpload(
+                    finalUploadContext, socketChannelContext, simpleChannelContext));
+        } catch (Exception e) {
+            log.error("处理结束帧失败", e);
+        }
+    }
+
+    private void finalizeUpload(FileUploadContext uploadContext,
+            SocketChannelContext socketChannelContext,
+            SimpleChannelContext simpleChannelContext) {
+        try {
+            UploadIntegrityVerifier.VerificationResult verificationResult;
+            try {
+                verificationResult = UploadIntegrityVerifier.verify(
+                        Paths.get(uploadContext.getFilePath()),
+                        uploadContext.getFileSize(),
+                        uploadContext.getMd5());
+            } catch (IOException verifyError) {
+                log.error("读取上传文件执行完整性校验失败: taskId={}, filePath={}",
+                        uploadContext.getRequestTaskId(), uploadContext.getFilePath(), verifyError);
+                failIntegrityCheck(uploadContext, socketChannelContext, simpleChannelContext,
+                        "上传文件完整性校验失败");
+                return;
+            }
+            if (!verificationResult.isValid()) {
+                log.warn("上传文件完整性校验未通过: taskId={}, fileName={}, reason={}",
+                        uploadContext.getRequestTaskId(), uploadContext.getFileName(),
+                        verificationResult.getMessage());
+                failIntegrityCheck(uploadContext, socketChannelContext, simpleChannelContext,
+                        verificationResult.getMessage());
+                return;
+            }
             uploadContext.markCompleted();
             // 更新数据库文件传输任务状态, 文件主表插入数据
             FileTaskDto fileTaskDto = new FileTaskDto();
             fileTaskDto.setId(uploadContext.getFileTaskId());
             fileTaskDto.setStatus(FileTaskStatusEnum.UPLOAD_SUCCESS.getCode());
+            fileTaskDto.setCurrentOffset(uploadContext.getFileSize());
             fileTaskDto.setGmtModified(new Date());
             fileTaskService.update(fileTaskDto);
             fileTaskDto = fileTaskService.getById(fileTaskDto.getId());
             FileDo fileDo = fileService.createByTask(fileTaskDto);
             if (Objects.isNull(fileDo)) {
-                sendAckFrame(socketChannelContext, uploadContext, "error", "文件数据保存失败");
-                this.realeaseResource(uploadContext, socketChannelContext);
+                failIntegrityCheck(uploadContext, socketChannelContext, simpleChannelContext,
+                        "文件数据保存失败");
                 return;
             }
 
             // 3. 发送完成 ACK 文件结束上传，uploadContext内部已经设置了fileId和taskId
             uploadContext.setFileId(fileDo.getId());
-            sendAckFrame(socketChannelContext, uploadContext, "success", null);
+            try {
+                sendAckFrame(socketChannelContext, uploadContext, "success", null);
+            } catch (IOException ackError) {
+                // 文件和任务已成功入库。ACK 失败时保留成功结果，客户端可通过 RESUME_CHECK 幂等获取 complete。
+                log.warn("上传成功但终态 ACK 发送失败: taskId={}, fileId={}",
+                        uploadContext.getRequestTaskId(), uploadContext.getFileId(), ackError);
+            }
             // 4. 删除断点记录（上传完成）
             if (StringUtils.isNotBlank(uploadContext.getMd5())) {
-                CheckpointManager.removeCheckpoint(uploadContext.getMd5());
+                CheckpointManager.removeCheckpoint(uploadContext.getMd5(), uploadContext.getUserId());
                 log.debug("上传完成，删除断点记录: MD5={}", uploadContext.getMd5());
             }
             // 5. 释放资源
             this.realeaseResource(uploadContext, socketChannelContext);
             log.info("=> 文件上传完成，当前上传任务所有资源均已释放完毕: taskId={}, fileId={}, fileName={}, size={}, 耗时={}ms",
-                uploadContext.getRemoteAddress(),
+                uploadContext.getRequestTaskId(),
                 uploadContext.getFileId(),
                 uploadContext.getFileName(),
                 uploadContext.getBytesWritten(),
                 System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
                         .toInstant().toEpochMilli());
-            // 5. 终止后续 Handler
-            simpleChannelContext.setNeedStop(Boolean.TRUE);
         } catch (Exception e) {
-            log.error("处理结束帧失败", e);
+            log.error("上传完成校验与入库失败: taskId={}", uploadContext.getRequestTaskId(), e);
+            if (uploadContext.getFileId() != null) {
+                // 正式记录已经创建后禁止删除物理文件，保留幂等成功终态。
+                if (StringUtils.isNotBlank(uploadContext.getMd5())) {
+                    CheckpointManager.removeCheckpoint(uploadContext.getMd5(), uploadContext.getUserId());
+                }
+                realeaseResource(uploadContext, socketChannelContext);
+            } else {
+                failIntegrityCheck(uploadContext, socketChannelContext, simpleChannelContext,
+                        "上传完成处理失败");
+            }
+        }
+    }
+
+    private void failIntegrityCheck(FileUploadContext uploadContext,
+            SocketChannelContext socketChannelContext,
+            SimpleChannelContext simpleChannelContext,
+            String message) {
+        try {
+            if (uploadContext.getFileTaskId() != null) {
+                FileTaskDto failedTask = new FileTaskDto();
+                failedTask.setId(uploadContext.getFileTaskId());
+                failedTask.setStatus(FileTaskStatusEnum.UPLOAD_FAIL.getCode());
+                failedTask.setCurrentOffset(0L);
+                failedTask.setGmtModified(new Date());
+                fileTaskService.update(failedTask);
+            }
+            if (StringUtils.isNotBlank(uploadContext.getMd5())) {
+                CheckpointManager.removeCheckpoint(uploadContext.getMd5(), uploadContext.getUserId());
+            }
+            uploadContext.markFailed(message);
+            try {
+                sendAckFrame(socketChannelContext, uploadContext, "error", message);
+            } catch (IOException ackError) {
+                log.warn("上传失败 ACK 发送失败: taskId={}", uploadContext.getRequestTaskId(), ackError);
+            }
+        } finally {
+            realeaseResource(uploadContext, socketChannelContext);
+            simpleChannelContext.setNeedStop(Boolean.TRUE);
         }
     }
 
@@ -718,16 +850,24 @@ public class FileUploadHandler extends AbstractChannelHandler {
      * @param socketChannelContext
      */
     private void realeaseResource(FileUploadContext fileUploadContext, SocketChannelContext socketChannelContext) {
+        if (fileUploadContext == null) {
+            if (socketChannelContext != null && socketChannelContext.getSocketChannel() != null) {
+                WriteQueueHelper.closeAfterPendingWrites(socketChannelContext);
+            }
+            return;
+        }
         // 1. 释放并发许可
         fileUploadContext.releaseSemaphore(uploadSemaphore);
         // 2. 清理资源（包含本次文件上传任务和解析器）
         uploadContextMap.remove(fileUploadContext.getRequestTaskId());
+        uploadChannelContextMap.remove(fileUploadContext.getRequestTaskId());
+        rebalanceUploadRateLimiters();
         // 3. 释放文件传输解析器
         parserMap.remove(socketChannelContext.getRemoteAddress());
         // 4. 移除文件传输任务对应通道缓存数据
         AbstractEventHandler.channelDataMap.remove(socketChannelContext.getRemoteAddress());
         // 5. 关闭通道
-        NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
+        WriteQueueHelper.closeAfterPendingWrites(socketChannelContext);
     }
 
     /**
@@ -777,14 +917,26 @@ public class FileUploadHandler extends AbstractChannelHandler {
      */
     private void sendResumeAck(SocketChannelContext ctx, FileUploadContext uploadContext,
             String status, long uploadedSize, String message) throws IOException {
+        sendResumeAck(ctx, uploadContext, null, status, uploadedSize, message);
+    }
+
+    private void sendResumeAck(SocketChannelContext ctx, FileUploadContext uploadContext,
+            String requestTaskId, String status, long uploadedSize, String message) throws IOException {
         JSONObject ackJson = new JSONObject();
-        // [修改] uploadContext 为 null 时（压力拒绝场景）安全取值，避免 NPE
-        ackJson.put("taskId", uploadContext != null ? uploadContext.getRequestTaskId() : null);
+        ackJson.put("taskId", UploadResponseTaskIdResolver.resolve(uploadContext, requestTaskId));
         // 文件Id在断点应答帧先不传
         // ackJson.put("fileId", uploadContext.getFileId());
         ackJson.put("status", status);
         ackJson.put("uploadedSize", uploadedSize);
         ackJson.put("message", message);
+        if (uploadContext != null && uploadContext.getFileId() != null) {
+            ackJson.put("fileId", uploadContext.getFileId());
+        }
+        ackJson.put("initialChunkSize", config.getAdaptiveChunkInitialBytes());
+        ackJson.put("minChunkSize", config.getAdaptiveChunkMinBytes());
+        ackJson.put("maxChunkSize", config.getAdaptiveChunkMaxBytes());
+        ackJson.put("initialAckWindow", config.getAdaptiveAckInitialBytes());
+        ackJson.put("maxAckWindow", config.getAdaptiveAckMaxBytes());
 
         byte[] ackData = ackJson.toJSONString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
         java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(FileUploadFrame.HEADER_LENGTH + ackData.length);
@@ -806,6 +958,33 @@ public class FileUploadHandler extends AbstractChannelHandler {
             FileUploadContext uploadContext,
             String status,
             String message) throws IOException {
+        sendAckFrame(socketChannelContext, uploadContext, null, status, message, null);
+    }
+
+    private void sendAckFrame(SocketChannelContext socketChannelContext,
+            FileUploadContext uploadContext,
+            String requestTaskId,
+            String status,
+            String message) throws IOException {
+        sendAckFrame(socketChannelContext, uploadContext, requestTaskId, status, message, null);
+    }
+
+    private void sendAckFrame(SocketChannelContext socketChannelContext,
+            FileUploadContext uploadContext,
+            String requestTaskId,
+            String status,
+            String message,
+            Long uploadedSize) throws IOException {
+        sendAckFrame(socketChannelContext, uploadContext, requestTaskId, status, message, uploadedSize, null);
+    }
+
+    private void sendAckFrame(SocketChannelContext socketChannelContext,
+            FileUploadContext uploadContext,
+            String requestTaskId,
+            String status,
+            String message,
+            Long uploadedSize,
+            UploadBackpressureDecision decision) throws IOException {
         try {
             SocketChannel socketChannel = socketChannelContext.getSocketChannel();
             if (socketChannel == null || !socketChannel.isOpen()) {
@@ -814,14 +993,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
 
             // 构建 ACK 响应 JSON
-            JSONObject ackJson = new JSONObject();
-            // [修改] uploadContext 为 null 时（压力拒绝场景）安全取值，避免 NPE
-            ackJson.put("taskId", uploadContext != null ? uploadContext.getRequestTaskId() : null);
-            ackJson.put("fileId",  uploadContext != null ? uploadContext.getFileId() : null);
-            ackJson.put("status", status);
-            if (StringUtils.isNotBlank(message)) {
-                ackJson.put("message", message);
-            }
+            JSONObject ackJson = UploadAckPayloadBuilder.build(
+                    uploadContext, requestTaskId, status, message, uploadedSize, decision);
             byte[] ackData = ackJson.toJSONString().getBytes(StandardCharsets.UTF_8);
 
             // 构建 ACK 帧
@@ -842,6 +1015,23 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     ExceptionUtils.getStackTrace(e));
             throw e;
         }
+    }
+
+    private UploadBackpressureDecision createBackpressureDecision(
+            SocketChannelContext socketChannelContext,
+            FileUploadContext uploadContext) {
+        int activeUploads = Math.max(1, uploadContextMap.size());
+        double queueRatio = WorkerThreadPool.getQueueUtilization(socketChannelContext.getRemoteAddress());
+        long globalCapacity = Math.max(1L, config.getGlobalBucketCapacity());
+        double globalBudgetRatio = Math.min(
+                1D,
+                (double) globalRateLimiter.getAvailableTokens() / globalCapacity);
+        return uploadBackpressureController.decide(
+                ServerResourceMonitor.getInstance().getCurrentLevel(),
+                uploadContext.getWindowWriteMillis(),
+                queueRatio,
+                activeUploads,
+                globalBudgetRatio);
     }
 
     /**
@@ -865,7 +1055,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             FileUploadContext ctx = entry.getValue();
             // 只清理属于该客户端且未完成的上传
             if (remoteAddress.equals(ctx.getRemoteAddress())
-                    && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
+                    && ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING) {
                 cleanupContext(ctx);
                 return true; // 从 Map 中移除
             }
@@ -884,7 +1074,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         uploadContextMap.entrySet().removeIf(entry -> {
             FileUploadContext ctx = entry.getValue();
             if (now - ctx.getLastActiveTime() > idleThreshold
-                    && ctx.getStatus() != FileUploadContext.UploadStatus.COMPLETED) {
+                    && ctx.getStatus() == FileUploadContext.UploadStatus.UPLOADING) {
                 log.info("任务超时，冻结清理: taskId={}, lastActive={}", ctx.getFileTaskId(), new Date(ctx.getLastActiveTime()));
                 cleanupContext(ctx);
                 return true;
@@ -972,6 +1162,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
             // 2. 释放并发许可
             ctx.releaseSemaphore(uploadSemaphore);
+            uploadChannelContextMap.remove(ctx.getRequestTaskId());
+            rebalanceUploadRateLimiters();
             // 注意：文件通道已在步骤开头关闭，此处无需再次调用 closeFileChannel()
             // 3. 删除数据库记录（仅在无断点时）
             if (ctx.getMd5() == null && ctx.getFileId() != null) {
@@ -987,6 +1179,21 @@ public class FileUploadHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("清理上下文失败: taskId={}", ctx.getRequestTaskId(), e);
         }
+    }
+
+    private static void rebalanceUploadRateLimiters() {
+        int activeUploads = uploadChannelContextMap.size();
+        if (activeUploads <= 0) {
+            return;
+        }
+        long fairRate = config.calculateDynamicRate(activeUploads);
+        fairRate = Math.max(1L, (long) (fairRate * AdaptiveThrottlePolicy.uploadRateMultiplier()));
+        long capacity = Math.max(fairRate, fairRate * config.getBucketCapacityMultiplier());
+        for (SocketChannelContext channelContext : uploadChannelContextMap.values()) {
+            channelContext.setRateLimiter(new TokenBucketRateLimiter(fairRate, capacity));
+        }
+        log.debug("上传公平带宽已重算: activeUploads={}, perConnectionRate={} B/s",
+                activeUploads, fairRate);
     }
 
     private void applyAuthenticatedIdentity(FileUploadRequest request) {
@@ -1008,4 +1215,26 @@ public class FileUploadHandler extends AbstractChannelHandler {
         request.setUserId(identity.getUserId().intValue());
         request.setUserName(identity.getUserName());
     }
+
+    private String resolveUploadDirectory(FileUploadRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("上传请求不能为空");
+        }
+        if (UPLOAD_PURPOSE_CHAT_ATTACHMENT.equalsIgnoreCase(request.getUploadPurpose())) {
+            FileDto attachmentDirectory = fileService.ensureChatAttachmentDirectory(
+                    request.getUserId(), request.getUserName());
+            if (attachmentDirectory == null || attachmentDirectory.getId() == null
+                    || attachmentDirectory.getId() <= 0L) {
+                throw new IllegalStateException("聊天附件目录准备失败");
+            }
+            request.setDirId(attachmentDirectory.getId());
+            return attachmentDirectory.getFilePath();
+        }
+        if (request.getDirId() == null || request.getDirId() <= 0L) {
+            throw new IllegalArgumentException("上传目录ID无效");
+        }
+        return fileService.ensureUploadDirectory(
+                request.getDirId(), request.getUserId(), request.getUserName());
+    }
+
 }

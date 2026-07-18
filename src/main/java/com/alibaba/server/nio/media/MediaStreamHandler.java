@@ -23,11 +23,20 @@ import java.util.Map;
 public class MediaStreamHandler implements HttpHandler {
     private final MediaAccessService accessService;
     private final MediaTokenService tokenService;
+    private final MediaPlaybackSessionRegistry sessionRegistry;
     private final int bufferSize;
 
     public MediaStreamHandler(MediaAccessService accessService, MediaTokenService tokenService, int bufferSize) {
+        this(accessService, tokenService, new MediaPlaybackSessionRegistry(), bufferSize);
+    }
+
+    MediaStreamHandler(MediaAccessService accessService,
+                       MediaTokenService tokenService,
+                       MediaPlaybackSessionRegistry sessionRegistry,
+                       int bufferSize) {
         this.accessService = accessService;
         this.tokenService = tokenService;
+        this.sessionRegistry = sessionRegistry;
         this.bufferSize = bufferSize <= 0 ? 256 * 1024 : bufferSize;
     }
 
@@ -43,8 +52,16 @@ public class MediaStreamHandler implements HttpHandler {
                 handleStream(exchange);
                 return;
             }
+            if (path.startsWith("/media/seek/")) {
+                handleSeek(exchange);
+                return;
+            }
             sendJson(exchange, 404, "not found", null);
         } catch (Exception e) {
+            if (MediaClientAbortDetector.isClientAbort(e)) {
+                log.debug("媒体请求已被客户端取消: path={}", path);
+                return;
+            }
             log.error("media request failed: path={}", path, e);
             if (!exchange.getResponseHeaders().containsKey("Content-Type")) {
                 sendJson(exchange, 500, "播放服务异常", null);
@@ -62,8 +79,14 @@ public class MediaStreamHandler implements HttpHandler {
 
         try {
             Long fileId = parseFileId(exchange.getRequestURI().getPath(), "/media/play-url/");
-            String userName = queryParams(exchange).get("userName");
-            MediaPlayUrl playUrl = accessService.createPlayUrl(fileId, userName);
+            Map<String, String> params = queryParams(exchange);
+            String userName = params.get("userName");
+            String sessionId = params.get("sessionId");
+            MediaPlayUrl playUrl = accessService.createPlayUrl(fileId, userName, sessionId);
+            if (StringUtils.isNotBlank(sessionId) && !sessionRegistry.register(sessionId, fileId, userName)) {
+                sendJson(exchange, 400, "sessionId格式错误", null);
+                return;
+            }
             JSONObject data = new JSONObject();
             data.put("playUrl", playUrl.getPlayUrl());
             data.put("fileId", playUrl.getFileId());
@@ -82,6 +105,29 @@ public class MediaStreamHandler implements HttpHandler {
         }
     }
 
+    private void handleSeek(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 405, "method not allowed", null);
+            return;
+        }
+
+        try {
+            Long fileId = parseFileId(exchange.getRequestURI().getPath(), "/media/seek/");
+            Map<String, String> params = queryParams(exchange);
+            String userName = params.get("userName");
+            String sessionId = params.get("sessionId");
+            if (!sessionRegistry.markSeek(sessionId, fileId, userName)) {
+                sendJson(exchange, 409, "播放会话不存在或已过期", null);
+                return;
+            }
+            log.debug("收到媒体跳转通知: fileId={}, sessionId={}, targetSeconds={}",
+                    fileId, abbreviateSessionId(sessionId), params.get("targetSeconds"));
+            exchange.sendResponseHeaders(204, -1);
+        } catch (MediaAccessException e) {
+            sendJson(exchange, e.getStatusCode(), e.getMessage(), null);
+        }
+    }
+
     private void handleStream(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
         if (!"GET".equalsIgnoreCase(method) && !"HEAD".equalsIgnoreCase(method)) {
@@ -91,11 +137,16 @@ public class MediaStreamHandler implements HttpHandler {
 
         try {
             Long fileId = parseFileId(exchange.getRequestURI().getPath(), "/media/stream/");
-            String token = queryParams(exchange).get("token");
+            Map<String, String> params = queryParams(exchange);
+            String token = params.get("token");
+            String sessionId = params.get("sessionId");
             MediaTokenService.ValidationResult validation = tokenService.validateToken(token);
             if (!validation.isValid() || !fileId.equals(validation.getFileId())) {
                 sendSimple(exchange, 403, "forbidden");
                 return;
+            }
+            if (StringUtils.isNotBlank(sessionId)) {
+                sessionRegistry.touch(sessionId, fileId, validation.getUserName());
             }
             ResolvedMediaFile mediaFile = accessService.resolveForStreaming(fileId, validation.getUserName());
             long totalSize = mediaFile.getFile().length();
@@ -125,13 +176,19 @@ public class MediaStreamHandler implements HttpHandler {
             }
 
             exchange.sendResponseHeaders(status, range.length());
-            streamRange(exchange, mediaFile, range);
+            streamRange(exchange, mediaFile, range, fileId, validation.getUserName(), sessionId);
         } catch (MediaAccessException e) {
             sendSimple(exchange, e.getStatusCode(), e.getMessage());
         }
     }
 
-    private void streamRange(HttpExchange exchange, ResolvedMediaFile mediaFile, ByteRange range) throws IOException {
+    private void streamRange(HttpExchange exchange,
+                             ResolvedMediaFile mediaFile,
+                             ByteRange range,
+                             Long fileId,
+                             String userName,
+                             String sessionId) throws IOException {
+        long sent = 0L;
         try (RandomAccessFile raf = new RandomAccessFile(mediaFile.getFile(), "r");
              OutputStream outputStream = exchange.getResponseBody()) {
             raf.seek(range.getStart());
@@ -145,8 +202,27 @@ public class MediaStreamHandler implements HttpHandler {
                 }
                 outputStream.write(buffer, 0, read);
                 remaining -= read;
+                sent += read;
+            }
+        } catch (IOException e) {
+            if (!MediaClientAbortDetector.isClientAbort(e)) {
+                throw e;
+            }
+            if (sessionRegistry.wasRecentlySeeking(sessionId, fileId, userName)) {
+                log.debug("媒体 Range 因进度跳转被取消: fileId={}, sessionId={}, range={}-{}, sent={}",
+                        fileId, abbreviateSessionId(sessionId), range.getStart(), range.getEnd(), sent);
+            } else {
+                log.debug("媒体 Range 被客户端中止: fileId={}, sessionId={}, range={}-{}, sent={}",
+                        fileId, abbreviateSessionId(sessionId), range.getStart(), range.getEnd(), sent);
             }
         }
+    }
+
+    private String abbreviateSessionId(String sessionId) {
+        if (StringUtils.isBlank(sessionId)) {
+            return "none";
+        }
+        return sessionId.length() <= 8 ? sessionId : sessionId.substring(0, 8);
     }
 
     private void sendJson(HttpExchange exchange, int code, String message, Object data) throws IOException {

@@ -59,41 +59,52 @@ public class WriteEventHandler extends AbstractEventHandler {
         java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue = socketChannelContext.getPendingWriteQueue();
 
         // 同步块：防止与 WriteQueueHelper.submitWrite() 并发修改 ByteBuffer.position()
+        boolean closeAfterWrites = false;
         synchronized (queue) {
             // 没有待写数据，取消 OP_WRITE
             if (queue.isEmpty()) {
                 WriteQueueHelper.cancelWriteInterest(selectionKey);
-                return eventModel;
-            }
+                closeAfterWrites = Boolean.TRUE.equals(socketChannelContext.removeAttribute(
+                        WriteQueueHelper.CLOSE_AFTER_WRITES_ATTRIBUTE));
+            } else {
+                SocketChannel socketChannel = (SocketChannel) selectionKey.channel();
 
-            SocketChannel socketChannel = (SocketChannel) selectionKey.channel();
+                try {
+                    // 从队列中取出并写入数据
+                    ByteBuffer pendingBuffer;
+                    while ((pendingBuffer = queue.peek()) != null) {
+                        int written = socketChannel.write(pendingBuffer);
+                        log.debug("WriteEventHandler 写入: {} 字节, 剩余: {} 字节", written, pendingBuffer.remaining());
 
-            try {
-                // 从队列中取出并写入数据
-                ByteBuffer pendingBuffer;
-                while ((pendingBuffer = queue.peek()) != null) {
-                    int written = socketChannel.write(pendingBuffer);
-                    log.debug("WriteEventHandler 写入: {} 字节, 剩余: {} 字节", written, pendingBuffer.remaining());
-
-                    if (pendingBuffer.hasRemaining()) {
-                        // 没写完，保持 OP_WRITE 注册，等下次写事件继续
-                        break;
+                        if (pendingBuffer.hasRemaining()) {
+                            // 没写完，保持 OP_WRITE 注册，等下次写事件继续
+                            break;
+                        }
+                        // 写完了，移除队列头
+                        queue.poll();
                     }
-                    // 写完了，移除队列头
-                    queue.poll();
-                }
 
-                // 队列空了，取消 OP_WRITE
-                if (queue.isEmpty()) {
+                    // 队列空了，取消 OP_WRITE
+                    if (queue.isEmpty()) {
+                        WriteQueueHelper.cancelWriteInterest(selectionKey);
+                        closeAfterWrites = Boolean.TRUE.equals(socketChannelContext.removeAttribute(
+                                WriteQueueHelper.CLOSE_AFTER_WRITES_ATTRIBUTE));
+                        log.debug("队列数据全部写完，已取消 OP_WRITE");
+                    }
+
+                } catch (IOException e) {
+                    log.error("写入数据失败: remoteAddress={}", socketChannelContext.getRemoteAddress(), e);
+                    queue.clear();
+                    socketChannelContext.removeAttribute(WriteQueueHelper.CLOSE_AFTER_WRITES_ATTRIBUTE);
                     WriteQueueHelper.cancelWriteInterest(selectionKey);
-                    log.debug("队列数据全部写完，已取消 OP_WRITE");
+                    closeAfterWrites = true;
                 }
-
-            } catch (IOException e) {
-                log.error("写入数据失败: remoteAddress={}", socketChannelContext.getRemoteAddress(), e);
-                queue.clear();
-                WriteQueueHelper.cancelWriteInterest(selectionKey);
             }
+        }
+
+        if (closeAfterWrites) {
+            com.alibaba.server.nio.core.server.NioServerContext.closedAndRelease(
+                    socketChannelContext.getSocketChannel());
         }
 
         return eventModel;

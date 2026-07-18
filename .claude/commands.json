@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "name": "start",
+      "description": "【Trellis】启动开发会话，初始化任务上下文",
+      "prompt": "按照Trellis工作流，启动开发会话并初始化任务。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "before-backend-dev",
+      "description": "【Trellis】后端开发前的准备检查",
+      "prompt": "执行后端开发前的准备工作和检查。",
+      "files": [".trellis/spec/backend/index.md"]
+    },
+    {
+      "name": "before-frontend-dev",
+      "description": "【Trellis】前端开发前的准备检查",
+      "prompt": "执行前端开发前的准备工作和检查。",
+      "files": [".trellis/spec/frontend/index.md"]
+    },
+    {
+      "name": "brainstorm",
+      "description": "【Trellis】头脑风暴：探索解决方案和设计思路",
+      "prompt": "进行头脑风暴，探索多个解决方案，分析各方案的优缺点和权衡。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "break-loop",
+      "description": "【Trellis】破解循环：诊断和修复卡住的问题",
+      "prompt": "分析当前陷入的循环问题，诊断根本原因，提出突破方案。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "check-backend",
+      "description": "【Trellis】后端代码检查：规范、Bug、性能",
+      "prompt": "根据后端规范检查代码质量、发现Bug、优化性能。",
+      "files": [".trellis/spec/backend/index.md"]
+    },
+    {
+      "name": "check-cross-layer",
+      "description": "【Trellis】跨层检查：前后端交互集成验证",
+      "prompt": "检查前后端交互、API契约、数据流一致性。",
+      "files": [".trellis/spec/backend/index.md"]
+    },
+    {
+      "name": "check-frontend",
+      "description": "【Trellis】前端代码检查：规范、Bug、性能",
+      "prompt": "根据前端规范检查代码质量、发现Bug、优化性能。",
+      "files": [".trellis/spec/frontend/index.md"]
+    },
+    {
+      "name": "create-command",
+      "description": "【Trellis】创建新命令：快速定义可复用的AI指令",
+      "prompt": "创建新的可复用命令，定义提示词和上下文文件。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "finish-work",
+      "description": "【Trellis】完成工作：结束任务、提交PR、记录日志",
+      "prompt": "完成任务工作流：标记任务完成、创建PR、更新文档。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "integrate-skill",
+      "description": "【Trellis】集成技能：构建和集成新能力",
+      "prompt": "开发、测试和集成新的AI技能和工具。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "onboard",
+      "description": "【Trellis】入职指南：快速上手项目",
+      "prompt": "为新开发者提供项目入职指南、规范和上下文。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "parallel",
+      "description": "【Trellis】并行工作：分解任务并并行执行",
+      "prompt": "分析任务依赖，分解为可并行的子任务。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "record-session",
+      "description": "【Trellis】记录会话：更新日志和任务上下文",
+      "prompt": "记录当前会话的进度、决策和学习成果。",
+      "files": [".trellis/workflow.md"]
+    },
+    {
+      "name": "update-spec",
+      "description": "【Trellis】更新规范：维护项目指南和文档",
+      "prompt": "更新和改进Trellis规范文档，保持指南最新。",
+      "files": [".trellis/spec/backend/index.md"]
+    },
+    {
+      "name": "pr",
+      "description": "【Java项目】生成标准PR描述（严格遵循CLAUDE.md规则）",
+      "prompt": "请严格按照我提供的CLAUDE.md文件中的【PR描述生成】规则，为我生成规范、统一、可直接提交的PR描述。",
+      "files": ["CLAUDE.md"]
+    },
+    {
+      "name": "api",
+      "description": "【Java项目】生成接口文档（JavaDoc + Markdown）",
+      "prompt": "请严格按照CLAUDE.md文件中的【接口文档生成】规则，生成JavaDoc注释与Markdown接口文档，保持格式统一。",
+      "files": ["CLAUDE.md"]
+    },
+    {
+      "name": "review",
+      "description": "【Java项目】代码审查（规范、Bug、可读性、优化）",
+      "prompt": "请根据CLAUDE.md中的代码规范、项目风格、架构要求，对代码进行全面审查，指出问题并给出优化方案。",
+      "files": ["CLAUDE.md"]
+    },
+    {
+      "name": "new",
+      "description": "【Java项目】快速新建：Controller/Service/DTO/Mapper",
+      "prompt": "请按照CLAUDE.md中的项目架构、代码规范、命名风格，创建标准三层架构代码。",
+      "files": ["CLAUDE.md"]
+    },
+    {
+      "name": "test",
+      "description": "【Java项目】生成JUnit 5单元测试",
+      "prompt": "根据业务逻辑生成完整单元测试，遵循项目规范，覆盖正常/异常/边界场景。",
+      "files": ["CLAUDE.md"]
+    },
+    {
+      "name": "format",
+      "description": "【Java项目】代码格式化（缩进4空格、规范排版）",
+      "prompt": "按照CLAUDE.md中的代码风格规范，格式化代码，保持统一、整洁、易读。",
+      "files": ["CLAUDE.md"]
+    },
+    {
+      "name": "doc",
+      "description": "【Java项目】生成标准JavaDoc注释",
+      "prompt": "为类/方法/字段生成符合项目规范的清晰JavaDoc注释。",
+      "files": ["CLAUDE.md"]
+    }
+  ]
+}

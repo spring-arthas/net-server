@@ -12,7 +12,8 @@ public class SafeFileResolver {
     private final Path rootPath;
 
     public SafeFileResolver(String rootPath) {
-        this.rootPath = Paths.get(StringUtils.defaultIfBlank(rootPath, ".")).toAbsolutePath().normalize();
+        this.rootPath = canonicalPath(
+                Paths.get(StringUtils.defaultIfBlank(rootPath, ".")).toAbsolutePath().normalize());
     }
 
     public File resolve(FileDto fileDto) throws IOException {
@@ -24,12 +25,14 @@ public class SafeFileResolver {
         Path candidate = configuredPath.isAbsolute()
                 ? configuredPath.toAbsolutePath().normalize()
                 : rootPath.resolve(configuredPath).normalize();
+        candidate = canonicalPath(candidate);
 
         if (!candidate.startsWith(rootPath)) {
             if (!configuredPath.isAbsolute()) {
                 throw new IOException("file path escapes storage root");
             }
-            candidate = rootPath.resolve(stripLeadingSeparator(fileDto.getFilePath())).normalize();
+            candidate = canonicalPath(
+                    rootPath.resolve(stripLeadingSeparator(fileDto.getFilePath())).normalize());
             if (!candidate.startsWith(rootPath)) {
                 throw new IOException("file path escapes storage root");
             }
@@ -37,6 +40,14 @@ public class SafeFileResolver {
 
         File file = candidate.toFile();
         return file;
+    }
+
+    private static Path canonicalPath(Path path) {
+        try {
+            return path.toFile().getCanonicalFile().toPath().toAbsolutePath().normalize();
+        } catch (IOException ignored) {
+            return path.toAbsolutePath().normalize();
+        }
     }
 
     private String stripLeadingSeparator(String value) {

@@ -20,7 +20,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-# 二、沟通偏好
+# 二、构建验证规范（强制）
+
+**每次写完或改完代码后，必须立即执行以下命令验证编译通过：**
+
+```bash
+mvn clean package -DskipTests -Dmaven.compiler.release=8
+```
+
+- 出现任何编译错误，必须立即定位并修复，直到 `BUILD SUCCESS` 为止，再向用户报告完成
+- 禁止在编译未通过的情况下停止工作或声称任务完成
+- 修复编译错误时只改最小范围，不允许顺带重构其他代码
+
+---
+
+# 三、沟通偏好
 
 - **所有回复必须使用中文**，包括 trellis slash commands 执行后的输出
 - 简洁直接，优先给结论

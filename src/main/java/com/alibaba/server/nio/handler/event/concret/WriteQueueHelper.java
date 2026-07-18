@@ -27,6 +27,8 @@ import java.nio.channels.SocketChannel;
 @Slf4j
 public class WriteQueueHelper {
 
+    public static final String CLOSE_AFTER_WRITES_ATTRIBUTE = "closeAfterPendingWrites";
+
     /**
      * 写入数据（先尝试直接写，写不完则加入队列）
      * 
@@ -111,6 +113,25 @@ public class WriteQueueHelper {
             }
         } catch (Exception e) {
             log.error("注册 OP_WRITE 失败", e);
+        }
+    }
+
+    /**
+     * 在当前待写队列排空后关闭连接，避免非阻塞响应帧只发送一部分。
+     */
+    public static void closeAfterPendingWrites(SocketChannelContext socketChannelContext) {
+        if (socketChannelContext == null || socketChannelContext.getSocketChannel() == null) {
+            return;
+        }
+        java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue =
+                socketChannelContext.getPendingWriteQueue();
+        synchronized (queue) {
+            if (queue.isEmpty()) {
+                NioServerContext.closedAndRelease(socketChannelContext.getSocketChannel());
+                return;
+            }
+            socketChannelContext.putAttribute(CLOSE_AFTER_WRITES_ATTRIBUTE, Boolean.TRUE);
+            registerWriteInterest(socketChannelContext);
         }
     }
 
