@@ -7,6 +7,7 @@ import com.alibaba.server.nio.repository.user.repository.dataobject.UserDo;
 import com.alibaba.server.nio.repository.user.repository.param.UserDalQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
+import com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
@@ -260,5 +261,23 @@ public class UserServiceImpl implements UserService {
         return doList.stream()
                 .map(this::doToDto)
                 .collect(Collectors.toMap(UserDTO::getId, dto -> dto));
+    }
+
+    @Override
+    public List<UserSearchDTO> searchUsers(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        String normalizedKeyword = keyword.trim();
+        String likeKeyword = normalizedKeyword
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+        return userRepository.searchUsers(normalizedKeyword, likeKeyword);
+    }
+
+    @Override
+    public boolean existsActiveUser(Long userId) {
+        return userId != null && userRepository.countActiveById(userId) > 0;
     }
 }

@@ -1,0 +1,44 @@
+{
+  "id": "friend-add-security-closure",
+  "name": "friend-add-security-closure",
+  "title": "好友添加安全与闭环改造",
+  "description": "改造 net-server 与 chat-storage 的好友搜索、申请、审批、好友关系授权与前端交互闭环",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P0",
+  "creator": "veneno",
+  "assignee": "veneno",
+  "createdAt": "2026-07-19",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feature-v1.0",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

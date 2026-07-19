@@ -316,7 +316,7 @@ public class MediaStreamHandlerIntegrationTest {
         }
 
         @Override public FileDto createDirectory(Long parentId, String dirName, UserDTO userDTO) { throw new UnsupportedOperationException(); }
-        @Override public boolean deleteDirectory(Long dirId) { throw new UnsupportedOperationException(); }
+        @Override public boolean deleteDirectory(Long dirId, UserDTO userDTO) { throw new UnsupportedOperationException(); }
         @Override public FileDto updateDirectory(Long dirId, String newName) { throw new UnsupportedOperationException(); }
         @Override public FileDto moveDirectory(Long dirId, Long targetParentId) { throw new UnsupportedOperationException(); }
         @Override public boolean isDirectory(Long id) { throw new UnsupportedOperationException(); }

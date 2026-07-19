@@ -18,11 +18,15 @@ import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
 import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
 import com.alibaba.server.nio.repository.file.service.FileService;
+import com.alibaba.server.nio.repository.file.service.exception.DirectoryContainsFileException;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
+import com.alibaba.server.nio.repository.user.service.FriendshipService;
+import com.alibaba.server.nio.repository.user.service.dto.FriendRequestHandleResult;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
+import com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.service.api.AbstractChannelHandler;
 import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
@@ -235,6 +239,10 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         return BasicServer.classPathXmlApplicationContext.getBean(UserFriendApplyService.class);
     }
 
+    private FriendshipService getFriendshipService() {
+        return BasicServer.classPathXmlApplicationContext.getBean(FriendshipService.class);
+    }
+
     private void handleChatMessageSend(FileUploadFrame frame, SocketChannelContext context) {
         try {
             Long senderId = (Long) context.getAttribute("loggedInUserId");
@@ -251,6 +259,17 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             if (receiverId == null || org.apache.commons.lang.StringUtils.isBlank(content)) {
                 sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "接收方或内容不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            if (!getUserService().existsActiveUser(receiverId.longValue())) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "接收用户不存在或已停用",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+            if (!getFriendshipService().isActiveFriend(senderId.intValue(), receiverId)) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "你们还不是好友，无法发送消息",
                         UserAuthFrame.ErrorCode.INVALID_REQUEST);
                 return;
             }
@@ -316,16 +335,15 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 return;
             }
 
-            com.alibaba.server.nio.repository.user.service.param.UserFriendsUpdateParam updateParam = new com.alibaba.server.nio.repository.user.service.param.UserFriendsUpdateParam();
-            updateParam.setId(id);
-            updateParam.setAlias(alias);
-
-            getUserFriendsService().update(updateParam);
+            getFriendshipService().updateAlias(userId.intValue(), id, alias);
 
             JSONObject responseData = new JSONObject();
             responseData.put("status", "SUCCESS");
             sendSuccessResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, "更新好友别名成功", responseData);
 
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
         } catch (Exception e) {
             log.warn("处理更新好友别名异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
                     org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
@@ -664,7 +682,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
     private void handleFriendList(FileUploadFrame frame, SocketChannelContext context) {
         try {
-            Long userId = context.getUserDTO().getId();
+            Long userId = requireLoggedInUserId(context);
             UserFriendsQueryParam queryParam = new UserFriendsQueryParam();
             queryParam.setUserId(userId.intValue());
             List<UserFriendsDTO> friends = getUserFriendsService().query(queryParam);
@@ -724,147 +742,123 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 }
             }
 
-            sendSuccessResponse(context, FrameType.USER_RESPONSE, "获取好友列表成功", resultList);
+            sendSuccessResponse(context, FrameType.USER_FRIEND_LIST_RESPONSE, "获取好友列表成功", resultList);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_FRIEND_LIST_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
         } catch (Exception e) {
             log.error("获取好友列表失败", e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, "获取好友列表失败",
+            sendErrorResponse(context, FrameType.USER_FRIEND_LIST_RESPONSE, "获取好友列表失败",
                     UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
     private void handleFriendQuery(FileUploadFrame frame, SocketChannelContext context) {
-        JSONObject request = JSON.parseObject(frame.getDataAsString());
-        String userName = request.getString("userName");
-        UserQueryParam userQueryParam = new UserQueryParam();
-        userQueryParam.setUserName(userName);
+        try {
+            Long currentUserId = requireLoggedInUserId(context);
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String keyword = org.apache.commons.lang.StringUtils.trimToEmpty(request.getString("userName"));
+            if (org.apache.commons.lang.StringUtils.isBlank(keyword)) {
+                throw new IllegalArgumentException("搜索关键词不能为空");
+            }
+            if (keyword.length() > 64) {
+                throw new IllegalArgumentException("搜索关键词不能超过64个字符");
+            }
 
-        List<UserDTO> userDTOS = getUserService().getUserListByName(userQueryParam);
+            List<UserSearchDTO> users = getUserService().searchUsers(keyword);
+            if (users == null) {
+                users = new java.util.ArrayList<>();
+            }
 
-        if (userDTOS != null && !userDTOS.isEmpty()) {
-            Long currentUserId = context.getUserDTO().getId();
-
-            // 1. 批量查询当前用户的好友列表
             UserFriendsQueryParam friendQuery = new UserFriendsQueryParam();
             friendQuery.setUserId(currentUserId.intValue());
             List<UserFriendsDTO> friends = getUserFriendsService().query(friendQuery);
-            java.util.Set<Integer> friendIds = friends == null ? new java.util.HashSet<>()
+            Set<Integer> friendIds = friends == null ? new HashSet<>()
                     : friends.stream().map(UserFriendsDTO::getFriendId).collect(Collectors.toSet());
 
-            // 2. 批量查询当前用户发出的好友申请
-            UserFriendApplyQueryParam applyQuery = new UserFriendApplyQueryParam();
-            applyQuery.setSenderId(currentUserId.intValue());
-            List<UserFriendApplyDTO> myApplies = getUserFriendApplyService().query(applyQuery);
-            // Map<ReceiverId, Status> - 如果有多个申请，取最新的状态？这里假设最近的一个。
-            // 实际上 query 可能返回列表。为了简化，我们只关心是否有 pending (0) 或 rejected (2) 的记录。
-            // 优先级: Pending > Rejected > None?
-            // 如果同时有 rejected 和 pending (重新申请)，则 pending 优先。
-            java.util.Map<Integer, Integer> applyStatusMap = new java.util.HashMap<>();
-            if (myApplies != null) {
-                for (UserFriendApplyDTO apply : myApplies) {
-                    Integer receiverId = apply.getReceiverId();
-                    Integer status = apply.getStatus();
-                    // 逻辑：如果已经有状态，且新状态是0（待处理），覆盖之（显示待同意）。
-                    // 如果原状态是0，不变。
-                    // 简单粗暴点：0优先。
-                    if (!applyStatusMap.containsKey(receiverId)) {
-                        applyStatusMap.put(receiverId, status);
-                    } else {
-                        Integer existingStatus = applyStatusMap.get(receiverId);
-                        if (status == 0) { // 发现待处理，优先级最高
-                            applyStatusMap.put(receiverId, status);
-                        }
-                    }
-                }
-            }
+            UserFriendApplyQueryParam outgoingQuery = new UserFriendApplyQueryParam();
+            outgoingQuery.setSenderId(currentUserId.intValue());
+            Map<Integer, UserFriendApplyDTO> latestOutgoing = latestApplyByTarget(
+                    getUserFriendApplyService().query(outgoingQuery), true);
 
-            for (UserDTO user : userDTOS) {
+            UserFriendApplyQueryParam incomingQuery = new UserFriendApplyQueryParam();
+            incomingQuery.setReceiverId(currentUserId.intValue());
+            incomingQuery.setStatus(0);
+            Map<Integer, UserFriendApplyDTO> pendingIncoming = latestApplyByTarget(
+                    getUserFriendApplyService().query(incomingQuery), false);
+
+            for (UserSearchDTO user : users) {
                 user.setAvatar(getAvatarBase64(user.getAvatar()));
-
-                if (currentUserId.equals(user.getId())) {
+                Integer targetId = user.getUserId().intValue();
+                if (currentUserId.equals(user.getUserId())) {
+                    user.setFriendStatus(5);
                     user.setFriendStatusDesc("你自己");
-                    continue;
-                }
-
-                Integer targetId = user.getId().intValue();
-                if (friendIds.contains(targetId)) {
+                } else if (friendIds.contains(targetId)) {
                     user.setFriendStatus(1);
-                    user.setFriendStatusDesc("【已是好友啦，开始聊天吧】");
+                    user.setFriendStatusDesc("已是好友");
+                } else if (pendingIncoming.containsKey(targetId)) {
+                    user.setFriendStatus(4);
+                    user.setFriendStatusDesc("对方已申请添加你");
+                    user.setIncomingRequestId(pendingIncoming.get(targetId).getId());
                 } else {
-                    Integer applyStatus = applyStatusMap.get(targetId);
-                    if (applyStatus != null) {
-                        if (applyStatus == 0) {
-                            user.setFriendStatus(0);
-                            user.setFriendStatusDesc("【已申请添加好友，待对方同意】");
-                        } else if (applyStatus == 2) {
-                            user.setFriendStatus(2);
-                            user.setFriendStatusDesc("【对方拒绝了你的好友申请】");
-                        } else {
-                            user.setFriendStatus(3);
-                            user.setFriendStatusDesc("【添加】");
-                        }
+                    UserFriendApplyDTO outgoing = latestOutgoing.get(targetId);
+                    if (outgoing != null && outgoing.getStatus() != null && outgoing.getStatus() == 0) {
+                        user.setFriendStatus(0);
+                        user.setFriendStatusDesc("等待对方同意");
+                    } else if (outgoing != null && outgoing.getStatus() != null && outgoing.getStatus() == 2) {
+                        user.setFriendStatus(2);
+                        user.setFriendStatusDesc("重新申请");
                     } else {
                         user.setFriendStatus(3);
-                        user.setFriendStatusDesc("【添加】");
+                        user.setFriendStatusDesc("添加");
                     }
                 }
             }
-        }
 
-        sendSuccessResponse(context, FrameType.USER_RESPONSE, "搜索成功", userDTOS);
-        log.info("添加好友搜索成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
+            sendSuccessResponse(context, FrameType.USER_FRIEND_QUERY_RESPONSE, "搜索成功", users);
+            log.info("添加好友搜索成功: keywordLength={}, resultCount={}, remoteAddress={}",
+                    keyword.length(), users.size(), context.getRemoteAddress());
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_FRIEND_QUERY_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
+        } catch (Exception e) {
+            log.error("好友搜索失败", e);
+            sendErrorResponse(context, FrameType.USER_FRIEND_QUERY_RESPONSE, "搜索失败，请稍后重试",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
+        }
     }
 
     private void handleFriendAdd(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Integer receiveUserId = request.getInteger("userId"); // 搜索结果返回的userId
+            Integer receiveUserId = request.getInteger("userId");
             String requestMsg = request.getString("requestMsg");
-            Long currentUserId = context.getUserDTO().getId();
+            Long currentUserId = requireLoggedInUserId(context);
 
-            if (receiveUserId == null) {
-                throw new IllegalArgumentException("好友ID不能为空");
-            }
-            if (currentUserId.intValue() == receiveUserId) {
-                throw new IllegalArgumentException("不能添加自己为好友");
-            }
+            UserFriendApplyDTO apply = getFriendshipService()
+                    .sendRequest(currentUserId.intValue(), receiveUserId, requestMsg);
+            JSONObject responseData = new JSONObject();
+            responseData.put("requestId", apply.getId());
+            sendSuccessResponse(context, FrameType.USER_FRIEND_ADD_RESPONSE, "发送好友申请成功", responseData);
 
-            // 检查是否已经是好友
-            UserFriendsQueryParam friendQuery = new UserFriendsQueryParam();
-            friendQuery.setUserId(currentUserId.intValue());
-            friendQuery.setFriendId(receiveUserId);
-            List<UserFriendsDTO> friends = getUserFriendsService().query(friendQuery);
-            if (friends != null && !friends.isEmpty()) {
-                throw new IllegalArgumentException("已经是好友了");
-            }
-
-            // 检查是否已经申请过且待处理
-            UserFriendApplyQueryParam applyQuery = new UserFriendApplyQueryParam();
-            applyQuery.setSenderId(currentUserId.intValue());
-            applyQuery.setReceiverId(receiveUserId);
-            applyQuery.setStatus(0); // 待处理
-            List<UserFriendApplyDTO> applies = getUserFriendApplyService().query(applyQuery);
-            if (applies != null && !applies.isEmpty()) {
-                throw new IllegalArgumentException("已发送过申请，请等待对方处理");
-            }
-
-            UserFriendApplyCreateParam createParam = new UserFriendApplyCreateParam();
-            createParam.setSenderId(currentUserId.intValue());
-            createParam.setReceiverId(receiveUserId);
-            createParam.setRequestMsg(requestMsg);
-            getUserFriendApplyService().create(createParam);
-            sendSuccessResponse(context, FrameType.USER_RESPONSE, "发送好友申请成功", null);
+            JSONObject event = new JSONObject();
+            event.put("event", "REQUEST_CREATED");
+            event.put("requestId", apply.getId());
+            event.put("actorUserId", currentUserId);
+            pushFriendEvent(receiveUserId, event);
         } catch (IllegalArgumentException e) {
-            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(),
+            sendErrorResponse(context, FrameType.USER_FRIEND_ADD_RESPONSE, e.getMessage(),
                     UserAuthFrame.ErrorCode.INVALID_REQUEST);
         } catch (Exception e) {
             log.error("发送好友申请失败", e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, "发送好友申请失败", UserAuthFrame.ErrorCode.DB_ERROR);
+            sendErrorResponse(context, FrameType.USER_FRIEND_ADD_RESPONSE, "发送好友申请失败",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
     private void handleFriendApply(FileUploadFrame frame, SocketChannelContext context) {
         try {
-            Long currentUserId = context.getUserDTO().getId();
+            Long currentUserId = requireLoggedInUserId(context);
             UserFriendApplyQueryParam queryParam = new UserFriendApplyQueryParam();
             queryParam.setReceiverId(currentUserId.intValue());
             queryParam.setStatus(0);
@@ -885,6 +879,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                         JSONObject item = new JSONObject();
                         item.put("id", apply.getId());
                         item.put("senderId", apply.getSenderId());
+                        item.put("receiverId", apply.getReceiverId());
                         item.put("requestMsg", apply.getRequestMsg());
                         item.put("status", apply.getStatus());
                         item.put("userName", senderInfo.getUserName());
@@ -896,10 +891,14 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 }
             }
 
-            sendSuccessResponse(context, FrameType.USER_RESPONSE, "获取好友申请列表成功", resultList);
+            sendSuccessResponse(context, FrameType.USER_FRIEND_APPLY_RESPONSE, "获取好友申请列表成功", resultList);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_FRIEND_APPLY_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
         } catch (Exception e) {
             log.error("获取好友申请列表失败", e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, "获取好友申请列表失败", UserAuthFrame.ErrorCode.DB_ERROR);
+            sendErrorResponse(context, FrameType.USER_FRIEND_APPLY_RESPONSE, "获取好友申请列表失败",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
         }
     }
 
@@ -910,94 +909,62 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             Integer status = request.getInteger("action"); // 1=同意, 2=拒绝
             String alias = request.getString("alias"); // 备注名
 
-            if (applyId == null || status == null) {
-                throw new IllegalArgumentException("参数错误");
-            }
+            Long currentUserId = requireLoggedInUserId(context);
+            FriendRequestHandleResult result = getFriendshipService()
+                    .handleRequest(currentUserId.intValue(), applyId, status, alias);
 
-            // 获取申请记录以验证和获取sender/receiver
-            // 遗憾的是Service没有getDtoById，我们只能query... 或者改进UserFriendApplyService
-            // 这里为了简单，我们先update，但我们需要知道senderId来创建friend关系。
-            // 必须查询出来！
-            // 暂时没提供getById，那我们用query查询
-            // 或者直接 update，如果同意，则需要 senderId。
-            // 方案：查询Service中没有getById，那我们只能修改Service或者用Mapper直接查（不推荐直接用Repo）。
-            // 既然都在repository包下，我们可以假设Service能做。
-            // 但之前没加getById到 UserFriendApplyService。
-            // 这里我们先用 query 过滤 id? No, QueryParam usually doesn't have ID.
-            // Wait, implementation plan check: UserFriendApplyQueryParam has senderId,
-            // receiverId, status.
-            // UserFriendApplyUpdateParam has ID.
+            sendSuccessResponse(context, FrameType.USER_FRIEND_APPLY_HANDLE_RESPONSE, "处理成功", result);
 
-            // 我们需要获取该申请的详细信息。
-            // 只能先勉强信任前端传来的 senderId? 不安全。
-            // 正确做法：给 UserFriendApplyService 加 getById。
-            // 既然现在不能改Service (user didn't ask), 我们可以 iterate query result? No, inefficient.
-            // 我们假设 request 传了 senderId?
-            // Better: update service to add getById for Apply as well? Or just trust update
-            // returns success.
-            // But we need to insert UserFriends record.
-
-            // Let's look at `UserFriendApplyDo`. It extends `BaseDO`.
-            // UserFriendApplyService.update(param)
-
-            // Hack for now: query by status=0 and receiver=currentUserId to find the
-            // matching applyId in memory?
-            // Bad performance but safe.
-            Long currentUserId = context.getUserDTO().getId();
-            UserFriendApplyQueryParam queryParam = new UserFriendApplyQueryParam();
-            queryParam.setReceiverId(currentUserId.intValue());
-            queryParam.setStatus(0);
-            List<UserFriendApplyDTO> pendingApplies = getUserFriendApplyService().query(queryParam);
-
-            UserFriendApplyDTO targetApply = null;
-            if (pendingApplies != null) {
-                for (UserFriendApplyDTO dto : pendingApplies) {
-                    if (dto.getId().equals(applyId)) {
-                        targetApply = dto;
-                        break;
-                    }
-                }
-            }
-
-            if (targetApply == null) {
-                // 可能是已经处理过了或者id不对
-                // 尝试直接更新状态（如果只是拒绝，不需要TargetApply具体信息，除了校验）
-            }
-
-            UserFriendApplyUpdateParam updateParam = new UserFriendApplyUpdateParam();
-            updateParam.setId(applyId);
-            updateParam.setStatus(status);
-            getUserFriendApplyService().update(updateParam);
-
-            if (status == 1) { // 同意
-                if (targetApply != null) {
-                    // 创建双向好友关系
-                    // 1. Me -> Sender (with alias)
-                    UserFriendsCreateParam friend1 = new UserFriendsCreateParam();
-                    friend1.setUserId(currentUserId.intValue());
-                    friend1.setFriendId(targetApply.getSenderId());
-                    friend1.setAlias(alias);
-                    getUserFriendsService().create(friend1);
-
-                    // 2. Sender -> Me (no alias default)
-                    UserFriendsCreateParam friend2 = new UserFriendsCreateParam();
-                    friend2.setUserId(targetApply.getSenderId());
-                    friend2.setFriendId(currentUserId.intValue());
-                    friend2.setAlias(null); // 对方看我暂时没备注，或者可以用我的昵称
-                    getUserFriendsService().create(friend2);
-                } else {
-                    log.warn("处理好友申请: 同意了但未找到申请记录(可能已处理或权限不足), applyId={}", applyId);
-                    // 这种情况下没法创建好友关系... 这是一个问题。
-                    // 应该抛错。
-                    throw new IllegalStateException("未找到待处理的申请记录");
-                }
-            }
-
-            sendSuccessResponse(context, FrameType.USER_RESPONSE, "处理成功", null);
+            JSONObject event = new JSONObject();
+            event.put("event", status == 1 ? "REQUEST_ACCEPTED" : "REQUEST_REJECTED");
+            event.put("requestId", result.getRequestId());
+            event.put("actorUserId", currentUserId);
+            pushFriendEvent(result.getSenderId(), event);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_FRIEND_APPLY_HANDLE_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
         } catch (Exception e) {
             log.error("处理好友申请失败", e);
-            sendErrorResponse(context, FrameType.USER_RESPONSE, "处理失败，请稍后重试",
+            sendErrorResponse(context, FrameType.USER_FRIEND_APPLY_HANDLE_RESPONSE, "处理失败，请稍后重试",
                     UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    private Long requireLoggedInUserId(SocketChannelContext context) {
+        if (context == null || context.getUserDTO() == null || context.getUserDTO().getId() == null) {
+            throw new IllegalArgumentException("请先登录");
+        }
+        return context.getUserDTO().getId();
+    }
+
+    private Map<Integer, UserFriendApplyDTO> latestApplyByTarget(List<UserFriendApplyDTO> applies,
+            boolean keyByReceiver) {
+        Map<Integer, UserFriendApplyDTO> result = new HashMap<>();
+        if (applies == null) {
+            return result;
+        }
+        for (UserFriendApplyDTO apply : applies) {
+            Integer key = keyByReceiver ? apply.getReceiverId() : apply.getSenderId();
+            if (key == null) {
+                continue;
+            }
+            UserFriendApplyDTO existing = result.get(key);
+            if (existing == null || apply.getId() != null
+                    && (existing.getId() == null || apply.getId() > existing.getId())) {
+                result.put(key, apply);
+            }
+        }
+        return result;
+    }
+
+    private void pushFriendEvent(Integer userId, JSONObject event) {
+        if (userId == null || event == null) {
+            return;
+        }
+        SocketChannelContext targetContext = BasicServer.onlineUserChannels.get(userId.longValue());
+        if (targetContext != null && targetContext.getSocketChannel() != null
+                && targetContext.getSocketChannel().isConnected()) {
+            sendFrame(targetContext, FrameType.USER_FRIEND_EVENT_PUSH, event);
         }
     }
 
@@ -1043,10 +1010,13 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             Long dirId = request.getLong("id");
+            if (dirId == null) {
+                dirId = request.getLong("dirId");
+            }
 
-            getFileService().deleteDirectory(dirId);
+            getFileService().deleteDirectory(dirId, context.getUserDTO());
             sendSuccessResponse(context, FrameType.DIR_RESPONSE, "目录删除成功", null);
-        } catch (IllegalStateException e) {
+        } catch (DirectoryContainsFileException e) {
             sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(),
                     DirectoryFrame.ErrorCode.DIR_HAS_CHILDREN);
         } catch (IllegalArgumentException e) {

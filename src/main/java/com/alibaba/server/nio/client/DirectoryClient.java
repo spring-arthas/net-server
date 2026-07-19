@@ -110,7 +110,7 @@ public class DirectoryClient {
 
             JSONObject request = new JSONObject();
             request.put("action", "DELETE");
-            request.put("dirId", dirId);
+            request.put("id", dirId);
 
             sendFrame(channel, DIR_DELETE_REQ, request.toJSONString());
             System.out.println("发送删除目录请求: " + request.toJSONString());

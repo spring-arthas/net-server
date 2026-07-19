@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.repository.user.service;
 
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
+import com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
@@ -90,4 +91,9 @@ public interface UserService {
      * @return Map，key 为用户 ID，value 为用户信息
      */
     Map<Long, UserDTO> listByIds(List<Long> ids);
+
+    /** 好友搜索，只返回公开字段。 */
+    List<UserSearchDTO> searchUsers(String keyword);
+
+    boolean existsActiveUser(Long userId);
 }

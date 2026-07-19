@@ -98,11 +98,13 @@ public interface FileService {
     /**
      * 删除目录（DB + 文件系统）
      * 
-     * @param dirId 目录ID
+     * @param dirId   目录ID
+     * @param userDTO 当前登录用户
      * @return true=成功
-     * @throws IllegalStateException 目录下有子项
+     * @throws com.alibaba.server.nio.repository.file.service.exception.DirectoryContainsFileException
+     *         目录或其子目录下存在有效文件
      */
-    boolean deleteDirectory(Long dirId);
+    boolean deleteDirectory(Long dirId, UserDTO userDTO);
 
     /**
      * 更新目录名称（DB + 文件系统）

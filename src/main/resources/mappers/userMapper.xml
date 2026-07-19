@@ -23,4 +23,15 @@
             #{id}
         </foreach>
     </select>
+
+    <select id="searchUsers"
+        resultType="com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO">
+        SELECT id AS user_id, user_name, nick_name, avatar
+        FROM `user`
+        WHERE del = 'N'
+          AND (user_name LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '\\'
+               OR nick_name LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '\\')
+        ORDER BY CASE WHEN user_name = #{keyword} THEN 0 ELSE 1 END, id DESC
+        LIMIT 20
+    </select>
 </mapper>

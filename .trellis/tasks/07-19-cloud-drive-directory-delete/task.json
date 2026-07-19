@@ -1,0 +1,44 @@
+{
+  "id": "cloud-drive-directory-delete",
+  "name": "cloud-drive-directory-delete",
+  "title": "修复云盘目录删除同步",
+  "description": "目录删除前递归校验有效文件；无有效文件时同步删除文件系统空目录树和数据库目录记录，并修复 macOS 前端确认与错误提示。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P1",
+  "creator": "veneno",
+  "assignee": "veneno",
+  "createdAt": "2026-07-19",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feature-v1.0",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

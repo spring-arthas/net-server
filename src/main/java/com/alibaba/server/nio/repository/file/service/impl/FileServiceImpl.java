@@ -14,6 +14,7 @@ import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.dto.FileDto;
 import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
 import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
+import com.alibaba.server.nio.repository.file.service.exception.DirectoryContainsFileException;
 import com.alibaba.server.nio.repository.file.service.param.FileCreateParam;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
@@ -29,10 +30,13 @@ import org.springframework.util.CollectionUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -603,43 +607,170 @@ public class FileServiceImpl implements FileService {
         return this.doToDto(fileDo);
     }
 
+    /**
+     * 删除目录及其空目录树。只有目录树中不存在有效文件时才允许删除。
+     *
+     * @param dirId   目录ID
+     * @param userDTO 当前登录用户
+     * @return true=删除成功
+     */
     @Override
-    public boolean deleteDirectory(Long dirId) {
-        // 1. 校验目录存在
-        FileDo dirDo = this.fileRepository.get(dirId);
-        if (dirDo == null || YesOrNoEnum.Y.name().equals(dirDo.getIsFile())) {
-            throw new IllegalArgumentException("目录不存在");
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = RuntimeException.class)
+    public boolean deleteDirectory(Long dirId, UserDTO userDTO) {
+        if (dirId == null) {
+            throw new IllegalArgumentException("目录ID不能为空");
         }
-        rejectChatAttachmentDirectoryMutation(dirDo);
+        if (userDTO == null || userDTO.getId() == null || StringUtils.isBlank(userDTO.getUserName())) {
+            throw new IllegalArgumentException("当前用户信息无效");
+        }
+        if (userDTO.getId() > Integer.MAX_VALUE || userDTO.getId() < Integer.MIN_VALUE) {
+            throw new IllegalArgumentException("当前用户ID无效");
+        }
 
-        // 2. 检查是否有子项
+        Integer userId = userDTO.getId().intValue();
+        String userName = userDTO.getUserName().trim();
+        FileDo directory = this.fileRepository.get(dirId);
+        if (directory == null
+                || !YesOrNoEnum.N.name().equals(directory.getDel())
+                || !YesOrNoEnum.N.name().equals(directory.getIsFile())
+                || !YesOrNoEnum.Y.name().equals(directory.getIsExist())) {
+            throw new IllegalArgumentException("目录不存在或状态无效");
+        }
+        if (Long.valueOf(-1L).equals(directory.getParentId())) {
+            throw new IllegalArgumentException("用户根目录不允许删除");
+        }
+        rejectChatAttachmentDirectoryMutation(directory);
+
+        List<FileDo> directoryChain = loadAndValidateUploadDirectoryChain(dirId, userId, userName);
+        List<FileDo> descendants = collectActiveDescendants(dirId, new HashSet<Long>());
+        validateDirectoryDescendants(descendants, userId, userName);
+
+        List<FileDo> validFiles = descendants.stream()
+                .filter(item -> YesOrNoEnum.Y.name().equals(item.getIsFile()))
+                .filter(item -> YesOrNoEnum.Y.name().equals(item.getIsExist()))
+                .collect(Collectors.toList());
+        if (!validFiles.isEmpty()) {
+            log.warn("目录删除被拒绝: dirId={}, userId={}, validFileCount={}",
+                    dirId, userId, validFiles.size());
+            throw new DirectoryContainsFileException("目录或子目录中存在有效文件，请先删除文件");
+        }
+
+        Path directoryPath = resolveDirectoryPath(directoryChain, userName);
+        List<Long> recordIds = descendants.stream()
+                .map(FileDo::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        recordIds.add(dirId);
+
+        // 数据库更新先进入事务；文件系统删除失败时抛出异常，由 Spring 回滚目录记录和父节点状态。
+        this.fileRepository.batchLogicDelete(recordIds);
+        refreshParentHasChild(directory.getParentId());
+        deleteDirectoryTree(directoryPath);
+
+        log.info("删除目录成功: dirId={}, userId={}, recordCount={}, path={}",
+                dirId, userId, recordIds.size(), directoryPath);
+        return true;
+    }
+
+    private List<FileDo> collectActiveDescendants(Long parentId, Set<Long> visitedDirectoryIds) {
+        if (!visitedDirectoryIds.add(parentId)) {
+            throw new IllegalArgumentException("目录层级存在循环引用");
+        }
+
         FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setParentId(dirId);
+        queryParam.setParentId(parentId);
         queryParam.setDel(YesOrNoEnum.N.name());
         List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
-        if (!CollectionUtils.isEmpty(children)) {
-            throw new IllegalStateException("请先删除当前目录下的其他目录");
+        if (CollectionUtils.isEmpty(children)) {
+            return new ArrayList<>();
         }
 
-        // 3. 删除文件系统目录
-        String dirPath = buildDirectoryPath(dirId);
-        File dir = new File(dirPath);
-        if (dir.exists() && dir.isDirectory()) {
-            if (!dir.delete()) {
-                throw new RuntimeException("文件系统目录删除失败: " + dirPath);
+        List<FileDo> result = new ArrayList<>(children);
+        for (FileDo child : children) {
+            if (YesOrNoEnum.N.name().equals(child.getIsFile()) && child.getId() != null) {
+                result.addAll(collectActiveDescendants(child.getId(), visitedDirectoryIds));
             }
         }
+        return result;
+    }
 
-        // 4. 删除DB记录
-        FileDo updateDo = new FileDo();
-        updateDo.setId(dirId);
-        updateDo.setDel(YesOrNoEnum.Y.name());
-        updateDo.setDelTime(new Date());
-        updateDo.setGmtModified(updateDo.getDelTime());
-        this.fileRepository.updateSelective(updateDo);
+    private void validateDirectoryDescendants(List<FileDo> descendants, Integer userId, String userName) {
+        for (FileDo item : descendants) {
+            boolean file = YesOrNoEnum.Y.name().equals(item.getIsFile());
+            boolean directory = YesOrNoEnum.N.name().equals(item.getIsFile());
+            if (!file && !directory) {
+                throw new IllegalArgumentException("目录数据异常: 节点类型无效，id=" + item.getId());
+            }
+            if (!userId.equals(item.getUserId()) || !userName.equals(item.getUserName())) {
+                throw new IllegalArgumentException("目录数据异常: 存在非当前用户节点，id=" + item.getId());
+            }
+            if (directory) {
+                validatePathSegment(item.getFileName());
+            }
+        }
+    }
 
-        log.info("删除目录成功: id={}, path={}", dirId, dirPath);
-        return true;
+    private Path resolveDirectoryPath(List<FileDo> directoryChain, String userName) {
+        Path storageRoot = resolveStorageRoot();
+        Path currentPath = resolveSafeChild(storageRoot, userName);
+        List<Path> expectedPaths = new ArrayList<>(directoryChain.size());
+        expectedPaths.add(currentPath);
+        for (int index = 1; index < directoryChain.size(); index++) {
+            currentPath = resolveSafeChild(currentPath, directoryChain.get(index).getFileName());
+            ensureContained(storageRoot, currentPath);
+            expectedPaths.add(currentPath);
+        }
+        validateExistingDirectoryComponents(expectedPaths);
+        return currentPath;
+    }
+
+    private void deleteDirectoryTree(Path directoryPath) {
+        if (!Files.exists(directoryPath, LinkOption.NOFOLLOW_LINKS)) {
+            return;
+        }
+        if (Files.isSymbolicLink(directoryPath)
+                || !Files.isDirectory(directoryPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("目录文件系统路径无效");
+        }
+
+        try {
+            Files.walkFileTree(directoryPath, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Files.delete(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (exc != null) {
+                        throw exc;
+                    }
+                    Files.delete(dir);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            log.error("文件系统目录删除失败: path={}", directoryPath, e);
+            throw new RuntimeException("文件系统目录删除失败，请检查目录权限", e);
+        }
+    }
+
+    private void refreshParentHasChild(Long parentId) {
+        if (parentId == null || parentId <= 0) {
+            return;
+        }
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setParentId(parentId);
+        queryParam.setDel(YesOrNoEnum.N.name());
+        List<FileDo> remainingChildren = this.fileRepository.getAssignFiles(queryParam);
+
+        FileDo parentUpdate = new FileDo();
+        parentUpdate.setId(parentId);
+        parentUpdate.setHasChild(CollectionUtils.isEmpty(remainingChildren)
+                ? YesOrNoEnum.N.name() : YesOrNoEnum.Y.name());
+        parentUpdate.setGmtModified(new Date());
+        this.fileRepository.updateSelective(parentUpdate);
     }
 
     @Override

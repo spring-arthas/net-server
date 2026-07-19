@@ -24,9 +24,10 @@
             value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
         <property name="username" value="jxgy" />
         <property name="password" value="Fbhu0359" />-->
+        <property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
         <property
         name="url"
-        value="jdbc:mysql://localhost:3306/net_server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;"
+        value="jdbc:mysql://127.0.0.1:3306/net_server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;"
         />
         <property name="username" value="root" />
         <property name="password" value="911025pfz" />
@@ -112,6 +113,10 @@
 
     <bean id="userFriendApplyService"
           class="com.alibaba.server.nio.repository.user.service.impl.UserFriendApplyServiceImpl"
+          scope="singleton" />
+
+    <bean id="friendshipService"
+          class="com.alibaba.server.nio.repository.user.service.impl.FriendshipServiceImpl"
           scope="singleton" />
 
     <bean id="userFriendMessageService"

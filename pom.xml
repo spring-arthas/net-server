@@ -219,7 +219,9 @@
         </plugin>
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.1</version>
+          <!-- 3.5.1 supports Java 8; newer versions map maven.compiler.release
+               to the release flag, which is unavailable in a JDK 8 compiler. -->
+          <version>3.5.1</version>
         </plugin>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>

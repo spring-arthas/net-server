@@ -140,6 +140,18 @@ public class FileUploadFrame {
          * 处理好友申请
          */
         USER_FRIEND_APPLY_HANDLE_REQ(0x39, "处理好友申请"),
+        /** 好友搜索响应 */
+        USER_FRIEND_QUERY_RESPONSE(0x3A, "好友搜索响应"),
+        /** 发送好友申请响应 */
+        USER_FRIEND_ADD_RESPONSE(0x3B, "发送好友申请响应"),
+        /** 好友申请列表响应 */
+        USER_FRIEND_APPLY_RESPONSE(0x3C, "好友申请列表响应"),
+        /** 处理好友申请响应 */
+        USER_FRIEND_APPLY_HANDLE_RESPONSE(0x3D, "处理好友申请响应"),
+        /** 好友关系事件推送 */
+        USER_FRIEND_EVENT_PUSH(0x3E, "好友关系事件推送"),
+        /** 好友列表响应 */
+        USER_FRIEND_LIST_RESPONSE(0x3F, "好友列表响应"),
 
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
