@@ -1,0 +1,44 @@
+{
+  "id": "07-20-text-frame-delivery",
+  "name": "07-20-text-frame-delivery",
+  "title": "修复文本大帧响应续写",
+  "description": "修复10086文本连接部分写入注册错误Selector导致登录和历史消息超时",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P0",
+  "creator": "veneno",
+  "assignee": "veneno",
+  "createdAt": "2026-07-20",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
