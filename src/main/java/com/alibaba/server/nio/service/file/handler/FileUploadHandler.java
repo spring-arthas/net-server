@@ -412,6 +412,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setFileId(null);
             uploadContext.setFileTaskId(fileTaskId);
         }
+        uploadContext.setConnectionReuse(isReusableChatUpload(request));
+        uploadContext.setBatchId(request.getBatchId());
         // 6. 设置目录路径
         if (dirPath != null) {
             uploadContext.setBasePath(dirPath);
@@ -792,11 +794,13 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 log.debug("上传完成，删除断点记录: MD5={}", uploadContext.getMd5());
             }
             // 5. 释放资源
-            this.realeaseResource(uploadContext, socketChannelContext);
-            log.info("=> 文件上传完成，当前上传任务所有资源均已释放完毕: taskId={}, fileId={}, fileName={}, size={}, 耗时={}ms",
+            this.releaseCompletedUpload(uploadContext, socketChannelContext);
+            log.info("=> 文件上传完成，当前文件任务资源已释放: taskId={}, fileId={}, fileName={}, reuseConnection={}, batchId={}, size={}, 耗时={}ms",
                 uploadContext.getRequestTaskId(),
                 uploadContext.getFileId(),
                 uploadContext.getFileName(),
+                uploadContext.isConnectionReuse(),
+                uploadContext.getBatchId(),
                 uploadContext.getBytesWritten(),
                 System.currentTimeMillis() - uploadContext.getStartTime().atZone(java.time.ZoneId.systemDefault())
                         .toInstant().toEpochMilli());
@@ -807,7 +811,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 if (StringUtils.isNotBlank(uploadContext.getMd5())) {
                     CheckpointManager.removeCheckpoint(uploadContext.getMd5(), uploadContext.getUserId());
                 }
-                realeaseResource(uploadContext, socketChannelContext);
+                releaseCompletedUpload(uploadContext, socketChannelContext);
             } else {
                 failIntegrityCheck(uploadContext, socketChannelContext, simpleChannelContext,
                         "上传完成处理失败");
@@ -851,23 +855,64 @@ public class FileUploadHandler extends AbstractChannelHandler {
      */
     private void realeaseResource(FileUploadContext fileUploadContext, SocketChannelContext socketChannelContext) {
         if (fileUploadContext == null) {
-            if (socketChannelContext != null && socketChannelContext.getSocketChannel() != null) {
-                WriteQueueHelper.closeAfterPendingWrites(socketChannelContext);
-            }
+            closeUploadConnection(socketChannelContext);
             return;
         }
-        // 1. 释放并发许可
+        releaseUploadTask(fileUploadContext, socketChannelContext);
+        closeUploadConnection(socketChannelContext);
+    }
+
+    /**
+     * 上传成功后的资源释放。聊天附件批次只释放当前文件任务，其他上传保持原有关闭连接行为。
+     */
+    private void releaseCompletedUpload(FileUploadContext fileUploadContext,
+            SocketChannelContext socketChannelContext) {
+        releaseUploadTask(fileUploadContext, socketChannelContext);
+        if (fileUploadContext == null || !fileUploadContext.isConnectionReuse()) {
+            closeUploadConnection(socketChannelContext);
+            return;
+        }
+        log.info("聊天附件上传连接继续复用: batchId={}, completedTaskId={}, remoteAddress={}",
+                fileUploadContext.getBatchId(),
+                fileUploadContext.getRequestTaskId(),
+                socketChannelContext == null ? null : socketChannelContext.getRemoteAddress());
+    }
+
+    /** 只释放单个物理文件任务资源，不销毁解析器或 Socket。 */
+    private void releaseUploadTask(FileUploadContext fileUploadContext,
+            SocketChannelContext socketChannelContext) {
+        if (fileUploadContext == null) {
+            return;
+        }
         fileUploadContext.releaseSemaphore(uploadSemaphore);
-        // 2. 清理资源（包含本次文件上传任务和解析器）
         uploadContextMap.remove(fileUploadContext.getRequestTaskId());
         uploadChannelContextMap.remove(fileUploadContext.getRequestTaskId());
         rebalanceUploadRateLimiters();
-        // 3. 释放文件传输解析器
-        parserMap.remove(socketChannelContext.getRemoteAddress());
-        // 4. 移除文件传输任务对应通道缓存数据
-        AbstractEventHandler.channelDataMap.remove(socketChannelContext.getRemoteAddress());
-        // 5. 关闭通道
+        if (socketChannelContext != null) {
+            Object currentTaskId = socketChannelContext.getAttribute("currentUploadTaskId");
+            if (fileUploadContext.getRequestTaskId().equals(currentTaskId)) {
+                socketChannelContext.removeAttribute("currentUploadTaskId");
+            }
+        }
+    }
+
+    /** 释放连接级资源，供云盘单文件上传、错误和断连路径使用。 */
+    private void closeUploadConnection(SocketChannelContext socketChannelContext) {
+        if (socketChannelContext == null) {
+            return;
+        }
+        String remoteAddress = socketChannelContext.getRemoteAddress();
+        if (remoteAddress != null) {
+            parserMap.remove(remoteAddress);
+            AbstractEventHandler.channelDataMap.remove(remoteAddress);
+        }
         WriteQueueHelper.closeAfterPendingWrites(socketChannelContext);
+    }
+
+    private boolean isReusableChatUpload(FileUploadRequest request) {
+        return request != null
+                && Boolean.TRUE.equals(request.getConnectionReuse())
+                && UPLOAD_PURPOSE_CHAT_ATTACHMENT.equalsIgnoreCase(request.getUploadPurpose());
     }
 
     /**
@@ -945,7 +990,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(ackData.length);
         buffer.put(ackData);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
         WriteQueueHelper.submitWrite(ctx, buffer);
         log.debug("发送断点应答: 客户端地址={}, 应答数据={}", ctx.getRemoteAddress(), JSON.toJSONString(ackJson));
@@ -1004,7 +1049,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             buffer.put((byte) 0); // 标志位 1字节
             buffer.putInt(ackData.length); // 数据长度 4字节
             buffer.put(ackData); // 数据
-            buffer.flip();
+            com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
             // 使用 NIO 事件驱动的写操作（替代直接 write）
             com.alibaba.server.nio.handler.event.concret.WriteQueueHelper.submitWrite(socketChannelContext, buffer);

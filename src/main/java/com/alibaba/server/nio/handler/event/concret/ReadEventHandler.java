@@ -135,7 +135,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             NioServerContext.closedAndRelease(socketChannel);
             return FrameReadResultEnum.END;
         } finally {
-            byteBuffer.clear();
+            com.alibaba.server.nio.util.NioBufferCompat.clear(byteBuffer);
         }
         return frameReadResultEnum;
     }
@@ -195,7 +195,7 @@ public class ReadEventHandler extends AbstractEventHandler {
             }
             // 4. 限制本次读取的大小（不超过可用令牌）
             int shouldLimit = (int) Math.min(byteBuffer.capacity(), allowedBytes);
-            byteBuffer.limit(shouldLimit);
+            com.alibaba.server.nio.util.NioBufferCompat.limit(byteBuffer, shouldLimit);
             readBytes = socketChannel.read(byteBuffer);
             if (readBytes <= 0) {
                 break;
@@ -208,7 +208,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 globalLimiter.tryConsume(readBytes);
             }
             // 6. 从通道读取完并写入到byteBuffer后切换为读模式，将byteBuffer数据重新设置到bytes数组中
-            byteBuffer.flip();
+            com.alibaba.server.nio.util.NioBufferCompat.flip(byteBuffer);
             if (byteBuffer.hasRemaining()) {
                 // 读取原始数据
                 byte[] bytes = new byte[byteBuffer.remaining()];
@@ -222,7 +222,7 @@ public class ReadEventHandler extends AbstractEventHandler {
                 // 处理当前通道对应缓存数据模型内的数据序号【修复】：索引溢出保护，防止long连接场景下index溢出变为负数
                 channelCacheDataModel.setNewLatestIndex(channelCacheDataModel.getNewLatestIndex() >= (Integer.MAX_VALUE - 1) ? 1 : groupData.getIndex() + 1);
                 channelCacheDataModel.getWaitHandleDataList().add(groupData);
-                byteBuffer.clear(); // 清空，恢复 limit 到 capacity
+                com.alibaba.server.nio.util.NioBufferCompat.clear(byteBuffer); // 清空，恢复 limit 到 capacity
             }
         }
         // 判断读取结果：-1 表示流末尾（客户端关闭连接），需要关闭通道

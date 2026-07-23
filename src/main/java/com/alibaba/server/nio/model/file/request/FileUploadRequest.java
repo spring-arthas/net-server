@@ -19,4 +19,8 @@ public class FileUploadRequest {
 	private String taskId;
 	private String transferToken;
 	private String uploadPurpose;
+	/** 仅聊天附件批次可请求在单文件完成后保留当前上传连接。 */
+	private Boolean connectionReuse;
+	/** 客户端消息批次标识，只用于关联和诊断，不替代 taskId。 */
+	private String batchId;
 }

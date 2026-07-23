@@ -33,7 +33,7 @@ public class BasicUtil {
     //TODO 1、byte[] 转 long
     public static long bytesToLong(byte[] bytes) {
         buffer.put(bytes, 0, bytes.length);
-        buffer.flip();//need flip
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);//need flip
         return buffer.getLong();
     }
 

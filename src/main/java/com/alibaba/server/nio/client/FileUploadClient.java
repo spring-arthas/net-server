@@ -196,12 +196,12 @@ public class FileUploadClient {
 
         while (totalSent < fileSize) {
             // 从文件读取数据
-            readBuffer.clear();
+            com.alibaba.server.nio.util.NioBufferCompat.clear(readBuffer);
             int bytesRead = fileChannel.read(readBuffer);
             if (bytesRead == -1) {
                 break;
             }
-            readBuffer.flip();
+            com.alibaba.server.nio.util.NioBufferCompat.flip(readBuffer);
 
             // 提取实际读取的数据
             byte[] chunkData = new byte[bytesRead];
@@ -260,7 +260,7 @@ public class FileUploadClient {
             }
             bytesRead += read;
         }
-        headerBuffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(headerBuffer);
 
         // 验证魔数
         if (headerBuffer.get() != MAGIC[0] || headerBuffer.get() != MAGIC[1]) {
@@ -289,7 +289,7 @@ public class FileUploadClient {
             }
             bytesRead += read;
         }
-        dataBuffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(dataBuffer);
 
         byte[] data = new byte[dataLength];
         dataBuffer.get(data);
@@ -332,7 +332,7 @@ public class FileUploadClient {
             buffer.put(data);
         }
 
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
         return buffer;
     }
 

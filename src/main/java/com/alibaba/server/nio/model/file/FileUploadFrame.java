@@ -174,6 +174,10 @@ public class FileUploadFrame {
          * 文件重命名请求
          */
         FILE_RENAME_REQ(0x44, "文件重命名请求"),
+        /**
+         * 当前用户头像更新请求
+         */
+        USER_AVATAR_UPDATE_REQ(0x45, "当前用户头像更新请求"),
 
         // ========== 聊天消息帧 (0x50-0x5F) ==========
         /**

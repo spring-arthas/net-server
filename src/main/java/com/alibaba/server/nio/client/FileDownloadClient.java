@@ -104,7 +104,7 @@ public class FileDownloadClient {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
         socketChannel.write(buffer);
         System.out.println("已发送下载请求: fileId=" + fileId);
@@ -131,12 +131,12 @@ public class FileDownloadClient {
                 break;
             }
 
-            readBuffer.flip();
+            com.alibaba.server.nio.util.NioBufferCompat.flip(readBuffer);
             accumulator.put(readBuffer);
-            readBuffer.clear();
+            com.alibaba.server.nio.util.NioBufferCompat.clear(readBuffer);
 
             // 解析所有完整的帧
-            accumulator.flip();
+            com.alibaba.server.nio.util.NioBufferCompat.flip(accumulator);
             while (accumulator.remaining() >= HEADER_LENGTH) {
                 accumulator.mark(); // 标记当前位置
                 byte magic1 = accumulator.get();
@@ -262,7 +262,7 @@ public class FileDownloadClient {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
         socketChannel.write(buffer);
     }

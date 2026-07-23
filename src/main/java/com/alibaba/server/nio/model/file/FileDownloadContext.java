@@ -155,7 +155,7 @@ public class FileDownloadContext {
             return -1;
         }
         if (remaining < buffer.remaining()) {
-            buffer.limit(buffer.position() + (int) remaining);
+            com.alibaba.server.nio.util.NioBufferCompat.limit(buffer, buffer.position() + (int) remaining);
         }
         int bytesRead = fileChannel.read(buffer);
         if (bytesRead > 0) {

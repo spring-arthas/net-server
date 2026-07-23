@@ -80,6 +80,15 @@ public interface UserService {
      */
     void changePassword(Long userId, String oldPassword, String newPassword);
 
+    /**
+     * 更新用户头像。
+     *
+     * @param userId 用户ID
+     * @param avatar 头像文件路径
+     * @return 更新后的用户信息
+     */
+    UserDTO updateAvatar(Long userId, String avatar);
+
     List<UserDTO> getUserListByName(UserQueryParam userQueryParam);
 
     UserDTO getById(Long id);

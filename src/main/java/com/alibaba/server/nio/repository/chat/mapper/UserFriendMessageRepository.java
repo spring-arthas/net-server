@@ -19,9 +19,23 @@ import java.util.List;
 public interface UserFriendMessageRepository
                 extends BaseMapperRepository<UserFriendMessageQueryParam, UserFriendMessageDO> {
 
-        @Select("SELECT * FROM (SELECT * FROM user_friend_message WHERE (sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1}) ORDER BY gmt_created DESC LIMIT #{offset}, #{limit}) AS temp ORDER BY gmt_created ASC")
+        @Select("SELECT * FROM (SELECT * FROM user_friend_message WHERE del = 'N' AND ((sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1})) ORDER BY gmt_created DESC LIMIT #{offset}, #{limit}) AS temp ORDER BY gmt_created ASC")
         List<UserFriendMessageDO> getChatHistory(@Param("userId1") Integer userId1, @Param("userId2") Integer userId2,
                         @Param("offset") int offset, @Param("limit") int limit);
+
+        @Select("SELECT * FROM user_friend_message WHERE del = 'N' AND ((sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1})) ORDER BY id DESC LIMIT #{limit}")
+        List<UserFriendMessageDO> getLatestChatHistory(@Param("userId1") Integer userId1,
+                        @Param("userId2") Integer userId2, @Param("limit") int limit);
+
+        @Select("SELECT * FROM user_friend_message WHERE del = 'N' AND ((sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1})) AND id < #{beforeMessageId} ORDER BY id DESC LIMIT #{limit}")
+        List<UserFriendMessageDO> getChatHistoryBefore(@Param("userId1") Integer userId1,
+                        @Param("userId2") Integer userId2, @Param("beforeMessageId") Long beforeMessageId,
+                        @Param("limit") int limit);
+
+        @Select("SELECT * FROM user_friend_message WHERE del = 'N' AND ((sender_id = #{userId1} AND receiver_id = #{userId2}) OR (sender_id = #{userId2} AND receiver_id = #{userId1})) AND id > #{afterMessageId} ORDER BY id ASC LIMIT #{limit}")
+        List<UserFriendMessageDO> getChatHistoryAfter(@Param("userId1") Integer userId1,
+                        @Param("userId2") Integer userId2, @Param("afterMessageId") Long afterMessageId,
+                        @Param("limit") int limit);
 
         @Select("SELECT COUNT(*) FROM user_friend_message WHERE sender_id = #{senderId} AND receiver_id = #{receiverId} AND status = 0 AND del = 'N'")
         int getUnreadMessageCount(@Param("senderId") Integer senderId, @Param("receiverId") Integer receiverId);
@@ -35,7 +49,7 @@ public interface UserFriendMessageRepository
 
         @Select("SELECT COUNT(1) FROM user_friend_message "
                         + "WHERE del = 'N' AND (sender_id = #{userId} OR receiver_id = #{userId}) "
-                        + "AND content REGEXP CONCAT('\\\"(fileId|previewFileId)\\\"[[:space:]]*:[[:space:]]*', "
+                        + "AND content REGEXP CONCAT('\\\"(fileId|previewFileId|thumbnailFileId)\\\"[[:space:]]*:[[:space:]]*', "
                         + "#{fileId}, '([^0-9]|$)')")
         int countAttachmentReferencesForUser(@Param("userId") Long userId, @Param("fileId") Long fileId);
 }

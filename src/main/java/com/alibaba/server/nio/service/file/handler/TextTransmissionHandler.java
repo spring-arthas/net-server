@@ -15,7 +15,9 @@ import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.model.user.UserAuthFrame;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
+import com.alibaba.server.nio.service.user.OnlineUserRegistry;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
+import com.alibaba.server.nio.repository.chat.service.ChatHistoryPage;
 import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.exception.DirectoryContainsFileException;
@@ -49,6 +51,7 @@ import java.io.IOException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,6 +71,9 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class TextTransmissionHandler extends AbstractChannelHandler {
+
+    private static final long FRIEND_REJECT_COOLDOWN_MILLIS = 24L * 60L * 60L * 1000L;
+    private static final int MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
     /**
      * 帧解析器缓存(即每个socketChannelContext均匹配一个解析器)
@@ -188,6 +194,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case FILE_RENAME_REQ:
                     handleFileRename(frame, context);
                     break;
+                case USER_AVATAR_UPDATE_REQ:
+                    handleAvatarUpdate(frame, context);
+                    break;
 
                 // ========== 聊天消息帧 ==========
                 case CHAT_MSG_SEND_REQ: // 0x50
@@ -244,6 +253,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     }
 
     private void handleChatMessageSend(FileUploadFrame frame, SocketChannelContext context) {
+        String clientMsgId = null;
         try {
             Long senderId = (Long) context.getAttribute("loggedInUserId");
             if (senderId == null) {
@@ -256,6 +266,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             Integer receiverId = request.getInteger("receiverId");
             String content = request.getString("content");
             String msgType = request.getString("msgType"); // TEXT, IMAGE, etc.
+            clientMsgId = request.getString("clientMsgId");
 
             if (receiverId == null || org.apache.commons.lang.StringUtils.isBlank(content)) {
                 sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "接收方或内容不能为空",
@@ -273,6 +284,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                         UserAuthFrame.ErrorCode.INVALID_REQUEST);
                 return;
             }
+            content = ChatAttachmentContentValidator.validate(
+                    content,
+                    msgType,
+                    senderId.intValue(),
+                    fileId -> getFileService().getFileDetail(fileId));
 
             // 1. 持久化记录
             UserFriendMessageDO savedMsg = getChatMessageService()
@@ -292,9 +308,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             pushData.put("gmtCreated",
                     savedMsg.getGmtCreated() != null ? savedMsg.getGmtCreated().getTime() : System.currentTimeMillis());
 
-            // 3. 实时推送给接收方 (如果在线)
-            SocketChannelContext receiverContext = BasicServer.onlineUserChannels.get(receiverId.longValue());
-            if (receiverContext != null && receiverContext.getSocketChannel().isConnected()) {
+            // 3. 实时推送给接收方 (如果在线)。必须同时验证在线映射绑定的登录用户，
+            // 防止同一连接切换账号后，旧 userId 映射把消息回推给发送方。
+            SocketChannelContext receiverContext = OnlineUserRegistry
+                    .getActiveUserContext(receiverId.longValue());
+            if (receiverContext != null) {
                 sendFrame(receiverContext, FrameType.CHAT_MSG_PUSH, pushData);
                 log.info("聊天消息实时推送成功: sender={}, receiver={}", senderId, receiverId);
             } else {
@@ -305,14 +323,49 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject responseData = new JSONObject();
             responseData.put("messageId", savedMsg.getId());
             responseData.put("status", "SUCCESS");
+            responseData.put("clientMsgId", clientMsgId);
             sendSuccessResponse(context, FrameType.CHAT_MSG_RESPONSE, "发送成功", responseData);
 
+        } catch (ChatAttachmentValidationException e) {
+            JSONObject responseData = new JSONObject();
+            responseData.put("messageId", -1);
+            responseData.put("status", "FALSE");
+            responseData.put("clientMsgId", clientMsgId);
+            responseData.put("message", e.getMessage());
+            responseData.put("errorCode", e.getErrorCode());
+            responseData.put("attachmentField", e.getAttachmentField());
+            responseData.put("fileId", e.getFileId());
+            sendErrorResponse(
+                    context,
+                    FrameType.CHAT_MSG_RESPONSE,
+                    e.getMessage(),
+                    e.getErrorCode(),
+                    responseData);
+        } catch (IllegalArgumentException e) {
+            JSONObject responseData = new JSONObject();
+            responseData.put("messageId", -1);
+            responseData.put("status", "FALSE");
+            responseData.put("clientMsgId", clientMsgId);
+            responseData.put("message", e.getMessage());
+            sendErrorResponse(
+                    context,
+                    FrameType.CHAT_MSG_RESPONSE,
+                    e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST,
+                    responseData);
         } catch (Exception e) {
             log.warn("处理聊天消息异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame), ExceptionUtils.getStackTrace(e));
             JSONObject responseData = new JSONObject();
             responseData.put("messageId", -1);
             responseData.put("status", "FALSE");
-            sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, "消息发送失败", JSON.toJSONString(responseData));
+            responseData.put("clientMsgId", clientMsgId);
+            responseData.put("message", "消息发送失败");
+            sendErrorResponse(
+                    context,
+                    FrameType.CHAT_MSG_RESPONSE,
+                    "消息发送失败",
+                    "CHAT_MESSAGE_SEND_FAILED",
+                    responseData);
         }
     }
 
@@ -391,6 +444,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     }
 
     private void handleChatMessageHistory(FileUploadFrame frame, SocketChannelContext context) {
+        long startedAt = System.currentTimeMillis();
         try {
             Long userId = (Long) context.getAttribute("loggedInUserId");
             if (userId == null) {
@@ -402,11 +456,13 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             Integer friendId = request.getInteger("friendId");
             Integer limit = request.getInteger("limit");
-            Integer offset = request.getInteger("offset");
+            Long beforeMessageId = request.getLong("beforeMessageId");
+            Long afterMessageId = request.getLong("afterMessageId");
+            Integer offset = request.containsKey("offset") ? request.getInteger("offset") : null;
             if (limit == null || limit <= 0) {
                 limit = 50;
             }
-            if (offset == null || offset < 0) {
+            if (offset != null && offset < 0) {
                 offset = 0;
             }
 
@@ -416,79 +472,24 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 return;
             }
 
-            List<UserFriendMessageDO> historyList = getChatMessageService().getChatHistory(userId.intValue(), friendId,
-                    offset, limit);
+            ChatHistoryPage historyPage = getChatMessageService().getChatHistoryPage(
+                    userId.intValue(), friendId, beforeMessageId, afterMessageId, offset, limit);
+            JSONObject responseData = ChatHistoryResponseBuilder.buildResponseData(historyPage);
 
-            // 获取当前用户和好友的头像
-            UserDTO currentUser = getUserService().getById(userId);
-            UserDTO friendInfo = getUserService().getById(friendId.longValue());
-            String currentUserAvatar = currentUser != null ? getAvatarBase64(currentUser.getAvatar()) : "";
-            String friendAvatar = friendInfo != null ? getAvatarBase64(friendInfo.getAvatar()) : "";
-
-            java.text.SimpleDateFormat timeFormat = new java.text.SimpleDateFormat("HH:mm");
-            java.text.SimpleDateFormat fullFormat = new java.text.SimpleDateFormat("yyyy-MM-dd");
-
-            java.util.Calendar cal = java.util.Calendar.getInstance();
-            cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-            cal.set(java.util.Calendar.MINUTE, 0);
-            cal.set(java.util.Calendar.SECOND, 0);
-            cal.set(java.util.Calendar.MILLISECOND, 0);
-            long todayStart = cal.getTimeInMillis();
-
-            cal.add(java.util.Calendar.DATE, -1);
-            long yesterdayStart = cal.getTimeInMillis();
-
-            List<JSONObject> resultList = new java.util.ArrayList<>();
-            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(historyList)) {
-                for (UserFriendMessageDO msg : historyList) {
-                    JSONObject item = new JSONObject();
-                    // 本条消息Id
-                    item.put("id", msg.getId());
-                    // 消息发送方userId，类型为Int32
-                    item.put("senderId", msg.getSenderId());
-                    // 消息接收方userId，类型为Int32
-                    item.put("receiverId", msg.getReceiverId());
-                    // 消息内容
-                    item.put("content", msg.getContent());
-                    // 消息类型 类型为Int32
-                    item.put("msgType", msg.getMsgType());
-                    // 消息状态 类型为Int32
-                    item.put("status", msg.getStatus());
-
-                    // 【优化去重】不再每条消息放置完整的头像base64数据
-                    // 根据本条消息发送时间来配置消息所属的分组名称
-                    long msgTime = msg.getGmtCreated() != null ? msg.getGmtCreated().getTime()
-                            : System.currentTimeMillis();
-                    String timeStr;
-                    if (msgTime >= todayStart) {
-                        timeStr = timeFormat.format(msg.getGmtCreated());
-                    } else if (msgTime >= yesterdayStart) {
-                        timeStr = "昨天 " + timeFormat.format(msg.getGmtCreated());
-                    } else {
-                        timeStr = fullFormat.format(msg.getGmtCreated());
-                    }
-                    // 本条消息所属的分组名称
-                    item.put("groupTime", timeStr);
-                    // 每条消息增加一个消息发送时间
-                    item.put("msgTimeStr", timeFormat.format(msgTime));
-                    // 消息添加到集合中
-                    resultList.add(item);
-                }
-            }
-
-            // 【优化结构】将消息列表与用户头像信息拆分，减小网络传输体积
-            JSONObject responseData = new JSONObject();
-            responseData.put("list", resultList);
-
-            JSONObject avatars = new JSONObject();
-            avatars.put(userId.toString(), currentUserAvatar);
-            avatars.put(friendId.toString(), friendAvatar);
-            responseData.put("avatars", avatars);
+            String mode = beforeMessageId != null ? "BEFORE"
+                    : afterMessageId != null ? "AFTER"
+                    : offset != null ? "LEGACY_OFFSET" : "LATEST";
+            log.info("查询聊天历史完成: userId={}, friendId={}, mode={}, rows={}, hasMore={}, elapsedMs={}",
+                    userId, friendId, mode, historyPage.getMessages().size(), historyPage.isHasMore(),
+                    System.currentTimeMillis() - startedAt);
 
             sendSuccessResponse(context, FrameType.CHAT_MSG_HISTORY_RESPONSE, "查询成功", responseData);
 
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.CHAT_MSG_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
         } catch (Exception e) {
-            log.warn("处理历史消息异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
+            log.warn("处理历史消息异常: elapsedMs={}, error={}", System.currentTimeMillis() - startedAt,
                     org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
             JSONObject responseData = new JSONObject();
             responseData.put("status", "FALSE");
@@ -510,6 +511,71 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             }
         }
         return null;
+    }
+
+    private String saveAvatarData(String userName, String avatarData, String avatarName) {
+        if (org.apache.commons.lang.StringUtils.isBlank(avatarData)) {
+            throw new IllegalArgumentException("头像数据不能为空");
+        }
+
+        try {
+            String pureAvatarData = avatarData.contains(",")
+                    ? avatarData.substring(avatarData.indexOf(",") + 1)
+                    : avatarData;
+            byte[] decodedBytes = Base64.getDecoder().decode(pureAvatarData);
+            if (decodedBytes.length == 0) {
+                throw new IllegalArgumentException("头像数据不能为空");
+            }
+            if (decodedBytes.length > MAX_AVATAR_BYTES) {
+                throw new IllegalArgumentException("头像不能超过2MB");
+            }
+
+            String extension = ".jpg";
+            if (org.apache.commons.lang.StringUtils.isNotBlank(avatarName)) {
+                String lowerName = avatarName.toLowerCase(Locale.ROOT);
+                if (lowerName.endsWith(".png")) {
+                    extension = ".png";
+                } else if (lowerName.endsWith(".jpeg")) {
+                    extension = ".jpeg";
+                } else if (lowerName.endsWith(".jpg")) {
+                    extension = ".jpg";
+                }
+            }
+
+            String safeUserName = userName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String basePath = System.getProperty("user.home") + File.separator + "Desktop" + File.separator
+                    + "netdisk";
+            String savePath = basePath + File.separator + safeUserName + File.separator + "avatars" + File.separator
+                    + "avatar_" + System.currentTimeMillis() + extension;
+            File destFile = new File(savePath);
+            if (!destFile.getParentFile().exists()) {
+                destFile.getParentFile().mkdirs();
+            }
+
+            try (FileOutputStream fos = new FileOutputStream(destFile)) {
+                fos.write(decodedBytes);
+            }
+            return savePath;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("头像保存失败", e);
+            throw new IllegalArgumentException("头像保存失败");
+        }
+    }
+
+    private JSONObject buildUserResponseData(UserDTO userDTO) {
+        JSONObject data = new JSONObject();
+        data.put("userId", Integer.valueOf(String.valueOf(userDTO.getId())));
+        data.put("userName", userDTO.getUserName());
+        data.put("nickName", userDTO.getNickName());
+        data.put("phone", userDTO.getPhone());
+        data.put("mail", userDTO.getMail());
+        String transferToken = TransferTokenFactory.getInstance()
+                .generateToken(userDTO.getId(), userDTO.getUserName());
+        data.put("token", transferToken);
+        data.put("transferToken", transferToken);
+        return data;
     }
 
     // ========== 用户认证处理 ==========
@@ -575,6 +641,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             data.put("userId", result.getId());
             data.put("userName", result.getUserName());
             data.put("nickName", result.getNickName());
+            data.put("avatar", getAvatarBase64(result.getAvatar()));
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "注册成功", data);
             log.info("用户注册成功: userName={}", userName);
         } catch (IllegalArgumentException e) {
@@ -602,8 +669,13 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             context.putAttribute("loggedInUserId", userDTO.getId());
             context.putAttribute("loggedInUserName", userDTO.getUserName());
 
-            // 将登录成功的用户加入在线列表缓存
-            BasicServer.onlineUserChannels.put(userDTO.getId(), context);
+            // 将登录成功的用户加入在线列表缓存。同一连接重新登录其他账号时，
+            // 先清理该连接残留的旧 userId 映射，避免消息投递串号。
+            int removedBindings = OnlineUserRegistry.bindUser(userDTO.getId(), context);
+            if (removedBindings > 0) {
+                log.warn("登录连接存在旧用户映射，已清理: userId={}, remoteAddress={}, removedBindings={}",
+                        userDTO.getId(), context.getRemoteAddress(), removedBindings);
+            }
 
             // 3、为当前用户创建网盘目录
             try {
@@ -621,7 +693,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             data.put("userName", userDTO.getUserName());
             data.put("phone", userDTO.getPhone());
             data.put("mail", userDTO.getMail());
-            data.put("avatar", userDTO.getAvatar());
+            data.put("avatar", getAvatarBase64(userDTO.getAvatar()));
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
             log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
         } catch (IllegalArgumentException e) {
@@ -661,16 +733,52 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         }
     }
 
+    private void handleAvatarUpdate(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = requireLoggedInUserId(context);
+            String userName = (String) context.getAttribute("loggedInUserName");
+            if (org.apache.commons.lang.StringUtils.isBlank(userName)) {
+                UserDTO currentUser = getUserService().getById(userId);
+                userName = currentUser == null ? null : currentUser.getUserName();
+            }
+            if (org.apache.commons.lang.StringUtils.isBlank(userName)) {
+                sendErrorResponse(context, FrameType.USER_RESPONSE, "请先登录", UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String avatarData = request.getString("avatarData");
+            String avatarName = request.getString("avatarName");
+            String avatarPath = saveAvatarData(userName, avatarData, avatarName);
+
+            UserDTO updatedUser = getUserService().updateAvatar(userId, avatarPath);
+            if (context.getUserDTO() != null) {
+                context.getUserDTO().setAvatar(updatedUser.getAvatar());
+            }
+
+            JSONObject data = buildUserResponseData(updatedUser);
+            data.put("avatar", getAvatarBase64(updatedUser.getAvatar()));
+            sendSuccessResponse(context, FrameType.USER_RESPONSE, "头像更新成功", data);
+            log.info("用户头像更新成功: userId={}, userName={}", userId, userName);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_RESPONSE, e.getMessage(), UserAuthFrame.ErrorCode.INVALID_REQUEST);
+        } catch (Exception e) {
+            log.error("用户头像更新失败", e);
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "头像更新失败，请稍后重试", UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
     private void handleLogout(FileUploadFrame frame, SocketChannelContext context) {
         try {
             Long userId = (Long) context.getAttribute("loggedInUserId");
             String userName = (String) context.getAttribute("loggedInUserName");
 
             if (userId != null) {
-                BasicServer.onlineUserChannels.remove(userId);
+                OnlineUserRegistry.unbindUser(userId, context);
             }
             context.removeAttribute("loggedInUserId");
             context.removeAttribute("loggedInUserName");
+            context.setUserDTO(null);
 
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "退出登录成功", null);
             log.info("用户退出登录: userId={}, userName={}", userId, userName);
@@ -716,6 +824,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     item.put("userName", friendInfo.getUserName());
                     item.put("nickName", friendInfo.getNickName());
                     item.put("avatar", getAvatarBase64(friendInfo.getAvatar()));
+                    boolean online = OnlineUserRegistry.isUserOnline(friend.getFriendId());
+                    item.put("online", online);
+                    item.put("onlineStatus", online ? "ONLINE" : "OFFLINE");
 
                     // 增加当前好友所发送的消息中未读消息数量
                     int unreadCount = getChatMessageService().getUnreadMessageCount(friend.getFriendId(),
@@ -806,8 +917,13 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                         user.setFriendStatus(0);
                         user.setFriendStatusDesc("等待对方同意");
                     } else if (outgoing != null && outgoing.getStatus() != null && outgoing.getStatus() == 2) {
-                        user.setFriendStatus(2);
-                        user.setFriendStatusDesc("重新申请");
+                        if (isRecentRejectedApply(outgoing)) {
+                            user.setFriendStatus(0);
+                            user.setFriendStatusDesc("对方已拒绝，请24小时后再试");
+                        } else {
+                            user.setFriendStatus(2);
+                            user.setFriendStatusDesc("重新申请");
+                        }
                     } else {
                         user.setFriendStatus(3);
                         user.setFriendStatusDesc("添加");
@@ -957,13 +1073,20 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         return result;
     }
 
+    private boolean isRecentRejectedApply(UserFriendApplyDTO apply) {
+        if (apply == null || apply.getGmtModified() == null) {
+            return false;
+        }
+        long rejectedAt = apply.getGmtModified().getTime();
+        return System.currentTimeMillis() - rejectedAt < FRIEND_REJECT_COOLDOWN_MILLIS;
+    }
+
     private void pushFriendEvent(Integer userId, JSONObject event) {
         if (userId == null || event == null) {
             return;
         }
-        SocketChannelContext targetContext = BasicServer.onlineUserChannels.get(userId.longValue());
-        if (targetContext != null && targetContext.getSocketChannel() != null
-                && targetContext.getSocketChannel().isConnected()) {
+        SocketChannelContext targetContext = OnlineUserRegistry.getActiveUserContext(userId.longValue());
+        if (targetContext != null) {
             sendFrame(targetContext, FrameType.USER_FRIEND_EVENT_PUSH, event);
         }
     }
@@ -1078,6 +1201,10 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             Integer userId = context.getUserDTO().getId().intValue();
             Long dirId = request.getLong("dirId"); // 所选择的目录id(目录树上点击的目录Id、目录下拉树中选择目录Id)
             String fileName = request.getString("fileName"); //
+            if (dirId == null || dirId <= 0) {
+                sendErrorResponse(context, FrameType.FILE_RESPONSE, "请选择目录后再查询文件", "INVALID_REQUEST");
+                return;
+            }
             int pageNum = request.getIntValue("pageNum");
             int pageSize = request.getIntValue("pageSize");
             if (pageNum < 1) {
@@ -1089,12 +1216,10 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             FileQueryParam fileQueryParam = new FileQueryParam();
             fileQueryParam.setUserId(userId);
-            if (Objects.nonNull(dirId) && 0L != dirId) {
-                fileQueryParam.setParentId(dirId);
-            }
+            // 文件名搜索仍然限定在左侧目录树当前选中的目录内，不能退化为全用户搜索。
+            fileQueryParam.setParentId(dirId);
             fileQueryParam.setFileName(null);
             if (org.apache.commons.lang.StringUtils.isNotBlank(fileName)) {
-                fileQueryParam.setParentId(null);
                 fileQueryParam.setFileName(fileName);
             }
             fileQueryParam.setCurrentPage(pageNum);
@@ -1189,10 +1314,18 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
     private void sendErrorResponse(SocketChannelContext context, FrameType responseType, String message,
             String errorCode) {
+        sendErrorResponse(context, responseType, message, errorCode, null);
+    }
+
+    private void sendErrorResponse(SocketChannelContext context, FrameType responseType, String message,
+            String errorCode, Object data) {
         JSONObject response = new JSONObject();
         response.put("success", false);
         response.put("message", message);
         response.put("errorCode", errorCode);
+        if (data != null) {
+            response.put("data", data);
+        }
         sendFrame(context, responseType, response);
         log.warn("发送错误响应: errorCode={}, message={}", errorCode, message);
     }
@@ -1205,7 +1338,17 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     public static void cleanupConnection(String remoteAddress) {
         if (remoteAddress != null) {
             parserMap.remove(remoteAddress);
-            log.debug("TextTransmissionHandler: 清理帧解析器, remoteAddress={}", remoteAddress);
+            int removedOnlineUsers = OnlineUserRegistry.cleanupConnection(remoteAddress);
+            log.debug("TextTransmissionHandler: 清理帧解析器与在线用户缓存, remoteAddress={}, removedOnlineUsers={}",
+                    remoteAddress, removedOnlineUsers);
+        }
+    }
+
+    public static void cleanupSocketChannel(SocketChannel socketChannel) {
+        int removedOnlineUsers = OnlineUserRegistry.cleanupSocketChannel(socketChannel);
+        if (removedOnlineUsers > 0) {
+            log.debug("TextTransmissionHandler: 按 SocketChannel 清理在线用户缓存, removedOnlineUsers={}",
+                    removedOnlineUsers);
         }
     }
 
@@ -1218,10 +1361,15 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             buffer.put((byte) 0);
             buffer.putInt(jsonBytes.length);
             buffer.put(jsonBytes);
-            buffer.flip();
+            com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
-            log.info("=> 成功向客户端发送内容: 远程地址: {}, 数据内容: {}, 帧类型: {}, ",
-                    context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
+            if (ChatHistoryResponseBuilder.shouldLogPayload(type)) {
+                log.info("=> 成功向客户端发送内容: 远程地址: {}, 数据内容: {}, 帧类型: {}",
+                        context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
+            } else {
+                log.info("=> 成功向客户端发送历史响应: 远程地址: {}, 字节数: {}, 帧类型: {}",
+                        context.getRemoteAddress(), jsonBytes.length, type.getDescription());
+            }
             WriteQueueHelper.submitWrite(context, buffer);
         } catch (Exception e) {
             log.error("发送帧失败: type={}, error={}", type, ExceptionUtils.getStackTrace(e));

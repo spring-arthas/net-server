@@ -2,7 +2,9 @@ package com.alibaba.server.nio.repository.chat.service.impl;
 
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageRepository;
+import com.alibaba.server.nio.repository.chat.service.ChatHistoryPage;
 import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -55,6 +57,58 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
             return Collections.emptyList();
         }
         return chatMessageRepository.getChatHistory(userId1, userId2, Math.max(0, offset), limit > 0 ? limit : 50);
+    }
+
+    @Override
+    public ChatHistoryPage getChatHistoryPage(Integer userId1, Integer userId2,
+            Long beforeMessageId, Long afterMessageId, Integer legacyOffset, int limit) {
+        if (userId1 == null || userId2 == null) {
+            return new ChatHistoryPage(Collections.emptyList(), false, null, null);
+        }
+        if (beforeMessageId != null && afterMessageId != null) {
+            throw new IllegalArgumentException("beforeMessageId 和 afterMessageId 不能同时传入");
+        }
+
+        int pageSize = limit > 0 ? Math.min(limit, 100) : 50;
+        int fetchSize = pageSize + 1;
+        List<UserFriendMessageDO> fetched;
+        boolean descending = false;
+
+        if (beforeMessageId != null) {
+            fetched = chatMessageRepository.getChatHistoryBefore(
+                    userId1, userId2, beforeMessageId, fetchSize);
+            descending = true;
+        } else if (afterMessageId != null) {
+            fetched = chatMessageRepository.getChatHistoryAfter(
+                    userId1, userId2, afterMessageId, fetchSize);
+        } else if (legacyOffset != null) {
+            fetched = chatMessageRepository.getChatHistory(
+                    userId1, userId2, Math.max(0, legacyOffset), fetchSize);
+        } else {
+            fetched = chatMessageRepository.getLatestChatHistory(userId1, userId2, fetchSize);
+            descending = true;
+        }
+
+        List<UserFriendMessageDO> safeFetched = fetched == null ? Collections.emptyList() : fetched;
+        boolean hasMore = safeFetched.size() > pageSize;
+        int pageEnd = Math.min(pageSize, safeFetched.size());
+        int pageStart = 0;
+        if (legacyOffset != null && safeFetched.size() > pageSize) {
+            // The legacy mapper returns the over-fetched rows in ascending order,
+            // so the extra row is the oldest item at the front of the list.
+            pageStart = safeFetched.size() - pageSize;
+            pageEnd = safeFetched.size();
+        }
+        List<UserFriendMessageDO> pageMessages = new ArrayList<>(
+                safeFetched.subList(pageStart, pageEnd));
+        if (descending) {
+            Collections.reverse(pageMessages);
+        }
+
+        Long nextBeforeMessageId = pageMessages.isEmpty() ? null : pageMessages.get(0).getId();
+        Long latestMessageId = pageMessages.isEmpty() ? null
+                : pageMessages.get(pageMessages.size() - 1).getId();
+        return new ChatHistoryPage(pageMessages, hasMore, nextBeforeMessageId, latestMessageId);
     }
 
     @Override

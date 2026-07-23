@@ -89,7 +89,12 @@ public class FriendshipServiceImplTest {
                     }
                     return defaultValue(method.getReturnType());
                 }),
-                userRepository((method, args) -> defaultValue(method.getReturnType())));
+                userRepository((method, args) -> {
+                    if ("countActiveById".equals(method.getName())) {
+                        return 1;
+                    }
+                    return defaultValue(method.getReturnType());
+                }));
 
         service.handleRequest(7, 10L, 1, "备注");
         Assert.assertEquals(2, upsertCount.get());
@@ -106,6 +111,94 @@ public class FriendshipServiceImplTest {
             Assert.assertFalse("mail".equals(field.getName()));
             Assert.assertFalse("phone".equals(field.getName()));
         }
+    }
+
+    @Test
+    public void sendRequestRejectsWhenSenderNoLongerExists() {
+        FriendshipServiceImpl service = service(
+                applyRepository((method, args) -> defaultValue(method.getReturnType())),
+                friendsRepository((method, args) -> defaultValue(method.getReturnType())),
+                userRepository((method, args) -> {
+                    if ("countActiveById".equals(method.getName())) {
+                        Long userId = (Long) args[0];
+                        return userId == 5L ? 0 : 1;
+                    }
+                    return defaultValue(method.getReturnType());
+                }));
+
+        try {
+            service.sendRequest(5, 7, "hi");
+            Assert.fail("发送方失效时不得继续创建好友申请");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertEquals("当前用户不存在或已停用，请重新登录", expected.getMessage());
+        }
+    }
+
+    @Test
+    public void sendRequestRejectsRecentlyRejectedSameTarget() {
+        AtomicInteger insertCount = new AtomicInteger();
+        FriendshipServiceImpl service = service(
+                applyRepository((method, args) -> {
+                    if ("countRecentRejected".equals(method.getName())) {
+                        return 1;
+                    }
+                    if ("insertSelective".equals(method.getName())) {
+                        insertCount.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                }),
+                friendsRepository((method, args) -> defaultValue(method.getReturnType())),
+                userRepository((method, args) -> {
+                    if ("countActiveById".equals(method.getName())) {
+                        return 1;
+                    }
+                    return defaultValue(method.getReturnType());
+                }));
+
+        try {
+            service.sendRequest(5, 7, "hi");
+            Assert.fail("短期内被拒绝后不得反复骚扰同一用户");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertEquals("对方已拒绝你的申请，请24小时后再试", expected.getMessage());
+        }
+        Assert.assertEquals(0, insertCount.get());
+    }
+
+    @Test
+    public void acceptRejectsWhenSenderNoLongerExists() {
+        UserFriendApplyDo apply = new UserFriendApplyDo();
+        apply.setId(10L);
+        apply.setSenderId(5);
+        apply.setReceiverId(7);
+        apply.setStatus(0);
+        AtomicInteger updateCount = new AtomicInteger();
+
+        FriendshipServiceImpl service = service(
+                applyRepository((method, args) -> {
+                    if ("findPendingForUpdate".equals(method.getName())) {
+                        return apply;
+                    }
+                    if ("updatePendingStatus".equals(method.getName())) {
+                        updateCount.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                }),
+                friendsRepository((method, args) -> defaultValue(method.getReturnType())),
+                userRepository((method, args) -> {
+                    if ("countActiveById".equals(method.getName())) {
+                        Long userId = (Long) args[0];
+                        return userId == 5L ? 0 : 1;
+                    }
+                    return defaultValue(method.getReturnType());
+                }));
+
+        try {
+            service.handleRequest(7, 10L, 1, "备注");
+            Assert.fail("申请发送方失效后不得同意申请");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertEquals("申请发送方不存在或已停用", expected.getMessage());
+        }
+        Assert.assertEquals(0, updateCount.get());
     }
 
     private FriendshipServiceImpl service(UserFriendApplyRepository applyRepository,

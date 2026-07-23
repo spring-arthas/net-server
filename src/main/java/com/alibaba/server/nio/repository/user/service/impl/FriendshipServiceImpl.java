@@ -24,6 +24,7 @@ public class FriendshipServiceImpl implements FriendshipService {
     private static final int MAX_ALIAS_LENGTH = 64;
     private static final int MAX_REQUESTS_PER_MINUTE = 10;
     private static final int MAX_REQUESTS_PER_DAY = 100;
+    private static final int REJECT_REAPPLY_COOLDOWN_MINUTES = 1440;
 
     private final UserFriendApplyRepository userFriendApplyRepository;
     private final UserFriendsRepository userFriendsRepository;
@@ -46,6 +47,9 @@ public class FriendshipServiceImpl implements FriendshipService {
         if (senderId.equals(receiverId)) {
             throw new IllegalArgumentException("不能添加自己为好友");
         }
+        if (userRepository.countActiveById(Long.valueOf(senderId)) == 0) {
+            throw new IllegalArgumentException("当前用户不存在或已停用，请重新登录");
+        }
         if (userRepository.countActiveById(Long.valueOf(receiverId)) == 0) {
             throw new IllegalArgumentException("目标用户不存在或已停用");
         }
@@ -57,6 +61,10 @@ public class FriendshipServiceImpl implements FriendshipService {
         }
         if (userFriendApplyRepository.findPending(receiverId, senderId) != null) {
             throw new IllegalArgumentException("对方已向你发送好友申请，请到“新的朋友”中处理");
+        }
+        if (userFriendApplyRepository.countRecentRejected(senderId, receiverId,
+                REJECT_REAPPLY_COOLDOWN_MINUTES) > 0) {
+            throw new IllegalArgumentException("对方已拒绝你的申请，请24小时后再试");
         }
         if (userFriendApplyRepository.countCreatedSince(senderId, 1) >= MAX_REQUESTS_PER_MINUTE) {
             throw new IllegalArgumentException("好友申请过于频繁，请稍后再试");
@@ -107,6 +115,15 @@ public class FriendshipServiceImpl implements FriendshipService {
         UserFriendApplyDo apply = userFriendApplyRepository.findPendingForUpdate(requestId, receiverId);
         if (apply == null) {
             throw new IllegalArgumentException("申请不存在、无权处理或已经处理");
+        }
+
+        if (action == ACTION_ACCEPT) {
+            if (userRepository.countActiveById(Long.valueOf(apply.getSenderId())) == 0) {
+                throw new IllegalArgumentException("申请发送方不存在或已停用");
+            }
+            if (userRepository.countActiveById(Long.valueOf(receiverId)) == 0) {
+                throw new IllegalArgumentException("当前用户不存在或已停用，请重新登录");
+            }
         }
 
         int updated = userFriendApplyRepository.updatePendingStatus(requestId, receiverId, action);

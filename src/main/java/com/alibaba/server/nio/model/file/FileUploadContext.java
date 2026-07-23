@@ -90,6 +90,12 @@ public class FileUploadContext {
 
     private String userName;
 
+    /** 当前文件完成后是否保留上传连接，仅允许聊天附件请求启用。 */
+    private boolean connectionReuse = false;
+
+    /** 聊天消息批次标识。 */
+    private String batchId;
+
     /**
      * 上传状态
      */

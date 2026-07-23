@@ -19,11 +19,13 @@ bin-release/
 
 # Java / IntelliJ / Maven
 target/
+.runtime/
 .idea/
 *.class
 *.iml
 test_upload.txt
 nohup.out
+hs_err_pid*.log
 .DS_Store
 
 # Environment variables (do not commit)

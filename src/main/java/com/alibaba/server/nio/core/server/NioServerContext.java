@@ -227,6 +227,7 @@ public class NioServerContext {
         if (!Optional.ofNullable(socketChannel).isPresent()) {
             return false;
         }
+        com.alibaba.server.nio.service.file.handler.TextTransmissionHandler.cleanupSocketChannel(socketChannel);
         if (!socketChannel.isOpen()) {
             log.info("NioServerContext: SocketChannel已关闭, 忽略本次资源释放请求");
             return true;

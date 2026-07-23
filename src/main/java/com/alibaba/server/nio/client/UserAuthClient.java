@@ -162,7 +162,7 @@ public class UserAuthClient {
         buffer.put((byte) 0); // flags
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
         while (buffer.hasRemaining()) {
             channel.write(buffer);
@@ -181,7 +181,7 @@ public class UserAuthClient {
                 throw new IOException("连接已关闭");
             }
         }
-        headerBuffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(headerBuffer);
 
         // 验证魔数
         byte magic1 = headerBuffer.get();
@@ -203,7 +203,7 @@ public class UserAuthClient {
                 throw new IOException("连接已关闭");
             }
         }
-        dataBuffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(dataBuffer);
 
         String jsonStr = new String(dataBuffer.array(), 0, dataLength, StandardCharsets.UTF_8);
         return JSON.parseObject(jsonStr);

@@ -98,6 +98,7 @@ public class UserServiceImpl implements UserService {
         userDo.setPassword(param.getPassword());
         userDo.setPhone(param.getPhone());
         userDo.setMail(param.getMail());
+        userDo.setAvatar(param.getAvatar());
         userDo.setLastLoginDate(param.getLastLoginDate());
         userDo.setRegisterDate(param.getRegisterDate());
         userDo.setGmtModified(param.getLastLoginDate() == null ? new Date() : param.getLastLoginDate());
@@ -228,6 +229,28 @@ public class UserServiceImpl implements UserService {
         this.userRepository.updateSelective(updateDo);
 
         log.info("用户修改密码成功: userId={}", userId);
+    }
+
+    @Override
+    public UserDTO updateAvatar(Long userId, String avatar) {
+        if (userId == null) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        if (avatar == null || avatar.trim().isEmpty()) {
+            throw new IllegalArgumentException("头像不能为空");
+        }
+
+        UserDo userDo = this.userRepository.get(userId);
+        if (userDo == null || String.valueOf(BasicConstant.YES).equals(userDo.getDel())) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+
+        UserUpdateParam updateParam = new UserUpdateParam();
+        updateParam.setId(userId);
+        updateParam.setAvatar(avatar.trim());
+        this.update(updateParam);
+
+        return this.doToDto(this.userRepository.get(userId));
     }
 
     @Override

@@ -409,13 +409,13 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 }
 
                 // ========== 读取文件数据 ==========
-                readBuffer.clear();
+                com.alibaba.server.nio.util.NioBufferCompat.clear(readBuffer);
                 int bytesRead = context.readChunk(readBuffer);
                 if (bytesRead == -1) {
                     break; // 文件读取完毕
                 }
                 if (bytesRead > 0) {
-                    readBuffer.flip();
+                    com.alibaba.server.nio.util.NioBufferCompat.flip(readBuffer);
                     byte[] data = new byte[readBuffer.remaining()];
                     readBuffer.get(data);
                     sendDataFrame(socketChannelContext, data);
@@ -462,7 +462,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
     }
@@ -480,7 +480,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
         log.debug("发送帧: type={}, dataLength={}", type, data.length);

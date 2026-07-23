@@ -291,8 +291,8 @@ public class FileRangePullHandler extends AbstractChannelHandler {
                 applyBackpressure(socketChannelContext, lastProgressTs);
 
                 int toRead = (int) Math.min(BUFFER_SIZE, endExclusive - (startOffset + sent));
-                readBuffer.clear();
-                readBuffer.limit(toRead);
+                com.alibaba.server.nio.util.NioBufferCompat.clear(readBuffer);
+                com.alibaba.server.nio.util.NioBufferCompat.limit(readBuffer, toRead);
 
                 int n = channel.read(readBuffer);
                 if (n < 0) {
@@ -336,7 +336,7 @@ public class FileRangePullHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
     }
 
@@ -413,7 +413,7 @@ public class FileRangePullHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        buffer.flip();
+        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
     }
 

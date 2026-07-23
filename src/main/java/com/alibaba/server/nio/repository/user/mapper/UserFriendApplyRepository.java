@@ -36,4 +36,11 @@ public interface UserFriendApplyRepository
     @Select("SELECT COUNT(1) FROM user_friend_apply WHERE sender_id = #{senderId} AND del = 'N' "
             + "AND gmt_created >= DATE_SUB(NOW(), INTERVAL #{minutes} MINUTE)")
     int countCreatedSince(@Param("senderId") Integer senderId, @Param("minutes") int minutes);
+
+    @Select("SELECT COUNT(1) FROM user_friend_apply WHERE sender_id = #{senderId} "
+            + "AND receiver_id = #{receiverId} AND status = 2 AND del = 'N' "
+            + "AND gmt_modified >= DATE_SUB(NOW(), INTERVAL #{minutes} MINUTE)")
+    int countRecentRejected(@Param("senderId") Integer senderId,
+            @Param("receiverId") Integer receiverId,
+            @Param("minutes") int minutes);
 }

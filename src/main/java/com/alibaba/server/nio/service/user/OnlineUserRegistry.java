@@ -28,6 +28,51 @@ public final class OnlineUserRegistry {
         return isUserOnline(userId, BasicServer.onlineUserChannels);
     }
 
+    /**
+     * 将用户绑定到当前文本连接。
+     *
+     * 同一条连接重新登录其他账号前，必须先移除它原有的所有用户映射，
+     * 避免多个 userId 同时指向同一个 SocketChannelContext。
+     *
+     * @return 被清理的旧用户映射数量
+     */
+    public static int bindUser(Long userId, SocketChannelContext context) {
+        if (userId == null || context == null) {
+            return 0;
+        }
+        int removed = cleanupContext(context, BasicServer.onlineUserChannels);
+        BasicServer.onlineUserChannels.put(userId, context);
+        return removed;
+    }
+
+    /**
+     * 仅当在线表中的映射仍属于当前连接时才解除绑定。
+     * 防止旧连接退出时误删同账号已经建立的新连接。
+     */
+    public static boolean unbindUser(Long userId, SocketChannelContext context) {
+        return userId != null
+                && context != null
+                && BasicServer.onlineUserChannels.remove(userId, context);
+    }
+
+    /**
+     * 获取身份与连接状态均有效的在线用户连接。
+     * 对身份不匹配或已经关闭的残留映射进行即时清理。
+     */
+    public static SocketChannelContext getActiveUserContext(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        SocketChannelContext context = BasicServer.onlineUserChannels.get(userId);
+        if (isActiveUserContext(userId, context)) {
+            return context;
+        }
+        if (context != null) {
+            BasicServer.onlineUserChannels.remove(userId, context);
+        }
+        return null;
+    }
+
     static boolean isUserOnline(Long userId, Map<Long, SocketChannelContext> channels) {
         if (userId == null || channels == null) {
             return false;
@@ -71,6 +116,20 @@ public final class OnlineUserRegistry {
                 if (channels.remove(entry.getKey(), context)) {
                     removed++;
                 }
+            }
+        }
+        return removed;
+    }
+
+    private static int cleanupContext(SocketChannelContext targetContext,
+            ConcurrentHashMap<Long, SocketChannelContext> channels) {
+        if (targetContext == null || channels == null || channels.isEmpty()) {
+            return 0;
+        }
+        int removed = 0;
+        for (Map.Entry<Long, SocketChannelContext> entry : channels.entrySet()) {
+            if (entry.getValue() == targetContext && channels.remove(entry.getKey(), targetContext)) {
+                removed++;
             }
         }
         return removed;

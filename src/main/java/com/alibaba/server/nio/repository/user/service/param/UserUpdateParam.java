@@ -25,6 +25,8 @@ public class UserUpdateParam {
 
     private String mail;
 
+    private String avatar;
+
     private Date lastLoginDate;
 
     private Date registerDate;

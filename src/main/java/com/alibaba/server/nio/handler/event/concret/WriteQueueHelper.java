@@ -68,7 +68,7 @@ public class WriteQueueHelper {
                         // 队列头的数据没写完，新数据入队尾
                         ByteBuffer copy = ByteBuffer.allocate(buffer.remaining());
                         copy.put(buffer);
-                        copy.flip();
+                        com.alibaba.server.nio.util.NioBufferCompat.flip(copy);
                         queue.offer(copy);
                         registerWriteInterest(socketChannelContext);
                         log.debug("队列数据未完全写入，重新注册写事件，新数据入队，队列大小: {}", queue.size());
@@ -86,7 +86,7 @@ public class WriteQueueHelper {
                 if (buffer.hasRemaining()) {
                     ByteBuffer copy = ByteBuffer.allocate(buffer.remaining());
                     copy.put(buffer);
-                    copy.flip();
+                    com.alibaba.server.nio.util.NioBufferCompat.flip(copy);
                     queue.offer(copy);
                     registerWriteInterest(socketChannelContext);
                     log.debug("数据未完全写入，剩余 {} 字节加入队列", copy.remaining());
@@ -105,11 +105,23 @@ public class WriteQueueHelper {
     private static void registerWriteInterest(SocketChannelContext socketChannelContext) {
         try {
             SocketChannel socketChannel = socketChannelContext.getSocketChannel();
-            Selector selector = NioServerContext.getSelector(BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR);
+            String selectorName = "TEXT".equals(socketChannelContext.getHandlerType())
+                    ? BasicConstant.NIO_SERVER_MAIN_CORE_TEXT_SELECTOR
+                    : BasicConstant.NIO_SERVER_MAIN_CORE_FILE_SELECTOR;
+            Selector selector = NioServerContext.getSelector(selectorName);
+            if (selector == null) {
+                log.error("注册 OP_WRITE 失败，Selector不存在: handlerType={}, selectorName={}",
+                        socketChannelContext.getHandlerType(), selectorName);
+                return;
+            }
             SelectionKey key = socketChannel.keyFor(selector);
             if (key != null && key.isValid()) {
                 key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                 selector.wakeup();
+            } else {
+                log.error("注册 OP_WRITE 失败，通道未注册到目标Selector: handlerType={}, selectorName={}, remoteAddress={}",
+                        socketChannelContext.getHandlerType(), selectorName,
+                        socketChannelContext.getRemoteAddress());
             }
         } catch (Exception e) {
             log.error("注册 OP_WRITE 失败", e);

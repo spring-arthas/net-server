@@ -124,7 +124,7 @@ public class FileServiceImpl implements FileService {
             fileCreateParam.setIsExist(YesOrNoEnum.Y.name());
             fileCreateParam.setHasChild(YesOrNoEnum.N.name());
             FileDo fileDo = this.createParamToDo(fileCreateParam);
-            this.fileRepository.insertSelective(fileDo);
+            insertSelectiveKeepingAssignedId(fileDo);
             return this.doToDto(fileDo);
         }
     }
@@ -195,7 +195,7 @@ public class FileServiceImpl implements FileService {
         fileCreateParam.setIsExist(YesOrNoEnum.Y.name());
         fileCreateParam.setHasChild(YesOrNoEnum.N.name());
         FileDo fileDo = this.createParamToDo(fileCreateParam);
-        this.fileRepository.insertSelective(fileDo);
+        insertSelectiveKeepingAssignedId(fileDo);
 
         // 更新父节点的hasChild状态为true
         fileDo = new FileDo();
@@ -311,6 +311,20 @@ public class FileServiceImpl implements FileService {
         fileDo.setGmtModified(date);
         fileDo.setDelTime(null);
         return fileDo;
+    }
+
+    /**
+     * file 表使用业务侧雪花 ID，但通用 insertSelective 会执行 LAST_INSERT_ID()
+     * 并回填实体。显式 ID 插入时该值可能是连接上一次自增操作的残留值，
+     * 因此插入完成后必须恢复真正写入数据库的雪花 ID。
+     */
+    private void insertSelectiveKeepingAssignedId(FileDo fileDo) {
+        Long assignedId = fileDo == null ? null : fileDo.getId();
+        if (assignedId == null || assignedId <= 0L) {
+            throw new IllegalArgumentException("文件记录缺少有效的预分配ID");
+        }
+        this.fileRepository.insertSelective(fileDo);
+        fileDo.setId(assignedId);
     }
 
     private FileDo updateParamToDo(FileUpdateParam param) {
@@ -498,8 +512,12 @@ public class FileServiceImpl implements FileService {
         fileDo.setGmtCreated(new Date());
         fileDo.setGmtModified(fileDo.getGmtCreated());
         fileDo.setId(SnowflakeIdWorkerUtil.generateId());
-        this.fileRepository.insertSelective(fileDo);
-        return fileDo;
+        insertSelectiveKeepingAssignedId(fileDo);
+        FileDo persisted = this.fileRepository.get(fileDo.getId());
+        if (persisted == null) {
+            throw new IllegalStateException("文件记录写入后无法回读: fileId=" + fileDo.getId());
+        }
+        return persisted;
     }
 
     /**
@@ -592,7 +610,7 @@ public class FileServiceImpl implements FileService {
         createParam.setUserName(userDTO.getUserName());
         createParam.setUserId(Integer.valueOf(String.valueOf(userDTO.getId())));
         FileDo fileDo = this.createParamToDo(createParam);
-        this.fileRepository.insertSelective(fileDo);
+        insertSelectiveKeepingAssignedId(fileDo);
 
         // 6. 更新父目录的hasChild状态（根目录除外）
         if (!isRootDirectory) {
@@ -970,6 +988,9 @@ public class FileServiceImpl implements FileService {
         if (Objects.isNull(fileQueryParam.getUserId())) {
             throw new IllegalArgumentException("用户ID不能为空");
         }
+        if (Objects.isNull(fileQueryParam.getParentId()) || fileQueryParam.getParentId() <= 0) {
+            throw new IllegalArgumentException("目录ID不能为空");
+        }
         // 默认分页参数
         if (fileQueryParam.getCurrentPage() < 1) {
             fileQueryParam.setCurrentPage(1);
@@ -1224,7 +1245,7 @@ public class FileServiceImpl implements FileService {
                 createParam.setUserId(userId);
                 createParam.setUserName(normalizedUserName);
                 FileDo created = createParamToDo(createParam);
-                fileRepository.insertSelective(created);
+                insertSelectiveKeepingAssignedId(created);
 
                 FileDo rootUpdate = new FileDo();
                 rootUpdate.setId(rootDirectory.getId());

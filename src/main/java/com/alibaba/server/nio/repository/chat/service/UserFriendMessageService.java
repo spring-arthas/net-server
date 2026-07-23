@@ -30,6 +30,9 @@ public interface UserFriendMessageService {
      */
     List<UserFriendMessageDO> getChatHistory(Integer userId1, Integer userId2, int offset, int limit);
 
+    ChatHistoryPage getChatHistoryPage(Integer userId1, Integer userId2,
+            Long beforeMessageId, Long afterMessageId, Integer legacyOffset, int limit);
+
     /**
      * 获取指定发送者发给指定接收者的未读消息数量
      *
