@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-hud:setup)",
+      "Bash(sort -t. -k1,1n -k2,2n -k3,3n -k4,4n)",
+      "Bash(sudo chown:*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/hljy/IdeaProjects/code/net-server/**)",
+      "Bash(done)",
+      "Bash(gh pr:*)",
+      "Bash(claude mcp:*)",
+      "Bash(pip show:*)",
+      "Bash(pip3 show:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -c \"import mcp_mysql_server; print\\(''ok''\\)\")",
+      "Bash(mysql:*)",
+      "Bash(/Library/Frameworks/Python.framework/Versions/3.13/bin/mcp-mysql-server --version 2>&1)",
+      "Skill(update-config)",
+      "Bash(dig:*)",
+      "Bash(curl:*)",
+      "Bash(mvn clean:*)",
+      "Bash(mvn compile:*)",
+      "Bash(chmod -R u+w /Users/hljy/IdeaProjects/code/net-server/target/)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(grep -l 'To be filled by the team' /Users/hljy/IdeaProjects/code/net-server/.trellis/spec/backend/*.md)",
+      "Bash(grep -l 'To be filled by the team' /Users/hljy/IdeaProjects/code/net-server/.trellis/spec/frontend/*.md)",
+      "Bash(python3:*)",
+      "Bash(xargs cat:*)",
+      "Bash(git -C /Users/hljy/IdeaProjects/code/net-server log --oneline -10)"
+    ]
+  }
+}
