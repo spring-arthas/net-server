@@ -14,6 +14,8 @@ import com.alibaba.server.nio.model.file.DirectoryFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame;
 import com.alibaba.server.nio.model.file.FileUploadFrame.FrameType;
 import com.alibaba.server.nio.model.user.UserAuthFrame;
+import com.alibaba.server.nio.service.file.security.SessionTokenFactory;
+import com.alibaba.server.nio.service.file.security.SessionTokenService;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.user.OnlineUserRegistry;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
@@ -148,6 +150,12 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     break;
                 case USER_LOGOUT_REQ: // 用户退出登录请求
                     handleLogout(frame, context);
+                    break;
+                case USER_SESSION_RESUME_REQ:
+                    handleSessionResume(frame, context);
+                    break;
+                case CONNECTION_HEARTBEAT_REQ:
+                    handleHeartbeat(frame, context);
                     break;
                 case USER_FRIEND_LIST_REQ: // 用户好友列表
                     handleFriendList(frame, context);
@@ -575,7 +583,21 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 .generateToken(userDTO.getId(), userDTO.getUserName());
         data.put("token", transferToken);
         data.put("transferToken", transferToken);
+        String sessionToken = SessionTokenFactory.getInstance()
+                .generateToken(userDTO.getId(), userDTO.getUserName(), userDTO.getPassword());
+        data.put("sessionToken", sessionToken);
         return data;
+    }
+
+    private void bindAuthenticatedUser(UserDTO userDTO, SocketChannelContext context) {
+        context.setUserDTO(userDTO);
+        context.putAttribute("loggedInUserId", userDTO.getId());
+        context.putAttribute("loggedInUserName", userDTO.getUserName());
+        int removedBindings = OnlineUserRegistry.bindUser(userDTO.getId(), context);
+        if (removedBindings > 0) {
+            log.warn("认证连接存在旧用户映射，已清理: userId={}, remoteAddress={}, removedBindings={}",
+                    userDTO.getId(), context.getRemoteAddress(), removedBindings);
+        }
     }
 
     // ========== 用户认证处理 ==========
@@ -664,18 +686,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             if (Objects.isNull(userDTO) || StringUtils.equals("del", userDTO.getDel())) {
                 throw new IllegalArgumentException("不存在");
             }
-            // 登录成功后保存用户信息到连接上下文, 即将当前用户信息与服务端对应的SocketChannel进行绑定
-            context.setUserDTO(userDTO);
-            context.putAttribute("loggedInUserId", userDTO.getId());
-            context.putAttribute("loggedInUserName", userDTO.getUserName());
-
-            // 将登录成功的用户加入在线列表缓存。同一连接重新登录其他账号时，
-            // 先清理该连接残留的旧 userId 映射，避免消息投递串号。
-            int removedBindings = OnlineUserRegistry.bindUser(userDTO.getId(), context);
-            if (removedBindings > 0) {
-                log.warn("登录连接存在旧用户映射，已清理: userId={}, remoteAddress={}, removedBindings={}",
-                        userDTO.getId(), context.getRemoteAddress(), removedBindings);
-            }
+            bindAuthenticatedUser(userDTO, context);
 
             // 3、为当前用户创建网盘目录
             try {
@@ -684,15 +695,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 log.error("NioServerContext: 目录初始化失败，但服务将继续启动, error = {}",
                         org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
             }
-            JSONObject data = new JSONObject();
-            data.put("userId", Integer.valueOf(String.valueOf(userDTO.getId())));
-            String transferToken = TransferTokenFactory.getInstance()
-                    .generateToken(userDTO.getId(), userDTO.getUserName());
-            data.put("token", transferToken);
-            data.put("transferToken", transferToken);
-            data.put("userName", userDTO.getUserName());
-            data.put("phone", userDTO.getPhone());
-            data.put("mail", userDTO.getMail());
+            JSONObject data = buildUserResponseData(userDTO);
             data.put("avatar", getAvatarBase64(userDTO.getAvatar()));
             sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录成功", data);
             log.info("用户登录成功: userName={}, remoteAddress={}", userName, context.getRemoteAddress());
@@ -704,6 +707,68 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("用户登录系统异常", e);
             sendErrorResponse(context, FrameType.USER_RESPONSE, "登录失败，请稍后重试", UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    private void handleSessionResume(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String sessionToken = request.getString("sessionToken");
+            final UserDTO[] resumedUser = new UserDTO[1];
+            SessionTokenService.ValidationResult validation = SessionTokenFactory.getInstance()
+                    .validateToken(sessionToken, userId -> {
+                        UserDTO user = getUserService().getById(userId);
+                        if (user == null || StringUtils.equals("del", user.getDel())) {
+                            return null;
+                        }
+                        resumedUser[0] = user;
+                        return user.getPassword();
+                    });
+            if (!validation.isValid() || resumedUser[0] == null) {
+                String errorCode = validation.getMessage() != null && validation.getMessage().contains("expired")
+                        ? UserAuthFrame.ErrorCode.SESSION_EXPIRED
+                        : UserAuthFrame.ErrorCode.SESSION_INVALID;
+                sendErrorResponse(context, FrameType.USER_RESPONSE, "登录状态已失效，请重新登录", errorCode);
+                return;
+            }
+
+            UserDTO userDTO = resumedUser[0];
+            bindAuthenticatedUser(userDTO, context);
+            JSONObject data = buildUserResponseData(userDTO);
+            data.put("avatar", getAvatarBase64(userDTO.getAvatar()));
+            sendSuccessResponse(context, FrameType.USER_RESPONSE, "登录状态恢复成功", data);
+            log.info("用户会话恢复成功: userId={}, remoteAddress={}", userDTO.getId(), context.getRemoteAddress());
+        } catch (Exception e) {
+            log.warn("用户会话恢复失败: remoteAddress={}, error={}", context.getRemoteAddress(), e.getMessage());
+            sendErrorResponse(context, FrameType.USER_RESPONSE, "登录状态恢复失败，请重新登录",
+                    UserAuthFrame.ErrorCode.SESSION_INVALID);
+        }
+    }
+
+    private void handleHeartbeat(FileUploadFrame frame, SocketChannelContext context) {
+        JSONObject request = null;
+        try {
+            request = JSON.parseObject(frame.getDataAsString());
+            String nonce = request.getString("nonce");
+            if (org.apache.commons.lang.StringUtils.isBlank(nonce)) {
+                throw new IllegalArgumentException("心跳标识不能为空");
+            }
+            requireLoggedInUserId(context);
+            JSONObject data = new JSONObject();
+            data.put("nonce", nonce);
+            data.put("serverTime", System.currentTimeMillis());
+            sendSuccessResponse(context, FrameType.CONNECTION_HEARTBEAT_RESPONSE, "ok", data);
+        } catch (IllegalArgumentException e) {
+            JSONObject data = new JSONObject();
+            if (request != null) {
+                data.put("nonce", request.getString("nonce"));
+            }
+            sendErrorResponse(context, FrameType.CONNECTION_HEARTBEAT_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.NOT_LOGGED_IN, data);
+        } catch (Exception e) {
+            log.warn("控制连接心跳处理失败: remoteAddress={}, error={}", context.getRemoteAddress(), e.getMessage());
+            sendErrorResponse(context, FrameType.CONNECTION_HEARTBEAT_RESPONSE, "心跳处理失败",
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
         }
     }
 

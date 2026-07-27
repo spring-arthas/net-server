@@ -76,5 +76,9 @@ public class UserAuthFrame {
         public static final String DB_ERROR = "DB_ERROR";
         /** 请求无效 */
         public static final String INVALID_REQUEST = "INVALID_REQUEST";
+        /** 会话凭证无效 */
+        public static final String SESSION_INVALID = "SESSION_INVALID";
+        /** 会话凭证已过期 */
+        public static final String SESSION_EXPIRED = "SESSION_EXPIRED";
     }
 }

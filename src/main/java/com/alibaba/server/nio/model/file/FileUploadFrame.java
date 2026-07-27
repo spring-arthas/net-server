@@ -178,6 +178,12 @@ public class FileUploadFrame {
          * 当前用户头像更新请求
          */
         USER_AVATAR_UPDATE_REQ(0x45, "当前用户头像更新请求"),
+        /** 使用持久会话凭证恢复文本连接身份 */
+        USER_SESSION_RESUME_REQ(0x46, "用户会话恢复请求"),
+        /** 控制连接心跳请求 */
+        CONNECTION_HEARTBEAT_REQ(0x47, "控制连接心跳请求"),
+        /** 控制连接心跳响应 */
+        CONNECTION_HEARTBEAT_RESPONSE(0x48, "控制连接心跳响应"),
 
         // ========== 聊天消息帧 (0x50-0x5F) ==========
         /**
