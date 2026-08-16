@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -76,8 +77,16 @@ public final class TlsGatewayConfig {
     public static TlsGatewayConfig load(
             Map<String, Object> values,
             Function<String, String> environment) {
+        return load(values, environment, System::getProperty);
+    }
+
+    static TlsGatewayConfig load(
+            Map<String, Object> values,
+            Function<String, String> environment,
+            Function<String, String> systemProperty) {
         Objects.requireNonNull(values, "values");
         Objects.requireNonNull(environment, "environment");
+        Objects.requireNonNull(systemProperty, "systemProperty");
         boolean enabled = booleanValue(values, BasicConstant.TLS_GATEWAY_ENABLED, true);
         if (!enabled) {
             return disabled();
@@ -88,11 +97,11 @@ public final class TlsGatewayConfig {
                 environment,
                 "NET_SERVER_PUBLIC_IP",
                 BasicConstant.TLS_GATEWAY_PUBLIC_IP));
-        Path keyStorePath = keyStorePath(requiredEnvironmentOrConfig(
+        Path keyStorePath = keyStorePath(keyStoreValue(
                 values,
                 environment,
-                "NET_SERVER_TLS_KEYSTORE",
-                BasicConstant.TLS_GATEWAY_KEYSTORE_PATH));
+                systemProperty),
+                systemProperty.apply("user.home"));
         String passwordValue = environment.apply("NET_SERVER_TLS_KEYSTORE_PASSWORD");
         char[] keyStorePassword = passwordValue == null ? new char[0] : passwordValue.toCharArray();
 
@@ -190,6 +199,49 @@ public final class TlsGatewayConfig {
         return configValue;
     }
 
+    private static String keyStoreValue(
+            Map<String, Object> values,
+            Function<String, String> environment,
+            Function<String, String> systemProperty) {
+        String environmentValue = environment.apply("NET_SERVER_TLS_KEYSTORE");
+        if (StringUtils.isNotBlank(environmentValue)) {
+            return environmentValue.trim();
+        }
+
+        String operatingSystemKey = keyStoreConfigKey(systemProperty.apply("os.name"));
+        String configValue = stringValue(values, operatingSystemKey, null);
+        if (StringUtils.isBlank(configValue)
+                && !BasicConstant.TLS_GATEWAY_KEYSTORE_PATH.equals(operatingSystemKey)) {
+            configValue = stringValue(values, BasicConstant.TLS_GATEWAY_KEYSTORE_PATH, null);
+        }
+        if (StringUtils.isBlank(configValue)) {
+            throw new TlsGatewayConfigurationException(
+                    "缺少环境变量 NET_SERVER_TLS_KEYSTORE，且配置 "
+                            + operatingSystemKey
+                            + " 和 "
+                            + BasicConstant.TLS_GATEWAY_KEYSTORE_PATH
+                            + " 均为空");
+        }
+        return configValue;
+    }
+
+    private static String keyStoreConfigKey(String osName) {
+        if (StringUtils.isBlank(osName)) {
+            return BasicConstant.TLS_GATEWAY_KEYSTORE_PATH;
+        }
+        String normalized = osName.toLowerCase(Locale.ROOT);
+        if (normalized.contains("mac") || normalized.contains("darwin")) {
+            return BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_MACOS;
+        }
+        if (normalized.contains("win")) {
+            return BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_WINDOWS;
+        }
+        if (normalized.contains("linux") || normalized.contains("nux")) {
+            return BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_LINUX;
+        }
+        return BasicConstant.TLS_GATEWAY_KEYSTORE_PATH;
+    }
+
     private static InetAddress publicBindAddress(String value) {
         try {
             InetAddress address = InetAddress.getByName(value);
@@ -205,9 +257,9 @@ public final class TlsGatewayConfig {
         }
     }
 
-    private static Path keyStorePath(String value) {
+    private static Path keyStorePath(String value, String userHome) {
         try {
-            Path path = Paths.get(value).toAbsolutePath().normalize();
+            Path path = Paths.get(expandUserHome(value, userHome)).toAbsolutePath().normalize();
             if (!Files.isRegularFile(path)) {
                 throw new TlsGatewayConfigurationException(
                         "NET_SERVER_TLS_KEYSTORE 文件不存在: " + path);
@@ -218,6 +270,31 @@ public final class TlsGatewayConfig {
                     "NET_SERVER_TLS_KEYSTORE 路径无效",
                     exception);
         }
+    }
+
+    private static String expandUserHome(String value, String userHome) {
+        String resolved = value.trim();
+        boolean requiresUserHome = resolved.contains("${user.home}")
+                || resolved.contains("%USERPROFILE%")
+                || "~".equals(resolved)
+                || resolved.startsWith("~/")
+                || resolved.startsWith("~\\");
+        if (!requiresUserHome) {
+            return resolved;
+        }
+        if (StringUtils.isBlank(userHome)) {
+            throw new TlsGatewayConfigurationException(
+                    "无法展开 NET_SERVER_TLS_KEYSTORE 路径：user.home 为空");
+        }
+        resolved = resolved.replace("${user.home}", userHome);
+        resolved = resolved.replace("%USERPROFILE%", userHome);
+        if ("~".equals(resolved)) {
+            return userHome;
+        }
+        if (resolved.startsWith("~/") || resolved.startsWith("~\\")) {
+            return Paths.get(userHome, resolved.substring(2)).toString();
+        }
+        return resolved;
     }
 
     private static void requireLoopback(Map<String, Object> values, String key) {
