@@ -5,6 +5,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -68,6 +69,80 @@ public class TlsGatewayConfigTest {
 
         assertEquals("172.21.32.64", config.getBindAddress().getHostAddress());
         assertEquals(keyStore.toAbsolutePath().normalize(), config.getKeyStorePath());
+    }
+
+    @Test
+    public void loadsWindowsKeyStoreForDirectJarStartup() throws Exception {
+        Path userHome = temporaryFolder.newFolder("windows-home").toPath();
+        Path keyStore = createUserHomeKeyStore(userHome, "tls");
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, "172.21.32.64");
+        values.put(
+                BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_WINDOWS,
+                "${user.home}/.net-server/tls/net-server.p12");
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                name -> null,
+                systemProperties("Windows 11", userHome));
+
+        assertEquals(keyStore.toAbsolutePath().normalize(), config.getKeyStorePath());
+    }
+
+    @Test
+    public void loadsMacOsKeyStoreForDirectJarStartup() throws Exception {
+        Path userHome = temporaryFolder.newFolder("macos-home").toPath();
+        Path keyStore = createUserHomeKeyStore(userHome, "tls-macos");
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, "172.21.32.64");
+        values.put(
+                BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_MACOS,
+                "${user.home}/.net-server/tls-macos/net-server.p12");
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                name -> null,
+                systemProperties("Mac OS X", userHome));
+
+        assertEquals(keyStore.toAbsolutePath().normalize(), config.getKeyStorePath());
+    }
+
+    @Test
+    public void loadsLinuxKeyStoreForDirectJarStartup() throws Exception {
+        Path userHome = temporaryFolder.newFolder("linux-home").toPath();
+        Path keyStore = createUserHomeKeyStore(userHome, "tls-linux");
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, "172.21.32.64");
+        values.put(
+                BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_LINUX,
+                "~/.net-server/tls-linux/net-server.p12");
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                name -> null,
+                systemProperties("Linux", userHome));
+
+        assertEquals(keyStore.toAbsolutePath().normalize(), config.getKeyStorePath());
+    }
+
+    @Test
+    public void environmentKeyStoreOverridesOperatingSystemConfiguration() throws Exception {
+        Path userHome = temporaryFolder.newFolder("override-home").toPath();
+        createUserHomeKeyStore(userHome, "tls");
+        Path environmentKeyStore = temporaryFolder.newFile("environment.p12").toPath();
+        Map<String, Object> values = configValues();
+        values.put(
+                BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_WINDOWS,
+                "${user.home}/.net-server/tls/net-server.p12");
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                environment("172.21.32.64", environmentKeyStore, ""),
+                systemProperties("Windows 11", userHome));
+
+        assertEquals(
+                environmentKeyStore.toAbsolutePath().normalize(),
+                config.getKeyStorePath());
     }
 
     @Test
@@ -191,6 +266,24 @@ public class TlsGatewayConfigTest {
             }
             return null;
         };
+    }
+
+    private Function<String, String> systemProperties(String osName, Path userHome) {
+        return name -> {
+            if ("os.name".equals(name)) {
+                return osName;
+            }
+            if ("user.home".equals(name)) {
+                return userHome.toString();
+            }
+            return null;
+        };
+    }
+
+    private Path createUserHomeKeyStore(Path userHome, String tlsDirectory) throws Exception {
+        Path directory = Files.createDirectories(
+                userHome.resolve(".net-server").resolve(tlsDirectory));
+        return Files.createFile(directory.resolve("net-server.p12"));
     }
 
     private void assertEndpoint(TlsGatewayConfig config, String name, int port) {
