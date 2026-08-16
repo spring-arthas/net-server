@@ -34,7 +34,7 @@ openssl req -new -newkey rsa:3072 -nodes -sha256 \
     -config "$openssl_config" \
     -keyout "$server_key" -out "$server_request"
 
-openssl x509 -req -sha256 -days 825 \
+openssl x509 -req -sha256 -days 397 \
     -in "$server_request" \
     -CA "$ca_certificate" -CAkey "$ca_key" -CAcreateserial \
     -extfile "$openssl_config" -extensions server_extensions \

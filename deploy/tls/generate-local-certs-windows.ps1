@@ -124,7 +124,7 @@ Invoke-OpenSsl -Arguments @(
 )
 
 Invoke-OpenSsl -Arguments @(
-    'x509', '-req', '-sha256', '-days', '825',
+    'x509', '-req', '-sha256', '-days', '397',
     '-in', $serverRequest,
     '-CA', $caCertificate, '-CAkey', $caKey, '-CAcreateserial',
     '-extfile', $opensslConfig, '-extensions', 'server_extensions',

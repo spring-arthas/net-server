@@ -48,6 +48,28 @@ if ($null -eq $javaExecutable) {
     $javaExecutable = $javaCommand.Source
 }
 
+# Windows locks an executable JAR while the JVM is running. Running the file
+# directly from target prevents IDEA or Maven from cleaning and rebuilding it.
+# Stage a private runtime copy outside the project so target remains writable.
+$runtimeDirectory = [System.IO.Path]::GetFullPath(
+    (Join-Path $env:USERPROFILE '.net-server\runtime'))
+if (-not (Test-Path -LiteralPath $runtimeDirectory -PathType Container)) {
+    [void](New-Item -ItemType Directory -Path $runtimeDirectory -Force)
+}
+$runtimeJarName = '{0}-{1}-{2}.jar' -f `
+    [System.IO.Path]::GetFileNameWithoutExtension($resolvedJarPath), `
+    $PID, `
+    [Guid]::NewGuid().ToString('N')
+$runtimeJarPath = [System.IO.Path]::GetFullPath(
+    (Join-Path $runtimeDirectory $runtimeJarName))
+$runtimePrefix = $runtimeDirectory.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+if (-not $runtimeJarPath.StartsWith(
+        $runtimePrefix,
+        [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Resolved runtime JAR path is outside the runtime directory.'
+}
+Copy-Item -LiteralPath $resolvedJarPath -Destination $runtimeJarPath
+
 if (-not [string]::IsNullOrWhiteSpace($publicIp)) {
     $env:NET_SERVER_PUBLIC_IP = $publicIp
 }
@@ -61,6 +83,7 @@ if ($null -eq [Environment]::GetEnvironmentVariable('NET_SERVER_TLS_KEYSTORE_PAS
 }
 
 Write-Output "Java: $javaExecutable"
+Write-Output "Runtime JAR: $runtimeJarPath"
 if ([string]::IsNullOrWhiteSpace($keyStore)) {
     Write-Output 'TLS keystore: auto (resolved by Java from user.home)'
 } else {
@@ -72,5 +95,13 @@ if ([string]::IsNullOrWhiteSpace($publicIp)) {
     Write-Output "TLS bind address: $publicIp"
 }
 
-& $javaExecutable -jar $resolvedJarPath
-exit $LASTEXITCODE
+$javaExitCode = 1
+try {
+    & $javaExecutable -jar $runtimeJarPath
+    $javaExitCode = $LASTEXITCODE
+} finally {
+    if (Test-Path -LiteralPath $runtimeJarPath -PathType Leaf) {
+        Remove-Item -LiteralPath $runtimeJarPath -Force
+    }
+}
+exit $javaExitCode

@@ -1,5 +1,8 @@
 # net-server 内置 TLS 部署
 
+当前本地/局域网默认配置已关闭 TLS，服务直接监听明文 TCP。以下内容仅适用于将
+`TLS.GATEWAY.ENABLED` 显式改为 `true` 的部署。
+
 `net-server` 自己监听公网 TLS 端口并转发到同一 JVM 内的回环后端，不再启动 HAProxy。
 
 默认启动不需要预先设置 TLS 环境变量。Java 会在每次启动时：

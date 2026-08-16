@@ -18,18 +18,20 @@ import static org.junit.Assert.assertTrue;
 public class TlsDeploymentConfigurationTest {
 
     @Test
-    public void plaintextBackendsAreLoopbackOnlyAndEmbeddedGatewayIsEnabled() throws Exception {
+    public void lanDefaultsUsePlainTcpWithoutEmbeddedGateway() throws Exception {
         Properties properties = new Properties();
         try (InputStream input = getClass().getResourceAsStream("/server.properties")) {
             assertNotNull(input);
             properties.load(input);
         }
 
-        assertProperty(properties, "NIO.BIND.IP", "127.0.0.1");
-        assertProperty(properties, "NIO.MEDIA.STREAM.BIND.IP", "127.0.0.1");
+        assertProperty(properties, "NIO.BIND.IP", "0.0.0.0");
+        assertProperty(properties, "NIO.MEDIA.STREAM.BIND.IP", "0.0.0.0");
         assertProperty(properties, "MEDIA.STREAM.PUBLIC.HOST", "auto");
-        assertProperty(properties, "MEDIA.STREAM.PUBLIC.SCHEME", "https");
-        assertProperty(properties, "TLS.GATEWAY.ENABLED", "true");
+        assertProperty(properties, "MEDIA.STREAM.PUBLIC.SCHEME", "http");
+        assertProperty(properties, "TLS.GATEWAY.ENABLED", "false");
+        assertProperty(properties, "NIO.FILE.BASE.PATH.WINDOWS", "E:\\storage\\upload\\file");
+        assertProperty(properties, "NIO.FILE.BASE.PATH.LINUX.MAC", "/Users/hljy/Documents/storages/");
         assertProperty(properties, "TLS.GATEWAY.PUBLIC.IP", "auto");
         assertProperty(properties, "TLS.GATEWAY.KEYSTORE.AUTO.CREATE", "true");
         assertProperty(
@@ -59,6 +61,24 @@ public class TlsDeploymentConfigurationTest {
         assertFalse(source.contains("NET_SERVER_TLS_KEYSTORE is missing"));
         assertFalse(source.contains("TLS PKCS12 does not exist"));
         assertTrue(source.contains("resolved by Java"));
+        assertTrue(source.contains(".net-server\\runtime"));
+        assertTrue(source.contains("Copy-Item -LiteralPath $resolvedJarPath"));
+        assertFalse(source.contains("& $javaExecutable -jar $resolvedJarPath"));
+    }
+
+    @Test
+    public void manualCertificateScriptsUseAppleCompatibleServerLifetime() throws IOException {
+        String windowsSource = new String(
+                Files.readAllBytes(Paths.get("deploy/tls/generate-local-certs-windows.ps1")),
+                StandardCharsets.UTF_8);
+        String unixSource = new String(
+                Files.readAllBytes(Paths.get("deploy/tls/generate-local-certs.sh")),
+                StandardCharsets.UTF_8);
+
+        assertTrue(windowsSource.contains("'x509', '-req', '-sha256', '-days', '397'"));
+        assertTrue(unixSource.contains("openssl x509 -req -sha256 -days 397"));
+        assertFalse(windowsSource.contains("'-days', '825'"));
+        assertFalse(unixSource.contains("-days 825"));
     }
 
     @Test
