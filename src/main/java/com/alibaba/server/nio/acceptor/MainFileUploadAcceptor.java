@@ -43,13 +43,10 @@ public class MainFileUploadAcceptor extends AbstractAcceptor implements Runnable
             }
 
             while (true) {
-                // 循环处理所有待处理的连接，避免多客户端同时连接时丢失
-                SocketChannel socketChannel;
-                int acceptedCount = 0;
-                while ((socketChannel = serverSocketChannel.accept()) != null) {
-                    this.registerFileSocketChannel(socketChannel);
-                    acceptedCount++;
-                }
+                // [修改] 单个客户端初始化失败由 AbstractAcceptor 隔离，
+                // Acceptor 线程继续接收后续连接。
+                int acceptedCount = super.acceptPendingConnections(
+                        serverSocketChannel, this::registerFileSocketChannel, "文件上传");
 
                 if (acceptedCount > 0) {
                     log.debug("本次唤醒共接受 {} 个客户端上传连接", acceptedCount);

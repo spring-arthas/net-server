@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.model.file;
 
+import com.alibaba.server.nio.service.file.security.UploadPathResolver;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -196,15 +197,16 @@ public class FileUploadContext {
      * 否则使用默认格式：/data/file-storage/yyyy/MM/dd/{taskId}_{fileName}
      */
     public String buildFilePath() {
+        Path directory;
         if (basePath != null && !basePath.isEmpty()) {
-            // 使用自定义目录路径
-            this.filePath = basePath + "/" + requestTaskId + "_" + fileName;
+            directory = Paths.get(basePath);
         } else {
-            // 使用默认路径
             LocalDateTime now = LocalDateTime.now();
             String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            this.filePath = FILE_STORAGE_ROOT + datePath + "/" + requestTaskId + "_" + fileName;
+            directory = Paths.get(FILE_STORAGE_ROOT, datePath);
         }
+        // [修改] 所有上传路径统一规范化并限制在认证目录的直接子级。
+        this.filePath = UploadPathResolver.resolve(directory, requestTaskId, fileName).toString();
         return this.filePath;
     }
 
@@ -213,12 +215,18 @@ public class FileUploadContext {
      * 支持断点续传：根据 isResume 标志选择打开模式
      */
     public FileChannel openFileChannel() throws IOException {
-        if (filePath == null) {
-            buildFilePath();
+        if (basePath != null && !basePath.isEmpty()) {
+            Path validatedPath = UploadPathResolver.resolve(Paths.get(basePath), requestTaskId, fileName);
+            if (filePath != null && !validatedPath.equals(Paths.get(filePath).toAbsolutePath().normalize())) {
+                throw new IOException("上传文件路径与认证目录不一致");
+            }
+            filePath = validatedPath.toString();
+        } else if (filePath == null) {
+            filePath = buildFilePath();
         }
 
         // 确保目录存在
-        Path path = Paths.get(filePath);
+        Path path = Paths.get(filePath).toAbsolutePath().normalize();
         Path parentDir = path.getParent();
         if (parentDir != null && !java.nio.file.Files.exists(parentDir)) {
             java.nio.file.Files.createDirectories(parentDir);

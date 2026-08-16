@@ -41,12 +41,10 @@ public class TextTransmissionAcceptor extends AbstractAcceptor implements Runnab
             }
 
             while (true) {
-                SocketChannel socketChannel;
-                int acceptedCount = 0;
-                while ((socketChannel = serverSocketChannel.accept()) != null) {
-                    this.registerTextSocketChannel(socketChannel);
-                    acceptedCount++;
-                }
+                // [修改] 单个客户端初始化失败由 AbstractAcceptor 隔离，
+                // Acceptor 线程继续接收后续连接。
+                int acceptedCount = super.acceptPendingConnections(
+                        serverSocketChannel, this::registerTextSocketChannel, "文本传输");
                 if (acceptedCount > 0) {
                     log.debug("本次唤醒共接受 {} 个客户端下载连接", acceptedCount);
                 }

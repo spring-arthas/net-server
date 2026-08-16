@@ -64,7 +64,26 @@ final class ChatHistoryResponseBuilder {
         item.put("gmtCreated", messageTime);
         item.put("groupTime", groupTime);
         item.put("msgTimeStr", timeFormat.format(messageDate));
+        item.put("reaction", message.getReaction());
+        item.put("retracted", message.getRetracted() != null && message.getRetracted().intValue() == 1);
         return item;
+    }
+
+    static List<JSONObject> buildSearchItems(List<UserFriendMessageDO> messages) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        long todayStart = calendar.getTimeInMillis();
+        calendar.add(Calendar.DATE, -1);
+        long yesterdayStart = calendar.getTimeInMillis();
+
+        List<JSONObject> resultList = new ArrayList<>();
+        for (UserFriendMessageDO message : messages) {
+            resultList.add(buildItem(message, todayStart, yesterdayStart));
+        }
+        return resultList;
     }
 
     static boolean shouldLogPayload(FrameType type) {

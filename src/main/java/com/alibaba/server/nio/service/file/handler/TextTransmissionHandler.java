@@ -1,6 +1,8 @@
 package com.alibaba.server.nio.service.file.handler;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONException;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.BasicServer;
@@ -20,6 +22,7 @@ import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.user.OnlineUserRegistry;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
 import com.alibaba.server.nio.repository.chat.service.ChatHistoryPage;
+import com.alibaba.server.nio.repository.chat.service.ChatMessageSearchPage;
 import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
 import com.alibaba.server.nio.repository.file.service.FileService;
 import com.alibaba.server.nio.repository.file.service.exception.DirectoryContainsFileException;
@@ -28,6 +31,7 @@ import com.alibaba.server.nio.repository.file.service.dto.FilePageDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.FriendshipService;
+import com.alibaba.server.nio.repository.user.service.dto.FriendPinUpdateResult;
 import com.alibaba.server.nio.repository.user.service.dto.FriendRequestHandleResult;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO;
@@ -44,6 +48,11 @@ import com.alibaba.server.nio.repository.user.service.param.UserFriendApplyCreat
 import com.alibaba.server.nio.repository.user.service.param.UserFriendApplyQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserFriendApplyUpdateParam;
 import com.alibaba.server.nio.repository.dynamic.service.UserDynamicService;
+import com.alibaba.server.nio.repository.dynamic.service.dto.DynamicActionResult;
+import com.alibaba.server.nio.repository.dynamic.service.dto.DynamicCreateResult;
+import com.alibaba.server.nio.repository.dynamic.service.dto.DynamicDetailResult;
+import com.alibaba.server.nio.repository.dynamic.service.dto.DynamicTimelinePage;
+import com.alibaba.server.nio.repository.dynamic.service.param.UserDynamicCreateParam;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -133,8 +142,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
      */
     private void processFrame(FileUploadFrame frame, SocketChannelContext context) {
         FrameType type = frame.getType();
-        log.debug("收到帧: type={}，帧类型={}, 操作={}, 数据内容={}",
-                type, type.getCode(), type.getDescription(), JSON.toJSONString(frame.getDataAsString()));
+        log.debug("收到帧: type={}，帧类型={}, 操作={}, 字节数={}",
+                type, type.getCode(), type.getDescription(), frame.getDataLength());
 
         try {
             switch (type) {
@@ -219,10 +228,31 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case USER_FRIEND_UPDATE_ALIAS_REQ: // 0x57
                     handleUserFriendUpdateAlias(frame, context);
                     break;
+                case USER_FRIEND_PIN_UPDATE_REQ: // 0x5C
+                    handleFriendPinUpdate(frame, context);
+                    break;
+                case CHAT_MSG_ACTION_REQ: // 0x59
+                    handleChatMessageAction(frame, context);
+                    break;
+                case CHAT_MSG_SEARCH_REQ: // 0x5E
+                    handleChatMessageSearch(frame, context);
+                    break;
 
                 // ========== 动态帧 ==========
                 case DYNAMIC_CREATE_REQ: // 0x60
                     handleDynamicCreate(frame, context);
+                    break;
+                case DYNAMIC_TIMELINE_REQ: // 0x62
+                    handleDynamicTimeline(frame, context);
+                    break;
+                case DYNAMIC_ACTION_REQ: // 0x64
+                    handleDynamicAction(frame, context);
+                    break;
+                case DYNAMIC_DETAIL_REQ: // 0x66
+                    handleDynamicDetail(frame, context);
+                    break;
+                case DYNAMIC_DELETE_REQ: // 0x68
+                    handleDynamicDelete(frame, context);
                     break;
                 default:
                     log.debug("未处理的帧类型: {}", type);
@@ -307,14 +337,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             String senderAvatar = senderInfo != null ? getAvatarBase64(senderInfo.getAvatar()) : "";
 
             // 2. 构建推送给接收方的消息报文
-            JSONObject pushData = new JSONObject();
-            pushData.put("messageId", savedMsg.getId());
-            pushData.put("senderId", senderId);
-            pushData.put("content", content);
-            pushData.put("msgType", savedMsg.getMsgType());
-            pushData.put("avatar", senderAvatar); // 消息附带发送人头像
-            pushData.put("gmtCreated",
-                    savedMsg.getGmtCreated() != null ? savedMsg.getGmtCreated().getTime() : System.currentTimeMillis());
+            JSONObject pushData = ChatMessagePushBuilder.build(savedMsg, senderId, content, senderAvatar, request);
 
             // 3. 实时推送给接收方 (如果在线)。必须同时验证在线映射绑定的登录用户，
             // 防止同一连接切换账号后，旧 userId 映射把消息回推给发送方。
@@ -413,6 +436,227 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             sendErrorResponse(context, FrameType.USER_FRIEND_UPDATE_ALIAS_RESPONSE, "更新好友别名失败",
                     JSON.toJSONString(responseData));
         }
+    }
+
+    private void handleFriendPinUpdate(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.USER_FRIEND_PIN_UPDATE_RESPONSE,
+                        "未登录, 无法更新聊天置顶", UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Long relationshipId = request.getLong("relationshipId");
+            Boolean pinned = request.getBoolean("pinned");
+            if (relationshipId == null || relationshipId <= 0 || pinned == null) {
+                throw new IllegalArgumentException("好友关系ID和置顶状态不能为空");
+            }
+
+            FriendPinUpdateResult result = getFriendshipService()
+                    .updatePinned(userId.intValue(), relationshipId, pinned);
+            JSONObject responseData = new JSONObject();
+            responseData.put("relationshipId", result.getRelationshipId());
+            responseData.put("pinned", result.isPinned());
+            responseData.put("pinnedAt",
+                    result.getPinnedAt() == null ? null : result.getPinnedAt().getTime());
+            sendSuccessResponse(context, FrameType.USER_FRIEND_PIN_UPDATE_RESPONSE,
+                    result.isPinned() ? "聊天已置顶" : "已取消置顶", responseData);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.USER_FRIEND_PIN_UPDATE_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
+        } catch (Exception e) {
+            log.error("更新好友置顶状态失败", e);
+            sendErrorResponse(context, FrameType.USER_FRIEND_PIN_UPDATE_RESPONSE, "更新好友置顶状态失败",
+                    "FRIEND_PIN_UPDATE_FAILED");
+        }
+    }
+
+    private void handleChatMessageAction(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "未登录, 无法操作消息",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String action = request.getString("action");
+            Long messageId = request.getLong("messageId");
+            Integer friendId = request.getInteger("friendId");
+            String reaction = request.getString("reaction");
+
+            if (org.apache.commons.lang.StringUtils.isBlank(action) || messageId == null || messageId <= 0) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "操作类型和消息ID不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            UserFriendMessageDO message = getChatMessageService().getMessageById(messageId);
+            if (message == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "消息不存在",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+            boolean participant = message.getSenderId().longValue() == userId.longValue()
+                    || message.getReceiverId().longValue() == userId.longValue();
+            if (!participant) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "无权操作该消息",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            String normalizedAction = org.apache.commons.lang.StringUtils.defaultString(action)
+                    .trim().toUpperCase(Locale.ROOT);
+            String notifyText;
+            if (normalizedAction.contains("REACTION")) {
+                if (org.apache.commons.lang.StringUtils.isBlank(reaction)) {
+                    sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "表情回应不能为空",
+                            UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                    return;
+                }
+                String mergedReaction = mergeReaction(message.getReaction(), reaction, userId.longValue());
+                getChatMessageService().updateMessageReaction(messageId, mergedReaction);
+                notifyText = "表情回应已更新";
+            } else if (normalizedAction.contains("RETRACT") || normalizedAction.contains("RECALL")) {
+                getChatMessageService().retractMessage(messageId);
+                notifyText = "消息已撤回";
+            } else {
+                sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "不支持的操作类型",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            // 构造推送: 通知双方客户端刷新消息状态
+            JSONObject pushData = new JSONObject();
+            pushData.put("action", normalizedAction);
+            pushData.put("messageId", messageId);
+            pushData.put("friendId", friendId != null ? friendId
+                    : (message.getSenderId().longValue() == userId.longValue()
+                            ? message.getReceiverId().longValue() : message.getSenderId().longValue()));
+            pushData.put("notifyText", notifyText);
+            UserFriendMessageDO updated = getChatMessageService().getMessageById(messageId);
+            pushData.put("reaction", updated != null ? updated.getReaction() : null);
+            pushData.put("retracted", updated != null ? updated.getRetracted() : null);
+
+            SocketChannelContext senderContext = OnlineUserRegistry.getActiveUserContext(userId);
+            if (senderContext != null && senderContext != context) {
+                sendFrame(senderContext, FrameType.CHAT_MSG_ACTION_PUSH, pushData);
+            }
+            Long peerId = message.getSenderId().longValue() == userId.longValue()
+                    ? message.getReceiverId().longValue() : message.getSenderId().longValue();
+            SocketChannelContext peerContext = OnlineUserRegistry.getActiveUserContext(peerId);
+            if (peerContext != null && peerContext != context) {
+                sendFrame(peerContext, FrameType.CHAT_MSG_ACTION_PUSH, pushData);
+            }
+
+            JSONObject responseData = new JSONObject();
+            responseData.put("action", normalizedAction);
+            responseData.put("messageId", messageId);
+            responseData.put("friendId", pushData.getLong("friendId"));
+            responseData.put("notifyText", notifyText);
+            responseData.put("reaction", pushData.get("reaction"));
+            responseData.put("retracted", pushData.get("retracted"));
+            sendSuccessResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, notifyText, responseData);
+
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
+        } catch (Exception e) {
+            log.warn("处理聊天消息操作异常，消息帧数据 = {}, error = {}", JSON.toJSONString(frame),
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
+            sendErrorResponse(context, FrameType.CHAT_MSG_ACTION_RESPONSE, "消息操作失败",
+                    "CHAT_MESSAGE_ACTION_FAILED");
+        }
+    }
+
+    private void handleChatMessageSearch(FileUploadFrame frame, SocketChannelContext context) {
+        long startedAt = System.currentTimeMillis();
+        Long userId = null;
+        Integer friendId = null;
+        int payloadLength = frame == null || frame.getData() == null ? 0 : frame.getData().length;
+        try {
+            userId = (Long) context.getAttribute("loggedInUserId");
+            if (userId == null) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_SEARCH_RESPONSE, "未登录, 无法搜索消息",
+                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            String keyword = request.getString("keyword");
+            friendId = request.getInteger("friendId");
+            Integer limit = request.getInteger("limit");
+            if (limit == null || limit <= 0) {
+                limit = 50;
+            }
+            if (org.apache.commons.lang.StringUtils.isBlank(keyword)) {
+                sendErrorResponse(context, FrameType.CHAT_MSG_SEARCH_RESPONSE, "搜索关键词不能为空",
+                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
+                return;
+            }
+
+            ChatMessageSearchPage searchPage = getChatMessageService()
+                    .searchMessagesPage(userId.intValue(), friendId, keyword, limit);
+            List<UserFriendMessageDO> matches = searchPage.getMessages();
+            JSONObject responseData = new JSONObject();
+            responseData.put("list", ChatHistoryResponseBuilder.buildSearchItems(matches));
+            responseData.put("hasMore", searchPage.isHasMore());
+            log.info("聊天消息搜索完成: userId={}, friendId={}, keywordLength={}, rows={}, elapsedMs={}",
+                    userId, friendId, keyword.trim().length(), matches.size(),
+                    System.currentTimeMillis() - startedAt);
+            sendSuccessResponse(context, FrameType.CHAT_MSG_SEARCH_RESPONSE, "搜索成功", responseData);
+
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.CHAT_MSG_SEARCH_RESPONSE, e.getMessage(),
+                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
+        } catch (Exception e) {
+            // [修改] 搜索载荷可能包含私聊内容，异常日志只记录定位所需元数据，不序列化完整帧。
+            log.warn("处理聊天消息搜索异常, userId={}, friendId={}, payloadLength={}",
+                    userId, friendId, payloadLength, e);
+            sendErrorResponse(context, FrameType.CHAT_MSG_SEARCH_RESPONSE, "消息搜索失败",
+                    "CHAT_MESSAGE_SEARCH_FAILED");
+        }
+    }
+
+    /**
+     * 合并表情回应: 已存在的emoji追加用户, 不存在的emoji新建, 相同用户重复回应则移除(取消回应)
+     */
+    private String mergeReaction(String currentReaction, String emoji, Long userId) {
+        JSONObject merged = new JSONObject();
+        if (org.apache.commons.lang.StringUtils.isNotBlank(currentReaction)) {
+            try {
+                JSONObject parsed = JSON.parseObject(currentReaction);
+                if (parsed != null) {
+                    merged = parsed;
+                }
+            } catch (Exception ignored) {
+                // 忽略历史脏数据
+            }
+        }
+        JSONArray users = merged.getJSONArray(emoji);
+        if (users == null) {
+            JSONArray newList = new JSONArray();
+            newList.add(userId);
+            merged.put(emoji, newList);
+        } else {
+            boolean removed = false;
+            for (int i = users.size() - 1; i >= 0; i--) {
+                if (users.getLong(i) != null && users.getLong(i).longValue() == userId.longValue()) {
+                    users.remove(i);
+                    removed = true;
+                }
+            }
+            if (removed) {
+                if (users.isEmpty()) {
+                    merged.remove(emoji);
+                }
+            } else {
+                users.add(userId);
+            }
+        }
+        return merged.toJSONString();
     }
 
     private void handleChatMessageRead(FileUploadFrame frame, SocketChannelContext context) {
@@ -874,13 +1118,6 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                         continue;
                     }
 
-                    // 如果没有备注，使用昵称或用户名
-                    if (org.apache.commons.lang.StringUtils.isBlank(friend.getAlias())) {
-                        friend.setAlias(org.apache.commons.lang.StringUtils.isNotBlank(friendInfo.getNickName())
-                                ? friendInfo.getNickName()
-                                : friendInfo.getUserName());
-                    }
-
                     JSONObject item = new JSONObject();
                     item.put("id", friend.getId());
                     item.put("userId", friend.getUserId());
@@ -889,6 +1126,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     item.put("userName", friendInfo.getUserName());
                     item.put("nickName", friendInfo.getNickName());
                     item.put("avatar", getAvatarBase64(friendInfo.getAvatar()));
+                    item.put("pinned", Boolean.TRUE.equals(friend.getPinned()));
+                    item.put("pinnedAt",
+                            friend.getPinnedAt() == null ? null : friend.getPinnedAt().getTime());
                     boolean online = OnlineUserRegistry.isUserOnline(friend.getFriendId());
                     item.put("online", online);
                     item.put("onlineStatus", online ? "ONLINE" : "OFFLINE");
@@ -917,6 +1157,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     resultList.add(item);
                 }
             }
+
+            resultList.sort(FriendListItemComparator.INSTANCE);
 
             sendSuccessResponse(context, FrameType.USER_FRIEND_LIST_RESPONSE, "获取好友列表成功", resultList);
         } catch (IllegalArgumentException e) {
@@ -1429,8 +1671,8 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
 
             if (ChatHistoryResponseBuilder.shouldLogPayload(type)) {
-                log.info("=> 成功向客户端发送内容: 远程地址: {}, 数据内容: {}, 帧类型: {}",
-                        context.getRemoteAddress(), JSON.toJSONString(data), type.getDescription());
+                log.info("=> 成功向客户端发送内容: 远程地址: {}, 字节数: {}, 帧类型: {}",
+                        context.getRemoteAddress(), jsonBytes.length, type.getDescription());
             } else {
                 log.info("=> 成功向客户端发送历史响应: 远程地址: {}, 字节数: {}, 帧类型: {}",
                         context.getRemoteAddress(), jsonBytes.length, type.getDescription());
@@ -1445,64 +1687,150 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         return BasicServer.classPathXmlApplicationContext.getBean(UserDynamicService.class);
     }
 
-    /**
-     * 处理新建动态请求
-     * 请求 JSON: { "content": "...", "imagePaths": "id1,id2,..." }
-     */
+    /** 处理新建动态请求。 */
     private void handleDynamicCreate(FileUploadFrame frame, SocketChannelContext context) {
         try {
-            Long userId = (Long) context.getAttribute("loggedInUserId");
-            if (userId == null) {
-                sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "未登录，无法发布动态",
-                        UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
-                return;
-            }
-
-            JSONObject request = JSON.parseObject(frame.getDataAsString());
-            String content = request.getString("content");
-            String imagePaths = request.getString("imagePaths");
-
-            log.info("handleDynamicCreate, userId={}, contentLen={}, imagePaths={}",
-                    userId, content == null ? 0 : content.length(), imagePaths);
-
-            // 校验文字内容
-            if (org.apache.commons.lang.StringUtils.isBlank(content)) {
-                sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "动态内容不能为空",
-                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
-                return;
-            }
-            if (content.length() > 500) {
-                sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "动态内容不能超过500个字符",
-                        UserAuthFrame.ErrorCode.INVALID_REQUEST);
-                return;
-            }
-
-            // 校验图片数量
-            if (org.apache.commons.lang.StringUtils.isNotBlank(imagePaths)) {
-                String[] images = imagePaths.split(",");
-                if (images.length > 9) {
-                    sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "图片不能超过9张",
-                            UserAuthFrame.ErrorCode.INVALID_REQUEST);
-                    return;
-                }
-            }
-
-            // 当前已在 WorkerThreadPool 线程中执行，直接同步调用 Service
-            Long dynamicId = getUserDynamicService().createDynamic(userId, content, imagePaths);
-            JSONObject responseData = new JSONObject();
-            responseData.put("dynamicId", dynamicId);
-            sendSuccessResponse(context, FrameType.DYNAMIC_RESPONSE, "发布动态成功", responseData);
-            log.info("handleDynamicCreate success, userId={}, dynamicId={}", userId, dynamicId);
-
+            Long userId = requireDynamicUser(context, FrameType.DYNAMIC_CREATE_RESPONSE);
+            if (userId == null) return;
+            UserDynamicCreateParam request = JSON.parseObject(frame.getDataAsString(), UserDynamicCreateParam.class);
+            DynamicCreateResult result = getUserDynamicService().create(userId, request);
+            sendSuccessResponse(context, FrameType.DYNAMIC_CREATE_RESPONSE, "发布动态成功", result);
+            log.info("发布动态请求完成, userId={}, dynamicId={}", userId, result.getDynamicId());
+        } catch (JSONException e) {
+            sendDynamicInvalidJson(context, FrameType.DYNAMIC_CREATE_RESPONSE);
+        } catch (SecurityException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_CREATE_RESPONSE, e);
         } catch (IllegalArgumentException e) {
-            log.warn("handleDynamicCreate 参数非法, userId={}, error={}",
-                    context.getAttribute("loggedInUserId"), e.getMessage());
-            sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, e.getMessage(),
-                    UserAuthFrame.ErrorCode.INVALID_REQUEST);
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_CREATE_RESPONSE, e);
         } catch (Exception e) {
-            log.error("handleDynamicCreate 系统异常, 帧数据={}, error={}", JSON.toJSONString(frame),
-                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
-            sendErrorResponse(context, FrameType.DYNAMIC_RESPONSE, "发布动态失败，请稍后重试", "DB_ERROR");
+            log.error("发布动态系统异常, userId={}", context.getAttribute("loggedInUserId"), e);
+            sendErrorResponse(context, FrameType.DYNAMIC_CREATE_RESPONSE, "发布动态失败，请稍后重试",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
         }
+    }
+
+    /** 处理时间线游标分页。 */
+    private void handleDynamicTimeline(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = requireDynamicUser(context, FrameType.DYNAMIC_TIMELINE_RESPONSE);
+            if (userId == null) return;
+            JSONObject request = parseDynamicRequest(frame);
+            DynamicTimelinePage result = getUserDynamicService().timeline(userId,
+                    request.getString("scope"), request.getLong("beforeId"), request.getIntValue("limit"));
+            sendSuccessResponse(context, FrameType.DYNAMIC_TIMELINE_RESPONSE, "获取动态成功", result);
+            log.info("动态时间线请求完成, userId={}, scope={}, recordCount={}, hasMore={}",
+                    userId, request.getString("scope"), result.getPosts().size(), result.isHasMore());
+        } catch (JSONException e) {
+            sendDynamicInvalidJson(context, FrameType.DYNAMIC_TIMELINE_RESPONSE);
+        } catch (SecurityException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_TIMELINE_RESPONSE, e);
+        } catch (IllegalArgumentException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_TIMELINE_RESPONSE, e);
+        } catch (Exception e) {
+            log.error("动态时间线系统异常, userId={}", context.getAttribute("loggedInUserId"), e);
+            sendErrorResponse(context, FrameType.DYNAMIC_TIMELINE_RESPONSE, "获取动态失败，请稍后重试",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    /** 处理点赞、取消点赞、回复、转发和取消转发。 */
+    private void handleDynamicAction(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = requireDynamicUser(context, FrameType.DYNAMIC_ACTION_RESPONSE);
+            if (userId == null) return;
+            JSONObject request = parseDynamicRequest(frame);
+            DynamicActionResult result = getUserDynamicService().action(userId,
+                    request.getLong("dynamicId"), request.getString("action"), request.getString("content"));
+            sendSuccessResponse(context, FrameType.DYNAMIC_ACTION_RESPONSE, "动态操作成功", result);
+            log.info("动态互动请求完成, userId={}, dynamicId={}, action={}",
+                    userId, result.getDynamicId(), result.getAction());
+        } catch (JSONException e) {
+            sendDynamicInvalidJson(context, FrameType.DYNAMIC_ACTION_RESPONSE);
+        } catch (SecurityException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_ACTION_RESPONSE, e);
+        } catch (IllegalArgumentException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_ACTION_RESPONSE, e);
+        } catch (Exception e) {
+            log.error("动态互动系统异常, userId={}", context.getAttribute("loggedInUserId"), e);
+            sendErrorResponse(context, FrameType.DYNAMIC_ACTION_RESPONSE, "动态操作失败，请稍后重试",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    /** 处理动态详情及回复分页。 */
+    private void handleDynamicDetail(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = requireDynamicUser(context, FrameType.DYNAMIC_DETAIL_RESPONSE);
+            if (userId == null) return;
+            JSONObject request = parseDynamicRequest(frame);
+            DynamicDetailResult result = getUserDynamicService().detail(userId,
+                    request.getLong("dynamicId"), request.getLong("beforeReplyId"), request.getIntValue("limit"));
+            sendSuccessResponse(context, FrameType.DYNAMIC_DETAIL_RESPONSE, "获取动态详情成功", result);
+            log.info("动态详情请求完成, userId={}, dynamicId={}, replyCount={}, hasMore={}",
+                    userId, request.getLong("dynamicId"), result.getReplies().size(), result.isHasMore());
+        } catch (JSONException e) {
+            sendDynamicInvalidJson(context, FrameType.DYNAMIC_DETAIL_RESPONSE);
+        } catch (SecurityException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_DETAIL_RESPONSE, e);
+        } catch (IllegalArgumentException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_DETAIL_RESPONSE, e);
+        } catch (Exception e) {
+            log.error("动态详情系统异常, userId={}", context.getAttribute("loggedInUserId"), e);
+            sendErrorResponse(context, FrameType.DYNAMIC_DETAIL_RESPONSE, "获取动态详情失败，请稍后重试",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    /** 处理仅限本人动态的逻辑删除。 */
+    private void handleDynamicDelete(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            Long userId = requireDynamicUser(context, FrameType.DYNAMIC_DELETE_RESPONSE);
+            if (userId == null) return;
+            JSONObject request = parseDynamicRequest(frame);
+            Long dynamicId = request.getLong("dynamicId");
+            getUserDynamicService().delete(userId, dynamicId);
+            sendSuccessResponse(context, FrameType.DYNAMIC_DELETE_RESPONSE, "删除动态成功", null);
+            log.info("动态删除请求完成, userId={}, dynamicId={}", userId, dynamicId);
+        } catch (JSONException e) {
+            sendDynamicInvalidJson(context, FrameType.DYNAMIC_DELETE_RESPONSE);
+        } catch (SecurityException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_DELETE_RESPONSE, e);
+        } catch (IllegalArgumentException e) {
+            sendDynamicBusinessError(context, FrameType.DYNAMIC_DELETE_RESPONSE, e);
+        } catch (Exception e) {
+            log.error("动态删除系统异常, userId={}", context.getAttribute("loggedInUserId"), e);
+            sendErrorResponse(context, FrameType.DYNAMIC_DELETE_RESPONSE, "删除动态失败，请稍后重试",
+                    UserAuthFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    private Long requireDynamicUser(SocketChannelContext context, FrameType responseType) {
+        Long userId = (Long) context.getAttribute("loggedInUserId");
+        if (userId == null) {
+            sendErrorResponse(context, responseType, "请先登录", UserAuthFrame.ErrorCode.NOT_LOGGED_IN);
+        }
+        return userId;
+    }
+
+    private JSONObject parseDynamicRequest(FileUploadFrame frame) {
+        String payload = frame.getDataAsString();
+        if (org.apache.commons.lang.StringUtils.isBlank(payload)) {
+            throw new IllegalArgumentException("动态请求不能为空");
+        }
+        return JSON.parseObject(payload);
+    }
+
+    private void sendDynamicBusinessError(SocketChannelContext context, FrameType responseType,
+            RuntimeException error) {
+        String errorCode = error instanceof SecurityException ? "FORBIDDEN"
+                : UserAuthFrame.ErrorCode.INVALID_REQUEST;
+        log.warn("动态请求被拒绝, userId={}, errorCode={}, message={}",
+                context.getAttribute("loggedInUserId"), errorCode, error.getMessage());
+        sendErrorResponse(context, responseType, error.getMessage(), errorCode);
+    }
+
+    private void sendDynamicInvalidJson(SocketChannelContext context, FrameType responseType) {
+        log.warn("动态请求JSON格式无效, userId={}", context.getAttribute("loggedInUserId"));
+        sendErrorResponse(context, responseType, "动态请求格式无效", UserAuthFrame.ErrorCode.INVALID_REQUEST);
     }
 }

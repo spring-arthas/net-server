@@ -185,7 +185,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             Long fileId = request.getLong("fileId");
             // 客户端生成的任务ID，用于标识本次下载会话
             String taskId = request.getString("taskId");
-            log.info("【接收到客户端文件传输请求】入参 = {}", jsonData);
+            // [修改] 原始请求包含 transferToken，日志只保留任务和文件标识。
+            log.info("接收到客户端文件下载请求: taskId={}, fileId={}", taskId, fileId);
             if (org.apache.commons.lang.StringUtils.isBlank(taskId)) {
                 sendErrorFrame(socketChannelContext, "taskId不能为空");
                 return;
@@ -269,7 +270,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 log.warn("ACK帧缺少taskId");
                 return;
             }
-            log.info("【接收到客户端文件传输请求确认】入参 = {}", jsonData);
+            // [修改] ACK 只记录任务状态，不打印完整协议载荷。
+            log.info("接收到客户端文件下载确认: taskId={}, status={}", taskId, status);
             // 2. 从缓存获取任务上下文
             FileDownloadContext context = contextMap.get(taskId);
             if (Objects.isNull(context)) {

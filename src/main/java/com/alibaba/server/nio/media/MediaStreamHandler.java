@@ -5,6 +5,7 @@ import com.alibaba.server.nio.media.MediaAccessService.MediaAccessException;
 import com.alibaba.server.nio.media.MediaAccessService.ResolvedMediaFile;
 import com.alibaba.server.nio.media.model.ByteRange;
 import com.alibaba.server.nio.media.model.MediaPlayUrl;
+import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -23,19 +24,30 @@ import java.util.Map;
 public class MediaStreamHandler implements HttpHandler {
     private final MediaAccessService accessService;
     private final MediaTokenService tokenService;
+    private final TransferTokenService transferTokenService;
     private final MediaPlaybackSessionRegistry sessionRegistry;
     private final int bufferSize;
 
+    public MediaStreamHandler(MediaAccessService accessService,
+                              MediaTokenService tokenService,
+                              TransferTokenService transferTokenService,
+                              int bufferSize) {
+        this(accessService, tokenService, transferTokenService, new MediaPlaybackSessionRegistry(), bufferSize);
+    }
+
+    /** 兼容旧测试和旧内部调用，播放地址入口仍使用媒体令牌身份。 */
     public MediaStreamHandler(MediaAccessService accessService, MediaTokenService tokenService, int bufferSize) {
-        this(accessService, tokenService, new MediaPlaybackSessionRegistry(), bufferSize);
+        this(accessService, tokenService, null, new MediaPlaybackSessionRegistry(), bufferSize);
     }
 
     MediaStreamHandler(MediaAccessService accessService,
                        MediaTokenService tokenService,
+                       TransferTokenService transferTokenService,
                        MediaPlaybackSessionRegistry sessionRegistry,
                        int bufferSize) {
         this.accessService = accessService;
         this.tokenService = tokenService;
+        this.transferTokenService = transferTokenService;
         this.sessionRegistry = sessionRegistry;
         this.bufferSize = bufferSize <= 0 ? 256 * 1024 : bufferSize;
     }
@@ -80,9 +92,11 @@ public class MediaStreamHandler implements HttpHandler {
         try {
             Long fileId = parseFileId(exchange.getRequestURI().getPath(), "/media/play-url/");
             Map<String, String> params = queryParams(exchange);
-            String userName = params.get("userName");
+            // [修改] 用户身份只取自签名传输令牌，query 中的 userName 不再参与鉴权。
+            TransferTokenService.ValidationResult identity = requireTransferIdentity(exchange);
+            String userName = identity.getUserName();
             String sessionId = params.get("sessionId");
-            MediaPlayUrl playUrl = accessService.createPlayUrl(fileId, userName, sessionId);
+            MediaPlayUrl playUrl = accessService.createPlayUrl(fileId, identity.getUserId(), userName, sessionId);
             if (StringUtils.isNotBlank(sessionId) && !sessionRegistry.register(sessionId, fileId, userName)) {
                 sendJson(exchange, 400, "sessionId格式错误", null);
                 return;
@@ -114,7 +128,8 @@ public class MediaStreamHandler implements HttpHandler {
         try {
             Long fileId = parseFileId(exchange.getRequestURI().getPath(), "/media/seek/");
             Map<String, String> params = queryParams(exchange);
-            String userName = params.get("userName");
+            // [修改] 跳转通知和播放地址使用同一令牌身份，避免伪造会话用户名。
+            String userName = requireTransferIdentity(exchange).getUserName();
             String sessionId = params.get("sessionId");
             if (!sessionRegistry.markSeek(sessionId, fileId, userName)) {
                 sendJson(exchange, 409, "播放会话不存在或已过期", null);
@@ -148,7 +163,8 @@ public class MediaStreamHandler implements HttpHandler {
             if (StringUtils.isNotBlank(sessionId)) {
                 sessionRegistry.touch(sessionId, fileId, validation.getUserName());
             }
-            ResolvedMediaFile mediaFile = accessService.resolveForStreaming(fileId, validation.getUserName());
+            ResolvedMediaFile mediaFile = accessService.resolveForStreaming(
+                    fileId, validation.getUserId(), validation.getUserName());
             long totalSize = mediaFile.getFile().length();
             String rangeHeader = exchange.getRequestHeaders().getFirst("Range");
             ByteRange range = RangeHeaderParser.parse(rangeHeader, totalSize);
@@ -287,5 +303,22 @@ public class MediaStreamHandler implements HttpHandler {
 
     private String decode(String value) throws IOException {
         return URLDecoder.decode(value, "UTF-8");
+    }
+
+    private TransferTokenService.ValidationResult requireTransferIdentity(HttpExchange exchange)
+            throws MediaAccessException {
+        if (transferTokenService == null) {
+            throw new MediaAccessException(401, "登录凭据缺失");
+        }
+        String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+        if (StringUtils.isBlank(authorization) || !authorization.startsWith("Bearer ")) {
+            throw new MediaAccessException(401, "登录凭据缺失");
+        }
+        String token = authorization.substring("Bearer ".length()).trim();
+        TransferTokenService.ValidationResult validation = transferTokenService.validateToken(token);
+        if (!validation.isValid()) {
+            throw new MediaAccessException(401, "登录凭据无效或已过期");
+        }
+        return validation;
     }
 }

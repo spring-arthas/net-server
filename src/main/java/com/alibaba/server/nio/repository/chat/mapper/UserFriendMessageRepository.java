@@ -52,4 +52,26 @@ public interface UserFriendMessageRepository
                         + "AND content REGEXP CONCAT('\\\"(fileId|previewFileId|thumbnailFileId)\\\"[[:space:]]*:[[:space:]]*', "
                         + "#{fileId}, '([^0-9]|$)')")
         int countAttachmentReferencesForUser(@Param("userId") Long userId, @Param("fileId") Long fileId);
+
+        @Select("SELECT * FROM user_friend_message WHERE del = 'N' AND (sender_id = #{userId} OR receiver_id = #{userId}) "
+                        + "AND content LIKE CONCAT('%', #{keyword}, '%') ORDER BY gmt_created DESC LIMIT #{limit}")
+        List<UserFriendMessageDO> searchMessages(@Param("userId") Integer userId, @Param("keyword") String keyword,
+                        @Param("limit") int limit);
+
+        @Select("SELECT * FROM user_friend_message WHERE del = 'N' "
+                        + "AND ((sender_id = #{userId} AND receiver_id = #{friendId}) "
+                        + "OR (sender_id = #{friendId} AND receiver_id = #{userId})) "
+                        + "AND content LIKE CONCAT('%', #{keyword}, '%') ORDER BY gmt_created DESC LIMIT #{limit}")
+        List<UserFriendMessageDO> searchMessagesInConversation(@Param("userId") Integer userId,
+                        @Param("friendId") Integer friendId, @Param("keyword") String keyword,
+                        @Param("limit") int limit);
+
+        @Select("SELECT * FROM user_friend_message WHERE del = 'N' AND id = #{messageId}")
+        UserFriendMessageDO getMessageById(@Param("messageId") Long messageId);
+
+        @Update("UPDATE user_friend_message SET reaction = #{reaction} WHERE id = #{messageId} AND del = 'N'")
+        int updateMessageReaction(@Param("messageId") Long messageId, @Param("reaction") String reaction);
+
+        @Update("UPDATE user_friend_message SET retracted = 1 WHERE id = #{messageId} AND del = 'N'")
+        int updateMessageRetracted(@Param("messageId") Long messageId);
 }

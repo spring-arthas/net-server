@@ -45,11 +45,12 @@ public class FrameDownloadParser {
      */
     private static final int HEADER_LENGTH = FileDownloadFrame.HEADER_LENGTH;
 
+    private static final int MAX_FRAME_DATA_SIZE = 10 * 1024 * 1024;
+
     /**
-     * 缓冲区最大大小限制（10MB）
-     * 防止限速期间数据积压导致内存泄漏
+     * [修改] 缓冲区必须容纳完整帧头和最大数据体，协议上限与内存上限保持一致。
      */
-    private static final int MAX_BUFFER_SIZE = 10 * 1024 * 1024;
+    private static final int MAX_BUFFER_SIZE = HEADER_LENGTH + MAX_FRAME_DATA_SIZE;
 
     /**
      * 当前解析状态
@@ -193,7 +194,7 @@ public class FrameDownloadParser {
         int dataLength = ByteBuffer.wrap(buf, headerStart + 2, 4).getInt();
 
         // 验证数据长度合理性
-        if (dataLength < 0 || dataLength > 100 * 1024 * 1024) { // 最大100MB
+        if (dataLength < 0 || dataLength > MAX_FRAME_DATA_SIZE) {
             log.warn("无效的数据长度: {}", dataLength);
             position += 2;
             state = ParseState.WAIT_MAGIC;

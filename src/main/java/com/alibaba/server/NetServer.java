@@ -28,8 +28,13 @@ public class NetServer {
     public static void main( String[] args ) {
         log.info("[" + LocalTime.formatDate(LocalDateTime.now()) + "] App | --> 当前操作系统类型: " + OSinfo.getOSname() + ", 可支持的最大线程数: " + Runtime.getRuntime().availableProcessors());
 
-        // 1、启动Nio服务
-        NioServerContext.startupServerContext();
+        try {
+            // 1、启动Nio服务
+            NioServerContext.startupServerContext();
+        } catch (IllegalStateException exception) {
+            // [修改] TLS 证书、端口或后端启动失败时，单进程部署必须返回非零退出码。
+            System.exit(1);
+        }
 
         // 2、启动Netty服务
         //GlobalNettyServer.startServerBootstrap();

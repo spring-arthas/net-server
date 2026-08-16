@@ -10,6 +10,16 @@ import static org.junit.Assert.assertTrue;
 
 public class SessionTokenServiceTest {
 
+    @Test(expected = IllegalArgumentException.class)
+    public void blankSecretIsRejected() {
+        new SessionTokenService("  ", 60L);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void publicPlaceholderSecretIsRejected() {
+        new SessionTokenService("change-me-session-secret", 60L);
+    }
+
     @Test
     public void generatedTokenValidatesAgainstCurrentCredential() {
         AtomicLong now = new AtomicLong(1_000L);

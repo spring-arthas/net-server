@@ -34,6 +34,7 @@ import com.alibaba.server.nio.service.file.config.FileUploadConfig;
 import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
+import com.alibaba.server.nio.service.file.security.UploadPathResolver;
 import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -46,6 +47,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Date;
 import java.util.List;
@@ -233,11 +235,18 @@ public class FileUploadHandler extends AbstractChannelHandler {
             }
             requestTaskId = fileUploadRequest.getTaskId();
             applyAuthenticatedIdentity(fileUploadRequest);
-            log.info("=> 接收到断点检查帧: 入参信息={}", JSON.toJSONString(fileUploadRequest));
+            UploadPathResolver.validateSegments(
+                    fileUploadRequest.getTaskId(), fileUploadRequest.getFileName());
+            // [修改] 只记录非敏感摘要，禁止 transferToken 随请求对象进入日志。
+            log.info("接收到断点检查帧: taskId={}, fileName={}, fileSize={}, dirId={}, userId={}",
+                    fileUploadRequest.getTaskId(),
+                    fileUploadRequest.getFileName(),
+                    fileUploadRequest.getFileSize(),
+                    fileUploadRequest.getDirId(),
+                    fileUploadRequest.getUserId());
 
             String targetDirectory = resolveUploadDirectory(fileUploadRequest);
-            String targetFilePath = targetDirectory + File.separator
-                    + fileUploadRequest.getTaskId() + "_" + fileUploadRequest.getFileName();
+            String targetFilePath = resolveTargetFilePath(targetDirectory, fileUploadRequest);
 
             // 2. 检查是否有断点记录
             UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(
@@ -343,12 +352,13 @@ public class FileUploadHandler extends AbstractChannelHandler {
         String dirPath = null;
         Long fileTaskId = null;
         dirPath = resolveUploadDirectory(request);
+        String targetFilePath = resolveTargetFilePath(dirPath, request);
         // 3. 创建数据库记录（仅全新上传需要）
         if (!isResume) {
             FileTaskDto fileTaskDto = new FileTaskDto();
             fileTaskDto.setParentId(request.getDirId());
             fileTaskDto.setFileName(request.getFileName());
-            fileTaskDto.setFilePath(dirPath + File.separator + request.getTaskId() + "_" + request.getFileName());
+            fileTaskDto.setFilePath(targetFilePath);
             fileTaskDto.setFileType(request.getFileType());
             fileTaskDto.setFileSize(request.getFileSize());
             fileTaskDto.setUserId(request.getUserId());
@@ -380,6 +390,10 @@ public class FileUploadHandler extends AbstractChannelHandler {
         // 4. 创建上传上下文（断点续传时数据来自断点对象，如果是全新上传时来自请求）
         FileUploadContext uploadContext = new FileUploadContext();
         if (isResume && checkpoint != null) {
+            Path checkpointPath = Paths.get(checkpoint.getFilePath()).toAbsolutePath().normalize();
+            if (!targetFilePath.equals(checkpointPath.toString())) {
+                throw new SecurityException("断点文件路径与认证目录不一致");
+            }
             // 断点续传模式, 从断点续传对象中恢复元数据
             uploadContext.setMd5(checkpoint.getMd5());
             uploadContext.setFileName(checkpoint.getFileName());
@@ -390,7 +404,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setRemoteAddress(socketChannelContext.getRemoteAddress());
             uploadContext.setStartOffset(checkpoint.getUploadedSize());
             uploadContext.setResume(true);
-            uploadContext.setFilePath(checkpoint.getFilePath());
+            uploadContext.setFilePath(targetFilePath);
             // 传输任务关联的标识元数据信息从断点对象中获取
             uploadContext.setRequestTaskId(checkpoint.getRequestTaskId());
             uploadContext.setFileId(checkpoint.getFileId());
@@ -411,6 +425,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.setRequestTaskId(request.getTaskId());
             uploadContext.setFileId(null);
             uploadContext.setFileTaskId(fileTaskId);
+            uploadContext.setFilePath(targetFilePath);
         }
         uploadContext.setConnectionReuse(isReusableChatUpload(request));
         uploadContext.setBatchId(request.getBatchId());
@@ -511,7 +526,15 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 requestTaskId = fileUploadRequest.getTaskId();
             }
             applyAuthenticatedIdentity(fileUploadRequest);
-            log.info("=> 文件上传接收到元数据帧: 入参数据={}", JSON.toJSONString(fileUploadRequest));
+            UploadPathResolver.validateSegments(
+                    fileUploadRequest.getTaskId(), fileUploadRequest.getFileName());
+            // [修改] 只记录非敏感摘要，禁止 transferToken 随请求对象进入日志。
+            log.info("接收到文件上传元数据帧: taskId={}, fileName={}, fileSize={}, dirId={}, userId={}",
+                    fileUploadRequest.getTaskId(),
+                    fileUploadRequest.getFileName(),
+                    fileUploadRequest.getFileSize(),
+                    fileUploadRequest.getDirId(),
+                    fileUploadRequest.getUserId());
             // 2. 使用通用方法创建上传上下文（全新上传模式，isResume=false）
             FileUploadContext uploadContext = createAndInitializeUploadContext(fileUploadRequest, socketChannelContext,
                     false, null);
@@ -1280,6 +1303,12 @@ public class FileUploadHandler extends AbstractChannelHandler {
         }
         return fileService.ensureUploadDirectory(
                 request.getDirId(), request.getUserId(), request.getUserName());
+    }
+
+    private String resolveTargetFilePath(String directory, FileUploadRequest request) {
+        // [修改] 目录来自服务端权限校验，客户端只能提供经过严格校验的单层文件名。
+        return UploadPathResolver.resolve(
+                Paths.get(directory), request.getTaskId(), request.getFileName()).toString();
     }
 
 }

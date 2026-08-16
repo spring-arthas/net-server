@@ -8,6 +8,11 @@ import static org.junit.Assert.assertTrue;
 
 public class TransferTokenServiceTest {
 
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsPublicDefaultSecret() {
+        new TransferTokenService("change-me-transfer-secret", 3600L);
+    }
+
     @Test
     public void validatesIssuedTokenAndIdentity() {
         TransferTokenService service = new TransferTokenService("test-secret", 3600L);

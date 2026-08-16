@@ -85,6 +85,8 @@ public class UserFriendsServiceImpl implements UserFriendsService {
         dto.setUserId(userFriendsDo.getUserId());
         dto.setFriendId(userFriendsDo.getFriendId());
         dto.setAlias(userFriendsDo.getAlias());
+        dto.setPinned(Boolean.TRUE.equals(userFriendsDo.getPinned()));
+        dto.setPinnedAt(userFriendsDo.getPinnedAt());
         dto.setDel(userFriendsDo.getDel());
         dto.setGmtCreated(userFriendsDo.getGmtCreated());
         dto.setGmtModified(userFriendsDo.getGmtModified());

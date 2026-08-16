@@ -15,7 +15,7 @@ import com.alibaba.server.nio.media.MediaStreamServer;
 import com.alibaba.server.nio.selector.TextTransmissionSelector;
 import com.alibaba.server.nio.selector.MainFileSelector;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.logging.stdout.StdOutImpl;
+import org.apache.ibatis.logging.nologging.NoLoggingImpl;
 import org.apache.ibatis.session.Configuration;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -169,7 +169,8 @@ public class CoreServer {
             // 针对PaginatedList实现的Mapper返回值转换
             config.setObjectFactory(new PaginatedListObjFactory());
             config.setObjectWrapperFactory(new PaginatedListWrapperFactory());
-            config.setLogImpl(StdOutImpl.class);
+            // [修改] 用户查询包含密码字段，禁止 MyBatis 将 SQL 参数和结果行输出到控制台。
+            config.setLogImpl(NoLoggingImpl.class);
             sqlSessionFactoryBean.setConfiguration(config);
 
             field.set(sqlSessionFactoryBean, Configuration.class);

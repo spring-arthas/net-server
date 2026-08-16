@@ -4,7 +4,9 @@ import com.alibaba.server.nio.repository.user.mapper.UserFriendApplyRepository;
 import com.alibaba.server.nio.repository.user.mapper.UserFriendsRepository;
 import com.alibaba.server.nio.repository.user.mapper.UserRepository;
 import com.alibaba.server.nio.repository.user.repository.dataobject.UserFriendApplyDo;
+import com.alibaba.server.nio.repository.user.repository.dataobject.UserFriendsDo;
 import com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO;
+import com.alibaba.server.nio.repository.user.service.dto.FriendPinUpdateResult;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +15,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Date;
 
 public class FriendshipServiceImplTest {
 
@@ -197,6 +200,89 @@ public class FriendshipServiceImplTest {
             Assert.fail("申请发送方失效后不得同意申请");
         } catch (IllegalArgumentException expected) {
             Assert.assertEquals("申请发送方不存在或已停用", expected.getMessage());
+        }
+        Assert.assertEquals(0, updateCount.get());
+    }
+
+    @Test
+    public void updatePinnedReturnsCanonicalOwnedState() {
+        Date pinnedAt = new Date(1785360000123L);
+        UserFriendsDo stored = new UserFriendsDo();
+        stored.setId(12L);
+        stored.setUserId(7);
+        stored.setFriendId(9);
+        stored.setPinned(true);
+        stored.setPinnedAt(pinnedAt);
+        AtomicInteger updateCount = new AtomicInteger();
+
+        FriendshipServiceImpl service = service(
+                applyRepository((method, args) -> defaultValue(method.getReturnType())),
+                friendsRepository((method, args) -> {
+                    if ("updateOwnedPin".equals(method.getName())) {
+                        Assert.assertEquals(Long.valueOf(12L), args[0]);
+                        Assert.assertEquals(Integer.valueOf(7), args[1]);
+                        Assert.assertEquals(Boolean.TRUE, args[2]);
+                        updateCount.incrementAndGet();
+                        return 1;
+                    }
+                    if ("findOwnedActiveById".equals(method.getName())) {
+                        return stored;
+                    }
+                    return defaultValue(method.getReturnType());
+                }),
+                userRepository((method, args) -> defaultValue(method.getReturnType())));
+
+        FriendPinUpdateResult result = service.updatePinned(7, 12L, Boolean.TRUE);
+
+        Assert.assertEquals(1, updateCount.get());
+        Assert.assertEquals(Long.valueOf(12L), result.getRelationshipId());
+        Assert.assertTrue(result.isPinned());
+        Assert.assertEquals(pinnedAt, result.getPinnedAt());
+    }
+
+    @Test
+    public void updatePinnedRejectsRelationshipNotOwned() {
+        AtomicInteger readCount = new AtomicInteger();
+        FriendshipServiceImpl service = service(
+                applyRepository((method, args) -> defaultValue(method.getReturnType())),
+                friendsRepository((method, args) -> {
+                    if ("updateOwnedPin".equals(method.getName())) {
+                        return 0;
+                    }
+                    if ("findOwnedActiveById".equals(method.getName())) {
+                        readCount.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                }),
+                userRepository((method, args) -> defaultValue(method.getReturnType())));
+
+        try {
+            service.updatePinned(7, 12L, Boolean.TRUE);
+            Assert.fail("无权关系不得更新置顶状态");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertEquals("好友关系不存在或无权修改", expected.getMessage());
+        }
+        Assert.assertEquals(0, readCount.get());
+    }
+
+    @Test
+    public void updatePinnedValidatesSetterInputBeforeDatabase() {
+        AtomicInteger updateCount = new AtomicInteger();
+        FriendshipServiceImpl service = service(
+                applyRepository((method, args) -> defaultValue(method.getReturnType())),
+                friendsRepository((method, args) -> {
+                    if ("updateOwnedPin".equals(method.getName())) {
+                        updateCount.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                }),
+                userRepository((method, args) -> defaultValue(method.getReturnType())));
+
+        try {
+            service.updatePinned(7, 12L, null);
+            Assert.fail("缺少置顶状态不得更新数据库");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertEquals("置顶状态不能为空", expected.getMessage());
         }
         Assert.assertEquals(0, updateCount.get());
     }

@@ -38,4 +38,16 @@ public interface UserFriendsRepository extends BaseMapperRepository<UserFriendsD
     int updateOwnedAlias(@Param("id") Long id,
             @Param("userId") Integer userId,
             @Param("alias") String alias);
+
+    @Update("UPDATE user_friends SET is_pinned = #{pinned}, "
+            + "pinned_at = CASE WHEN #{pinned} = 1 THEN COALESCE(pinned_at, NOW(3)) ELSE NULL END, "
+            + "gmt_modified = NOW() WHERE id = #{id} AND user_id = #{userId} AND del = 'N'")
+    int updateOwnedPin(@Param("id") Long id,
+            @Param("userId") Integer userId,
+            @Param("pinned") boolean pinned);
+
+    @Select("SELECT id, user_id, friend_id, alias, is_pinned AS pinned, pinned_at, del, "
+            + "gmt_created, gmt_modified, del_time FROM user_friends "
+            + "WHERE id = #{id} AND user_id = #{userId} AND del = 'N'")
+    UserFriendsDo findOwnedActiveById(@Param("id") Long id, @Param("userId") Integer userId);
 }

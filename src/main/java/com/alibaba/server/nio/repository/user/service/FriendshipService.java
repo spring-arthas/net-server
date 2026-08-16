@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.repository.user.service;
 
 import com.alibaba.server.nio.repository.user.service.dto.FriendRequestHandleResult;
+import com.alibaba.server.nio.repository.user.service.dto.FriendPinUpdateResult;
 import com.alibaba.server.nio.repository.user.service.dto.UserFriendApplyDTO;
 
 /**
@@ -17,4 +18,14 @@ public interface FriendshipService {
     boolean isActiveFriend(Integer userId, Integer friendId);
 
     void updateAlias(Integer userId, Long friendshipId, String alias);
+
+    /**
+     * 更新当前用户拥有的好友关系置顶状态。
+     *
+     * @param userId 当前登录用户 ID
+     * @param friendshipId 好友关系 ID
+     * @param pinned 是否置顶
+     * @return 数据库中的最终置顶状态
+     */
+    FriendPinUpdateResult updatePinned(Integer userId, Long friendshipId, Boolean pinned);
 }

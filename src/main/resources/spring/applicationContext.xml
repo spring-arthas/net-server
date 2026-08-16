@@ -16,21 +16,27 @@
     <!-- 启用对事务注解的支持 -->
     <tx:annotation-driven transaction-manager="transactionManager" />
 
+    <!-- [修改] 本机默认从 ~/.net-server/database.properties 读取，部署环境变量优先覆盖。 -->
+    <bean id="localDatabaseProperties"
+        class="org.springframework.beans.factory.config.PropertiesFactoryBean">
+        <property name="location">
+            <bean class="org.springframework.core.io.FileSystemResource">
+                <constructor-arg value="#{systemProperties['user.home'] + '/.net-server/database.properties'}" />
+            </bean>
+        </property>
+        <property name="ignoreResourceNotFound" value="true" />
+    </bean>
+
     <!--创建jdbc数据源 -->
     <bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init"
         destroy-method="close">
-        <!--<property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
-        <property name="url"
-            value="jdbc:mysql://10.30.5.33:31288/jxgy_saas_test?autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;" />
-        <property name="username" value="jxgy" />
-        <property name="password" value="Fbhu0359" />-->
         <property name="driverClassName" value="com.mysql.cj.jdbc.Driver" />
-        <property
-        name="url"
-        value="jdbc:mysql://127.0.0.1:3306/net_server?allowPublicKeyRetrieval=true&amp;autoReconnect=true&amp;failOverReadOnly=false&amp;rewriteBatchedStatements=true&amp;socketTimeout=30000&amp;allowMultiQueries=true&amp;connectTimeout=3000&amp;useSSL=false&amp;serverTimezone=Asia/Shanghai&amp;"
-        />
-        <property name="username" value="root" />
-        <property name="password" value="911025pfz" />
+        <property name="url"
+            value="#{systemEnvironment['NET_SERVER_DB_URL'] ?: @localDatabaseProperties['url']}" />
+        <property name="username"
+            value="#{systemEnvironment['NET_SERVER_DB_USERNAME'] ?: @localDatabaseProperties['username']}" />
+        <property name="password"
+            value="#{systemEnvironment.containsKey('NET_SERVER_DB_PASSWORD') ? systemEnvironment['NET_SERVER_DB_PASSWORD'] : @localDatabaseProperties['password']}" />
         <!-- 配置初始化大小、最小、最大 -->
         <property name="initialSize" value="1" />
         <property name="minIdle" value="1" />
@@ -78,7 +84,8 @@
         <property name="mapUnderscoreToCamelCase" value="true" />
         <property name="objectFactory" ref="paginatedListObjFactory" />
         <property name="objectWrapperFactory" ref="paginatedListWrapperFactory" />
-        <property name="logImpl" value="org.apache.ibatis.logging.stdout.StdOutImpl" />
+        <!-- [修改] 登录查询包含密码字段，禁止 MyBatis 打印 SQL 参数和用户结果行。 -->
+        <property name="logImpl" value="org.apache.ibatis.logging.nologging.NoLoggingImpl" />
     </bean>
     <bean id="paginatedListObjFactory"
         class="com.alibaba.server.nio.core.page.PaginatedListObjFactory" />
@@ -121,6 +128,11 @@
 
     <bean id="userFriendMessageService"
           class=" com.alibaba.server.nio.repository.chat.service.impl.UserFriendMessageServiceImpl"
+          scope="singleton" />
+
+    <!-- [修改] 动态协议由 net-server 本身处理，不需要额外服务进程。 -->
+    <bean id="userDynamicService"
+          class="com.alibaba.server.nio.repository.dynamic.service.impl.UserDynamicServiceImpl"
           scope="singleton" />
 
     <bean id="taskService"

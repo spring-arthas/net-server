@@ -56,6 +56,27 @@ public class UserFriendMessageRepositoryHistoryQueryTest {
     }
 
     @Test
+    public void conversationSearchOnlyMatchesMessagesBetweenLoggedInUserAndFriend() throws Exception {
+        String sql = selectSql("searchMessagesInConversation",
+                Integer.class, Integer.class, String.class, int.class);
+
+        assertConversationSearchFilter(sql);
+        assertTrue(sql.contains("del = 'N'"));
+        assertTrue(sql.contains("content LIKE CONCAT('%', #{keyword}, '%')"));
+        assertTrue(sql.contains("ORDER BY gmt_created DESC"));
+        assertTrue(sql.contains("LIMIT #{limit}"));
+    }
+
+    @Test
+    public void globalSearchRemainsAvailableForClientsWithoutFriendId() throws Exception {
+        String sql = selectSql("searchMessages",
+                Integer.class, String.class, int.class);
+
+        assertTrue(sql.contains("sender_id = #{userId} OR receiver_id = #{userId}"));
+        assertTrue(sql.contains("content LIKE CONCAT('%', #{keyword}, '%')"));
+    }
+
+    @Test
     public void cursorIndexMigrationIsIdempotentAndTargetsLiveTable() throws Exception {
         String migration = new String(Files.readAllBytes(Paths.get(
                 "sql/chat_history_cursor_migration_20260722.sql")), StandardCharsets.UTF_8);
@@ -80,5 +101,12 @@ public class UserFriendMessageRepositoryHistoryQueryTest {
         assertTrue(sql.contains("receiver_id = #{userId2}"));
         assertTrue(sql.contains("sender_id = #{userId2}"));
         assertTrue(sql.contains("receiver_id = #{userId1}"));
+    }
+
+    private static void assertConversationSearchFilter(String sql) {
+        assertTrue(sql.contains("sender_id = #{userId}"));
+        assertTrue(sql.contains("receiver_id = #{friendId}"));
+        assertTrue(sql.contains("sender_id = #{friendId}"));
+        assertTrue(sql.contains("receiver_id = #{userId}"));
     }
 }

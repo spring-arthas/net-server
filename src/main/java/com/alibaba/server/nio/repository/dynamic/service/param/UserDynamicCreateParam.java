@@ -1,14 +1,16 @@
 package com.alibaba.server.nio.repository.dynamic.service.param;
 
-import com.alibaba.server.nio.core.param.DalPageQueryParam;
+import com.alibaba.server.nio.repository.dynamic.service.dto.DynamicMediaDTO;
+import com.alibaba.server.nio.repository.dynamic.service.dto.DynamicReferenceDTO;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
+import java.util.List;
+
+/** 发布动态请求。 */
 @Data
-@EqualsAndHashCode(callSuper = true)
-public class UserDynamicCreateParam extends DalPageQueryParam {
-    private Long id;
-    private Long userId;
+public class UserDynamicCreateParam {
     private String content;
+    private List<DynamicMediaDTO> media;
     private String imagePaths;
+    private DynamicReferenceDTO reference;
 }

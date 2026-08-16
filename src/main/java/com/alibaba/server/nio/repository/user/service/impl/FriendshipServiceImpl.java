@@ -4,8 +4,10 @@ import com.alibaba.server.nio.repository.user.mapper.UserFriendApplyRepository;
 import com.alibaba.server.nio.repository.user.mapper.UserFriendsRepository;
 import com.alibaba.server.nio.repository.user.mapper.UserRepository;
 import com.alibaba.server.nio.repository.user.repository.dataobject.UserFriendApplyDo;
+import com.alibaba.server.nio.repository.user.repository.dataobject.UserFriendsDo;
 import com.alibaba.server.nio.repository.user.service.FriendshipService;
 import com.alibaba.server.nio.repository.user.service.dto.FriendRequestHandleResult;
+import com.alibaba.server.nio.repository.user.service.dto.FriendPinUpdateResult;
 import com.alibaba.server.nio.repository.user.service.dto.UserFriendApplyDTO;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.dao.DuplicateKeyException;
@@ -159,6 +161,27 @@ public class FriendshipServiceImpl implements FriendshipService {
         if (updated != 1) {
             throw new IllegalArgumentException("好友关系不存在或无权修改");
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FriendPinUpdateResult updatePinned(Integer userId, Long friendshipId, Boolean pinned) {
+        if (userId == null || friendshipId == null || friendshipId <= 0) {
+            throw new IllegalArgumentException("好友关系ID不能为空");
+        }
+        if (pinned == null) {
+            throw new IllegalArgumentException("置顶状态不能为空");
+        }
+        int updated = userFriendsRepository.updateOwnedPin(friendshipId, userId, pinned.booleanValue());
+        if (updated != 1) {
+            throw new IllegalArgumentException("好友关系不存在或无权修改");
+        }
+        UserFriendsDo stored = userFriendsRepository.findOwnedActiveById(friendshipId, userId);
+        if (stored == null) {
+            throw new IllegalStateException("好友置顶状态更新后读取失败");
+        }
+        return new FriendPinUpdateResult(
+                stored.getId(), Boolean.TRUE.equals(stored.getPinned()), stored.getPinnedAt());
     }
 
     private UserFriendApplyDTO toDto(UserFriendApplyDo apply) {

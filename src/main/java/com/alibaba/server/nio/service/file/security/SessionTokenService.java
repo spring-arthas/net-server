@@ -24,7 +24,10 @@ public class SessionTokenService {
     }
 
     SessionTokenService(String secret, long expireSeconds, LongSupplier clock) {
-        this.secret = StringUtils.defaultIfBlank(secret, "change-me-session-secret");
+        if (StringUtils.isBlank(secret) || "change-me-session-secret".equalsIgnoreCase(secret.trim())) {
+            throw new IllegalArgumentException("a non-default session token secret is required");
+        }
+        this.secret = secret.trim();
         this.expireSeconds = expireSeconds > 0 ? expireSeconds : DEFAULT_EXPIRE_SECONDS;
         this.clock = clock == null ? System::currentTimeMillis : clock;
     }

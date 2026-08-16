@@ -64,6 +64,48 @@ public class TextTransmissionHandlerHistoryContractTest {
         assertEquals(6L, list.getJSONObject(1).getLongValue("id"));
     }
 
+    @Test
+    public void realtimePushCopiesOptionalQuoteFieldsFromSendRequest() {
+        UserFriendMessageDO saved = message(18L, 1, 2, "reply", 1_700_000_120_000L);
+        JSONObject request = new JSONObject();
+        request.put("quoteMsgId", 9L);
+        request.put("quoteMsgContent", "上一条消息");
+        request.put("quoteMsgSenderName", "张三");
+
+        JSONObject push = ChatMessagePushBuilder.build(
+                saved, 1L, "reply", "avatar-base64", request);
+
+        assertEquals(Long.valueOf(9L), push.getLong("quoteMsgId"));
+        assertEquals("上一条消息", push.getString("quoteMsgContent"));
+        assertEquals("张三", push.getString("quoteMsgSenderName"));
+    }
+
+    @Test
+    public void realtimePushKeepsLegacyShapeWhenQuoteFieldsAreAbsent() {
+        UserFriendMessageDO saved = message(19L, 1, 2, "plain", 1_700_000_180_000L);
+
+        JSONObject push = ChatMessagePushBuilder.build(
+                saved, 1L, "plain", "", new JSONObject());
+
+        assertFalse(push.containsKey("quoteMsgId"));
+        assertFalse(push.containsKey("quoteMsgContent"));
+        assertFalse(push.containsKey("quoteMsgSenderName"));
+    }
+
+    @Test
+    public void realtimePushLimitsQuotePreviewToAndroidCompatibleLength() {
+        UserFriendMessageDO saved = message(20L, 1, 2, "reply", 1_700_000_240_000L);
+        JSONObject request = new JSONObject();
+        char[] oversized = new char[240];
+        Arrays.fill(oversized, 'a');
+        request.put("quoteMsgContent", new String(oversized));
+
+        JSONObject push = ChatMessagePushBuilder.build(
+                saved, 1L, "reply", "", request);
+
+        assertEquals(200, push.getString("quoteMsgContent").length());
+    }
+
     private static UserFriendMessageDO message(long id, int senderId, int receiverId,
             String content, long createdAt) {
         UserFriendMessageDO message = new UserFriendMessageDO();

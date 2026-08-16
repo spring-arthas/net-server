@@ -228,16 +228,65 @@ public class FileUploadFrame {
          */
         USER_FRIEND_UPDATE_ALIAS_RESPONSE(0x58, "更新好友别名回执"),
 
+        /**
+         * 更新好友置顶请求
+         */
+        USER_FRIEND_PIN_UPDATE_REQ(0x5C, "更新好友置顶请求"),
+
+        /**
+         * 更新好友置顶回执
+         */
+        USER_FRIEND_PIN_UPDATE_RESPONSE(0x5D, "更新好友置顶回执"),
+
+        /**
+         * 聊天消息操作请求(撤回/表情回应)
+         */
+        CHAT_MSG_ACTION_REQ(0x59, "聊天消息操作请求"),
+
+        /**
+         * 聊天消息操作回执
+         */
+        CHAT_MSG_ACTION_RESPONSE(0x5A, "聊天消息操作回执"),
+
+        /**
+         * 聊天消息操作推送
+         */
+        CHAT_MSG_ACTION_PUSH(0x5B, "聊天消息操作推送"),
+
+        /**
+         * 聊天消息搜索请求
+         */
+        CHAT_MSG_SEARCH_REQ(0x5E, "聊天消息搜索请求"),
+
+        /**
+         * 聊天消息搜索回执
+         */
+        CHAT_MSG_SEARCH_RESPONSE(0x5F, "聊天消息搜索回执"),
+
         // ========== 动态帧 (0x60-0x6F) ==========
         /**
          * 新建动态请求
          */
         DYNAMIC_CREATE_REQ(0x60, "新建动态请求"),
 
-        /**
-         * 动态操作响应
-         */
-        DYNAMIC_RESPONSE(0x61, "动态操作响应");
+        /** 新建动态回执 */
+        DYNAMIC_CREATE_RESPONSE(0x61, "新建动态回执"),
+        /** 时间线分页请求 */
+        DYNAMIC_TIMELINE_REQ(0x62, "动态时间线请求"),
+        /** 时间线分页回执 */
+        DYNAMIC_TIMELINE_RESPONSE(0x63, "动态时间线回执"),
+        /** 点赞、回复和转发请求 */
+        DYNAMIC_ACTION_REQ(0x64, "动态互动请求"),
+        /** 点赞、回复和转发回执 */
+        DYNAMIC_ACTION_RESPONSE(0x65, "动态互动回执"),
+        /** 动态详情请求 */
+        DYNAMIC_DETAIL_REQ(0x66, "动态详情请求"),
+        /** 动态详情回执 */
+        DYNAMIC_DETAIL_RESPONSE(0x67, "动态详情回执"),
+        /** 删除自己的动态请求 */
+        DYNAMIC_DELETE_REQ(0x68, "动态删除请求"),
+        /** 删除自己的动态回执 */
+        DYNAMIC_DELETE_RESPONSE(0x69, "动态删除回执");
 
         private final int code;
         private final String description;
