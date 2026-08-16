@@ -4,8 +4,6 @@ import com.alibaba.server.common.BasicConstant;
 import org.apache.commons.lang.StringUtils;
 
 import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,11 +30,14 @@ public final class TlsGatewayConfig {
     private static final int MAX_CONNECTIONS = 512;
     private static final int MIN_BUFFER_SIZE = 4_096;
     private static final int MAX_BUFFER_SIZE = 1_048_576;
+    private static final String DEFAULT_KEYSTORE_PATH =
+            "${user.home}/.net-server/tls/net-server.p12";
 
     private final boolean enabled;
     private final InetAddress bindAddress;
     private final Path keyStorePath;
     private final char[] keyStorePassword;
+    private final boolean keyStoreAutoCreate;
     private final List<TlsGatewayEndpoint> endpoints;
     private final int handshakeTimeoutMillis;
     private final int connectTimeoutMillis;
@@ -49,6 +50,7 @@ public final class TlsGatewayConfig {
             InetAddress bindAddress,
             Path keyStorePath,
             char[] keyStorePassword,
+            boolean keyStoreAutoCreate,
             List<TlsGatewayEndpoint> endpoints,
             int handshakeTimeoutMillis,
             int connectTimeoutMillis,
@@ -59,6 +61,7 @@ public final class TlsGatewayConfig {
         this.bindAddress = bindAddress;
         this.keyStorePath = keyStorePath;
         this.keyStorePassword = keyStorePassword.clone();
+        this.keyStoreAutoCreate = keyStoreAutoCreate;
         this.endpoints = Collections.unmodifiableList(new ArrayList<>(endpoints));
         this.handshakeTimeoutMillis = handshakeTimeoutMillis;
         this.connectTimeoutMillis = connectTimeoutMillis;
@@ -84,19 +87,33 @@ public final class TlsGatewayConfig {
             Map<String, Object> values,
             Function<String, String> environment,
             Function<String, String> systemProperty) {
+        return load(
+                values,
+                environment,
+                systemProperty,
+                value -> new TlsNetworkAddressResolver().resolve(value));
+    }
+
+    static TlsGatewayConfig load(
+            Map<String, Object> values,
+            Function<String, String> environment,
+            Function<String, String> systemProperty,
+            Function<String, InetAddress> addressResolver) {
         Objects.requireNonNull(values, "values");
         Objects.requireNonNull(environment, "environment");
         Objects.requireNonNull(systemProperty, "systemProperty");
+        Objects.requireNonNull(addressResolver, "addressResolver");
         boolean enabled = booleanValue(values, BasicConstant.TLS_GATEWAY_ENABLED, true);
         if (!enabled) {
             return disabled();
         }
 
-        InetAddress bindAddress = publicBindAddress(requiredEnvironmentOrConfig(
+        InetAddress bindAddress = addressResolver.apply(environmentOrConfig(
                 values,
                 environment,
                 "NET_SERVER_PUBLIC_IP",
-                BasicConstant.TLS_GATEWAY_PUBLIC_IP));
+                BasicConstant.TLS_GATEWAY_PUBLIC_IP,
+                TlsNetworkAddressResolver.AUTO));
         Path keyStorePath = keyStorePath(keyStoreValue(
                 values,
                 environment,
@@ -104,6 +121,12 @@ public final class TlsGatewayConfig {
                 systemProperty.apply("user.home"));
         String passwordValue = environment.apply("NET_SERVER_TLS_KEYSTORE_PASSWORD");
         char[] keyStorePassword = passwordValue == null ? new char[0] : passwordValue.toCharArray();
+        boolean keyStoreAutoCreate = environmentBooleanValue(
+                values,
+                environment,
+                "NET_SERVER_TLS_KEYSTORE_AUTO_CREATE",
+                BasicConstant.TLS_GATEWAY_KEYSTORE_AUTO_CREATE,
+                true);
 
         requireLoopback(values, BasicConstant.NIO_BIND_IP);
         requireLoopback(values, BasicConstant.NIO_MEDIA_STREAM_BIND_IP);
@@ -155,6 +178,7 @@ public final class TlsGatewayConfig {
                 bindAddress,
                 keyStorePath,
                 keyStorePassword,
+                keyStoreAutoCreate,
                 endpoints,
                 handshakeTimeoutMillis,
                 connectTimeoutMillis,
@@ -169,6 +193,7 @@ public final class TlsGatewayConfig {
                 null,
                 null,
                 new char[0],
+                false,
                 Collections.emptyList(),
                 DEFAULT_HANDSHAKE_TIMEOUT_MILLIS,
                 DEFAULT_CONNECT_TIMEOUT_MILLIS,
@@ -181,22 +206,19 @@ public final class TlsGatewayConfig {
         return new TlsGatewayEndpoint(name, port, BasicConstant.SERVER_LOCAL_LOOPBACK, port);
     }
 
-    private static String requiredEnvironmentOrConfig(
+    private static String environmentOrConfig(
             Map<String, Object> values,
             Function<String, String> environment,
             String environmentName,
-            String configKey) {
+            String configKey,
+            String defaultValue) {
         String environmentValue = environment.apply(environmentName);
         if (StringUtils.isNotBlank(environmentValue)) {
             return environmentValue.trim();
         }
-        String configValue = stringValue(values, configKey, null);
-        if (StringUtils.isBlank(configValue)) {
-            throw new TlsGatewayConfigurationException(
-                    "缺少环境变量 " + environmentName + "，且配置 " + configKey + " 为空");
-        }
+        String configValue = stringValue(values, configKey, defaultValue);
         // [修改] 直接 java -jar 启动不会经过脚本，允许从 server.properties 读取非敏感参数。
-        return configValue;
+        return StringUtils.isBlank(configValue) ? defaultValue : configValue;
     }
 
     private static String keyStoreValue(
@@ -215,12 +237,7 @@ public final class TlsGatewayConfig {
             configValue = stringValue(values, BasicConstant.TLS_GATEWAY_KEYSTORE_PATH, null);
         }
         if (StringUtils.isBlank(configValue)) {
-            throw new TlsGatewayConfigurationException(
-                    "缺少环境变量 NET_SERVER_TLS_KEYSTORE，且配置 "
-                            + operatingSystemKey
-                            + " 和 "
-                            + BasicConstant.TLS_GATEWAY_KEYSTORE_PATH
-                            + " 均为空");
+            configValue = DEFAULT_KEYSTORE_PATH;
         }
         return configValue;
     }
@@ -242,29 +259,9 @@ public final class TlsGatewayConfig {
         return BasicConstant.TLS_GATEWAY_KEYSTORE_PATH;
     }
 
-    private static InetAddress publicBindAddress(String value) {
-        try {
-            InetAddress address = InetAddress.getByName(value);
-            if (address.isAnyLocalAddress() || address.isLoopbackAddress()) {
-                throw new TlsGatewayConfigurationException(
-                        "NET_SERVER_PUBLIC_IP 必须是实际局域网或公网地址: " + value);
-            }
-            return address;
-        } catch (UnknownHostException exception) {
-            throw new TlsGatewayConfigurationException(
-                    "NET_SERVER_PUBLIC_IP 无法解析: " + value,
-                    exception);
-        }
-    }
-
     private static Path keyStorePath(String value, String userHome) {
         try {
-            Path path = Paths.get(expandUserHome(value, userHome)).toAbsolutePath().normalize();
-            if (!Files.isRegularFile(path)) {
-                throw new TlsGatewayConfigurationException(
-                        "NET_SERVER_TLS_KEYSTORE 文件不存在: " + path);
-            }
-            return path;
+            return Paths.get(expandUserHome(value, userHome)).toAbsolutePath().normalize();
         } catch (InvalidPathException exception) {
             throw new TlsGatewayConfigurationException(
                     "NET_SERVER_TLS_KEYSTORE 路径无效",
@@ -349,6 +346,26 @@ public final class TlsGatewayConfig {
         throw new TlsGatewayConfigurationException(key + " 必须是 true 或 false: " + value);
     }
 
+    private static boolean environmentBooleanValue(
+            Map<String, Object> values,
+            Function<String, String> environment,
+            String environmentName,
+            String configKey,
+            boolean defaultValue) {
+        String environmentValue = environment.apply(environmentName);
+        if (StringUtils.isBlank(environmentValue)) {
+            return booleanValue(values, configKey, defaultValue);
+        }
+        if ("true".equalsIgnoreCase(environmentValue.trim())) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(environmentValue.trim())) {
+            return false;
+        }
+        throw new TlsGatewayConfigurationException(
+                environmentName + " 必须是 true 或 false: " + environmentValue);
+    }
+
     private static String stringValue(
             Map<String, Object> values,
             String key,
@@ -385,6 +402,10 @@ public final class TlsGatewayConfig {
         return keyStorePassword.clone();
     }
 
+    public boolean isKeyStoreAutoCreate() {
+        return keyStoreAutoCreate;
+    }
+
     public List<TlsGatewayEndpoint> getEndpoints() {
         return endpoints;
     }
@@ -415,6 +436,7 @@ public final class TlsGatewayConfig {
                 "enabled=" + enabled +
                 ", bindAddress=" + bindAddress +
                 ", keyStorePath=" + keyStorePath +
+                ", keyStoreAutoCreate=" + keyStoreAutoCreate +
                 ", endpoints=" + endpoints +
                 ", handshakeTimeoutMillis=" + handshakeTimeoutMillis +
                 ", connectTimeoutMillis=" + connectTimeoutMillis +

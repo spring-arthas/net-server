@@ -192,6 +192,19 @@
       <version>3.2.2</version>
     </dependency>
 
+    <!-- 跨平台在 JVM 内生成本机 TLS CA 和服务端证书，避免依赖外部 OpenSSL。 -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <version>1.85</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <version>1.85</version>
+    </dependency>
+
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>

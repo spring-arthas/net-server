@@ -26,17 +26,7 @@ if ([string]::IsNullOrWhiteSpace($JarPath)) {
 }
 
 $publicIp = Get-EnvironmentValue -Name 'NET_SERVER_PUBLIC_IP'
-if ([string]::IsNullOrWhiteSpace($publicIp)) {
-    throw 'NET_SERVER_PUBLIC_IP is missing. Run deploy\tls\generate-local-certs-windows.ps1 first.'
-}
-
 $keyStore = Get-EnvironmentValue -Name 'NET_SERVER_TLS_KEYSTORE'
-if ([string]::IsNullOrWhiteSpace($keyStore)) {
-    throw 'NET_SERVER_TLS_KEYSTORE is missing. Run deploy\tls\generate-local-certs-windows.ps1 first.'
-}
-if (-not (Test-Path -LiteralPath $keyStore -PathType Leaf)) {
-    throw "TLS PKCS12 does not exist: $keyStore"
-}
 
 $resolvedJarPath = [System.IO.Path]::GetFullPath($JarPath)
 if (-not (Test-Path -LiteralPath $resolvedJarPath -PathType Leaf)) {
@@ -58,8 +48,12 @@ if ($null -eq $javaExecutable) {
     $javaExecutable = $javaCommand.Source
 }
 
-$env:NET_SERVER_PUBLIC_IP = $publicIp
-$env:NET_SERVER_TLS_KEYSTORE = $keyStore
+if (-not [string]::IsNullOrWhiteSpace($publicIp)) {
+    $env:NET_SERVER_PUBLIC_IP = $publicIp
+}
+if (-not [string]::IsNullOrWhiteSpace($keyStore)) {
+    $env:NET_SERVER_TLS_KEYSTORE = $keyStore
+}
 $userPassword = [Environment]::GetEnvironmentVariable('NET_SERVER_TLS_KEYSTORE_PASSWORD', 'User')
 if ($null -eq [Environment]::GetEnvironmentVariable('NET_SERVER_TLS_KEYSTORE_PASSWORD', 'Process') -and
     $null -ne $userPassword) {
@@ -67,8 +61,16 @@ if ($null -eq [Environment]::GetEnvironmentVariable('NET_SERVER_TLS_KEYSTORE_PAS
 }
 
 Write-Output "Java: $javaExecutable"
-Write-Output "TLS keystore: $keyStore"
-Write-Output "TLS bind address: $publicIp"
+if ([string]::IsNullOrWhiteSpace($keyStore)) {
+    Write-Output 'TLS keystore: auto (resolved by Java from user.home)'
+} else {
+    Write-Output "TLS keystore: $keyStore"
+}
+if ([string]::IsNullOrWhiteSpace($publicIp)) {
+    Write-Output 'TLS bind address: auto (resolved by Java from active network interfaces)'
+} else {
+    Write-Output "TLS bind address: $publicIp"
+}
 
 & $javaExecutable -jar $resolvedJarPath
 exit $LASTEXITCODE

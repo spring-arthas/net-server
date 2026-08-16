@@ -3,6 +3,8 @@ package com.alibaba.server.nio.media;
 import com.alibaba.server.common.BasicConstant;
 import org.junit.Test;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,6 +33,21 @@ public class MediaServiceFactoryEndpointTest {
         String publicHost = MediaServiceFactory.publicHost(config, name -> null);
 
         assertEquals("media.example.com", publicHost);
+    }
+
+    @Test
+    public void resolvesAutomaticMediaHostFromCurrentTlsAddress() throws UnknownHostException {
+        Map<String, Object> config = new HashMap<>();
+        config.put(BasicConstant.MEDIA_STREAM_PUBLIC_HOST, "auto");
+        config.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, "auto");
+        InetAddress resolvedAddress = InetAddress.getByName("192.168.0.101");
+
+        String publicHost = MediaServiceFactory.publicHost(
+                config,
+                name -> "NET_SERVER_PUBLIC_IP".equals(name) ? "auto" : null,
+                value -> resolvedAddress);
+
+        assertEquals("192.168.0.101", publicHost);
     }
 
     @Test

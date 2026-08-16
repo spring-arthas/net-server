@@ -12,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -45,30 +44,27 @@ public class NetServerStartScriptTest {
     }
 
     @Test
-    public void rejectsMissingPublicIpBeforeStartingJava() throws Exception {
+    public void startsJavaWhenPublicIpIsNotConfigured() throws Exception {
         ScriptResult result = runScript(false, null, KeyStoreMode.EXISTS);
 
-        assertNotEquals(0, result.exitCode);
-        assertTrue(result.output.contains("缺少 NET_SERVER_PUBLIC_IP"));
-        assertFalse(result.javaInvoked);
+        assertEquals(result.output, 0, result.exitCode);
+        assertTrue(result.javaInvoked);
     }
 
     @Test
-    public void rejectsMissingKeyStoreBeforeStartingJava() throws Exception {
-        ScriptResult result = runScript(false, "172.21.32.64", KeyStoreMode.MISSING_VARIABLE);
+    public void startsJavaWhenTlsEnvironmentIsNotConfigured() throws Exception {
+        ScriptResult result = runScript(false, null, KeyStoreMode.MISSING_VARIABLE);
 
-        assertNotEquals(0, result.exitCode);
-        assertTrue(result.output.contains("缺少 NET_SERVER_TLS_KEYSTORE"));
-        assertFalse(result.javaInvoked);
+        assertEquals(result.output, 0, result.exitCode);
+        assertTrue(result.javaInvoked);
     }
 
     @Test
-    public void rejectsNonexistentKeyStoreBeforeStartingJava() throws Exception {
+    public void startsJavaWhenConfiguredKeyStoreDoesNotExistYet() throws Exception {
         ScriptResult result = runScript(false, "172.21.32.64", KeyStoreMode.NONEXISTENT);
 
-        assertNotEquals(0, result.exitCode);
-        assertTrue(result.output.contains("TLS PKCS12 不存在"));
-        assertFalse(result.javaInvoked);
+        assertEquals(result.output, 0, result.exitCode);
+        assertTrue(result.javaInvoked);
     }
 
     private ScriptResult runScript(boolean jdwp) throws Exception {
@@ -124,6 +120,7 @@ public class NetServerStartScriptTest {
         processBuilder.environment().remove("NET_SERVER_PUBLIC_IP");
         processBuilder.environment().remove("NET_SERVER_TLS_KEYSTORE");
         processBuilder.environment().remove("NET_SERVER_TLS_KEYSTORE_PASSWORD");
+        processBuilder.environment().remove("NET_SERVER_TLS_KEYSTORE_AUTO_CREATE");
         if (publicIp != null) {
             processBuilder.environment().put("NET_SERVER_PUBLIC_IP", publicIp);
         }

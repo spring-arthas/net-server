@@ -7,8 +7,10 @@ import com.alibaba.server.nio.repository.dynamic.mapper.UserDynamicRepository;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.alibaba.server.nio.service.file.security.TokenSecretResolver;
+import com.alibaba.server.nio.tls.TlsNetworkAddressResolver;
 import org.apache.commons.lang.StringUtils;
 
+import java.net.InetAddress;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -72,15 +74,34 @@ public final class MediaServiceFactory {
     static String publicHost(
             Map<String, Object> config,
             Function<String, String> environment) {
+        return publicHost(
+                config,
+                environment,
+                value -> new TlsNetworkAddressResolver().resolve(value));
+    }
+
+    static String publicHost(
+            Map<String, Object> config,
+            Function<String, String> environment,
+            Function<String, InetAddress> addressResolver) {
         String gatewayPublicIp = environment.apply("NET_SERVER_PUBLIC_IP");
-        if (StringUtils.isNotBlank(gatewayPublicIp)) {
+        if (!TlsNetworkAddressResolver.isAutomatic(gatewayPublicIp)) {
             // [修改] 播放 URL 与 TLS Gateway 共用公网地址，真机不会收到 localhost。
             return urlHost(gatewayPublicIp);
         }
-        return urlHost(stringConfig(
+        String mediaPublicHost = stringConfig(
                 config,
                 BasicConstant.MEDIA_STREAM_PUBLIC_HOST,
-                stringConfig(config, BasicConstant.SERVER_IP, "127.0.0.1")));
+                null);
+        if (!TlsNetworkAddressResolver.isAutomatic(mediaPublicHost)) {
+            return urlHost(mediaPublicHost);
+        }
+        String configuredGatewayAddress = stringConfig(
+                config,
+                BasicConstant.TLS_GATEWAY_PUBLIC_IP,
+                TlsNetworkAddressResolver.AUTO);
+        InetAddress resolvedAddress = addressResolver.apply(configuredGatewayAddress);
+        return urlHost(resolvedAddress.getHostAddress());
     }
 
     private static String urlHost(String value) {

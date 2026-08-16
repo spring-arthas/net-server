@@ -13,26 +13,13 @@ DRY_RUN="${DRY_RUN:-false}"
 NET_SERVER_PUBLIC_IP="${NET_SERVER_PUBLIC_IP:-}"
 NET_SERVER_TLS_KEYSTORE="${NET_SERVER_TLS_KEYSTORE:-}"
 NET_SERVER_TLS_KEYSTORE_PASSWORD="${NET_SERVER_TLS_KEYSTORE_PASSWORD:-}"
+NET_SERVER_TLS_KEYSTORE_AUTO_CREATE="${NET_SERVER_TLS_KEYSTORE_AUTO_CREATE:-}"
 
-# [修改] TLS 入口和业务后端属于同一 Java 进程，启动前必须一次性校验入口参数。
-if [[ -z "$NET_SERVER_PUBLIC_IP" ]]; then
-  echo "缺少 NET_SERVER_PUBLIC_IP，无法监听 TLS 公网端口" >&2
-  exit 1
-fi
-
-if [[ -z "$NET_SERVER_TLS_KEYSTORE" ]]; then
-  echo "缺少 NET_SERVER_TLS_KEYSTORE，无法加载 TLS 证书" >&2
-  exit 1
-fi
-
-if [[ ! -f "$NET_SERVER_TLS_KEYSTORE" ]]; then
-  echo "TLS PKCS12 不存在: $NET_SERVER_TLS_KEYSTORE" >&2
-  exit 1
-fi
-
+# 环境变量为空时由 Java 根据当前网卡、user.home 和文件系统自动配置 TLS。
 export NET_SERVER_PUBLIC_IP
 export NET_SERVER_TLS_KEYSTORE
 export NET_SERVER_TLS_KEYSTORE_PASSWORD
+export NET_SERVER_TLS_KEYSTORE_AUTO_CREATE
 
 if [[ ! -x "$JAVA_BIN" ]]; then
   echo "Zulu JDK8 不存在或不可执行: $JAVA_BIN" >&2

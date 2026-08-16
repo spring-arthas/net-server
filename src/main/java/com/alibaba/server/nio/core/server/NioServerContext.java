@@ -6,6 +6,8 @@ import com.alibaba.server.nio.tls.EmbeddedTlsGateway;
 import com.alibaba.server.nio.tls.TlsBackendReadinessProbe;
 import com.alibaba.server.nio.tls.TlsContextFactory;
 import com.alibaba.server.nio.tls.TlsGatewayConfig;
+import com.alibaba.server.nio.tls.TlsKeyStoreProvisioner;
+import com.alibaba.server.nio.tls.TlsNetworkAddressResolver;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -80,6 +82,8 @@ public class NioServerContext {
             BasicServer.startupBasicServer();
             TlsGatewayConfig tlsConfig = TlsGatewayConfig.load(BasicServer.getMap(), System::getenv);
             if (tlsConfig.isEnabled()) {
+                applyResolvedTlsConfiguration(BasicServer.getMap(), tlsConfig);
+                new TlsKeyStoreProvisioner().provision(tlsConfig);
                 char[] keyStorePassword = tlsConfig.copyKeyStorePassword();
                 try {
                     preparingGateway = new EmbeddedTlsGateway(
@@ -119,6 +123,26 @@ public class NioServerContext {
             log.error("net-server 服务启动失败", exception);
             throw new IllegalStateException("net-server 服务启动失败", exception);
         }
+    }
+
+    static void applyResolvedTlsConfiguration(
+            Map<String, Object> configuration,
+            TlsGatewayConfig tlsConfig) {
+        String resolvedAddress = tlsConfig.getBindAddress().getHostAddress();
+        if (isAutomaticValue(configuration.get(BasicConstant.TLS_GATEWAY_PUBLIC_IP))) {
+            configuration.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, resolvedAddress);
+        }
+        if (isAutomaticValue(configuration.get(BasicConstant.MEDIA_STREAM_PUBLIC_HOST))) {
+            configuration.put(BasicConstant.MEDIA_STREAM_PUBLIC_HOST, resolvedAddress);
+        }
+        log.info("TLS 运行环境已解析: os={}, address={}, keyStore={}",
+                System.getProperty(BasicConstant.OS_NAME),
+                resolvedAddress,
+                tlsConfig.getKeyStorePath());
+    }
+
+    private static boolean isAutomaticValue(Object value) {
+        return value == null || TlsNetworkAddressResolver.isAutomatic(value.toString());
     }
 
     /**

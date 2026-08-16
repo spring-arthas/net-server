@@ -5,8 +5,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,6 +47,7 @@ public class TlsGatewayConfigTest {
         assertEquals(300_000, config.getIdleTimeoutMillis());
         assertEquals(512, config.getMaxConnections());
         assertEquals(65_536, config.getBufferSize());
+        assertTrue(config.isKeyStoreAutoCreate());
         assertFalse(config.toString().contains("private-value"));
     }
 
@@ -146,20 +151,82 @@ public class TlsGatewayConfigTest {
     }
 
     @Test
-    public void rejectsMissingPublicIp() throws Exception {
-        Path keyStore = temporaryFolder.newFile("net-server.p12").toPath();
-        assertInvalid(
-                configValues(),
-                environment(null, keyStore, ""),
-                "NET_SERVER_PUBLIC_IP");
+    public void resolvesPublicIpAutomaticallyWhenEnvironmentIsMissing()
+            throws UnknownHostException {
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, "auto");
+        values.put(BasicConstant.TLS_GATEWAY_KEYSTORE_PATH, "${user.home}/tls/net-server.p12");
+        InetAddress resolvedAddress = InetAddress.getByName("192.168.0.101");
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                name -> null,
+                name -> "user.home".equals(name)
+                        ? temporaryFolder.getRoot().getAbsolutePath()
+                        : "Mac OS X",
+                value -> resolvedAddress);
+
+        assertEquals("192.168.0.101", config.getBindAddress().getHostAddress());
     }
 
     @Test
-    public void rejectsMissingKeyStore() {
-        assertInvalid(
+    public void buildsDefaultKeyStorePathFromCurrentUserHome() {
+        TlsGatewayConfig config = TlsGatewayConfig.load(
                 configValues(),
                 environment("172.21.32.64", null, ""),
-                "NET_SERVER_TLS_KEYSTORE");
+                name -> {
+                    if ("user.home".equals(name)) {
+                        return temporaryFolder.getRoot().getAbsolutePath();
+                    }
+                    return "Mac OS X";
+                });
+
+        assertEquals(
+                temporaryFolder.getRoot().toPath().resolve(".net-server/tls/net-server.p12")
+                        .toAbsolutePath().normalize(),
+                config.getKeyStorePath());
+    }
+
+    @Test
+    public void allowsAutomaticKeyStoreCreationToBeDisabled() throws IOException {
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_KEYSTORE_AUTO_CREATE, "false");
+        Path keyStore = temporaryFolder.newFile("manual.p12").toPath();
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                environment("172.21.32.64", keyStore, ""));
+
+        assertFalse(config.isKeyStoreAutoCreate());
+    }
+
+    @Test
+    public void keyStoreAutoCreationEnvironmentOverridesConfiguration() throws IOException {
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_KEYSTORE_AUTO_CREATE, "false");
+        Path keyStore = temporaryFolder.newFile("environment-auto-create.p12").toPath();
+        Function<String, String> baseEnvironment =
+                environment("172.21.32.64", keyStore, "");
+
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                name -> "NET_SERVER_TLS_KEYSTORE_AUTO_CREATE".equals(name)
+                        ? "true"
+                        : baseEnvironment.apply(name));
+
+        assertTrue(config.isKeyStoreAutoCreate());
+    }
+
+    @Test
+    public void choosesOperatingSystemSpecificKeyStoreConfiguration() {
+        Map<String, Object> values = configValues();
+        values.put(BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_WINDOWS, "${user.home}/windows/net-server.p12");
+        values.put(BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_MACOS, "${user.home}/macos/net-server.p12");
+        values.put(BasicConstant.TLS_GATEWAY_KEYSTORE_PATH_LINUX, "${user.home}/linux/net-server.p12");
+
+        assertOperatingSystemPath(values, "Windows 11", "windows/net-server.p12");
+        assertOperatingSystemPath(values, "Mac OS X", "macos/net-server.p12");
+        assertOperatingSystemPath(values, "Linux", "linux/net-server.p12");
     }
 
     @Test
@@ -284,6 +351,21 @@ public class TlsGatewayConfigTest {
         Path directory = Files.createDirectories(
                 userHome.resolve(".net-server").resolve(tlsDirectory));
         return Files.createFile(directory.resolve("net-server.p12"));
+    }
+
+    private void assertOperatingSystemPath(
+            Map<String, Object> values,
+            String osName,
+            String expectedRelativePath) {
+        Path userHome = temporaryFolder.getRoot().toPath();
+        TlsGatewayConfig config = TlsGatewayConfig.load(
+                values,
+                environment("172.21.32.64", null, ""),
+                systemProperties(osName, userHome));
+
+        assertEquals(
+                Paths.get(userHome.toString(), expectedRelativePath).toAbsolutePath().normalize(),
+                config.getKeyStorePath());
     }
 
     private void assertEndpoint(TlsGatewayConfig config, String name, int port) {
