@@ -26,6 +26,23 @@ public class MediaServiceFactoryEndpointTest {
     }
 
     @Test
+    public void commandLineSystemPropertyOverridesStaticMediaHost() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(BasicConstant.MEDIA_STREAM_PUBLIC_HOST, "172.21.32.131");
+        String previous = System.getProperty("NET_SERVER_PUBLIC_IP");
+        try {
+            System.setProperty("NET_SERVER_PUBLIC_IP", "192.168.1.20");
+            assertEquals("192.168.1.20", MediaServiceFactory.publicHost(config, name -> null));
+        } finally {
+            if (previous == null) {
+                System.clearProperty("NET_SERVER_PUBLIC_IP");
+            } else {
+                System.setProperty("NET_SERVER_PUBLIC_IP", previous);
+            }
+        }
+    }
+
+    @Test
     public void configuredHostRemainsFallbackWhenGatewayEnvironmentIsMissing() {
         Map<String, Object> config = new HashMap<>();
         config.put(BasicConstant.MEDIA_STREAM_PUBLIC_HOST, "media.example.com");

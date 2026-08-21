@@ -7,6 +7,7 @@ import com.alibaba.server.nio.repository.dynamic.mapper.UserDynamicRepository;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.alibaba.server.nio.service.file.security.TokenSecretResolver;
+import com.alibaba.server.nio.service.file.StorageRootResolver;
 import com.alibaba.server.nio.tls.TlsNetworkAddressResolver;
 import org.apache.commons.lang.StringUtils;
 
@@ -62,7 +63,7 @@ public final class MediaServiceFactory {
                 .getBean(UserDynamicRepository.class);
         return new MediaAccessService(
                 fileService,
-                new SafeFileResolver(storageRoot(config)),
+                new SafeFileResolver(StorageRootResolver.resolve(config)),
                 tokenService,
                 stringConfig(config, BasicConstant.MEDIA_STREAM_PUBLIC_SCHEME, "https"),
                 publicHost,
@@ -85,6 +86,9 @@ public final class MediaServiceFactory {
             Function<String, String> environment,
             Function<String, InetAddress> addressResolver) {
         String gatewayPublicIp = environment.apply("NET_SERVER_PUBLIC_IP");
+        if (TlsNetworkAddressResolver.isAutomatic(gatewayPublicIp)) {
+            gatewayPublicIp = System.getProperty("NET_SERVER_PUBLIC_IP");
+        }
         if (!TlsNetworkAddressResolver.isAutomatic(gatewayPublicIp)) {
             // [修改] 播放 URL 与 TLS Gateway 共用公网地址，真机不会收到 localhost。
             return urlHost(gatewayPublicIp);
@@ -127,14 +131,6 @@ public final class MediaServiceFactory {
 
     public static int streamMaxThreads() {
         return intConfig(BasicServer.getMap(), BasicConstant.MEDIA_STREAM_MAX_THREADS, 64);
-    }
-
-    private static String storageRoot(Map<String, Object> config) {
-        Object os = config.get(BasicConstant.OS_NAME);
-        if (os != null && os.toString().contains("Win")) {
-            return stringConfig(config, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS, ".");
-        }
-        return stringConfig(config, BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC, ".");
     }
 
     private static String stringConfig(Map<String, Object> config, String key, String defaultValue) {

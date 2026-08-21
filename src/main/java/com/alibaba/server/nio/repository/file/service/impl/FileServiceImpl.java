@@ -6,6 +6,7 @@ import com.alibaba.server.common.SnowflakeIdWorkerUtil;
 import com.alibaba.server.common.YesOrNoEnum;
 import com.alibaba.server.nio.core.param.PageQueryParam;
 import com.alibaba.server.nio.core.result.PageResult;
+import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
@@ -19,6 +20,7 @@ import com.alibaba.server.nio.repository.file.service.param.FileCreateParam;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
+import com.alibaba.server.nio.service.file.StorageRootResolver;
 import com.alibaba.server.util.LocalTime;
 import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
@@ -1398,10 +1400,7 @@ public class FileServiceImpl implements FileService {
     }
 
     private Path resolveStorageRoot() {
-        String configuredRoot = NioServerContext.getValue(
-                com.alibaba.server.common.OSinfo.isWindows()
-                        ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS
-                        : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC);
+        String configuredRoot = StorageRootResolver.resolveRequired(BasicServer.getMap());
         if (StringUtils.isBlank(configuredRoot)) {
             throw new IllegalStateException("文件存储根目录未配置");
         }

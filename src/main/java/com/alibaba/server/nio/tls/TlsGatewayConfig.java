@@ -111,6 +111,7 @@ public final class TlsGatewayConfig {
         InetAddress bindAddress = addressResolver.apply(environmentOrConfig(
                 values,
                 environment,
+                systemProperty,
                 "NET_SERVER_PUBLIC_IP",
                 BasicConstant.TLS_GATEWAY_PUBLIC_IP,
                 TlsNetworkAddressResolver.AUTO));
@@ -209,12 +210,18 @@ public final class TlsGatewayConfig {
     private static String environmentOrConfig(
             Map<String, Object> values,
             Function<String, String> environment,
+            Function<String, String> systemProperty,
             String environmentName,
             String configKey,
             String defaultValue) {
         String environmentValue = environment.apply(environmentName);
         if (StringUtils.isNotBlank(environmentValue)) {
             return environmentValue.trim();
+        }
+        String systemValue = systemProperty.apply(environmentName);
+        if (StringUtils.isNotBlank(systemValue)) {
+            // [修改] 支持 java -jar --server-ip/positional IP，同时保留环境变量优先级。
+            return systemValue.trim();
         }
         String configValue = stringValue(values, configKey, defaultValue);
         // [修改] 直接 java -jar 启动不会经过脚本，允许从 server.properties 读取非敏感参数。

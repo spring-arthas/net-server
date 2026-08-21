@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.io.IOException;
 
 /**
  * @Auther: spring
@@ -26,6 +27,11 @@ import java.util.stream.Collectors;
 public class NetServer {
 
     public static void main( String[] args ) {
+        String commandLinePublicIp = resolveCommandLinePublicIp(args);
+        if (commandLinePublicIp != null) {
+            // [修改] Windows 直接使用 java -jar 启动时，命令行 IP 参与媒体地址和 TLS 地址解析。
+            System.setProperty("NET_SERVER_PUBLIC_IP", commandLinePublicIp);
+        }
         log.info("[" + LocalTime.formatDate(LocalDateTime.now()) + "] App | --> 当前操作系统类型: " + OSinfo.getOSname() + ", 可支持的最大线程数: " + Runtime.getRuntime().availableProcessors());
 
         try {
@@ -33,6 +39,7 @@ public class NetServer {
             NioServerContext.startupServerContext();
         } catch (IllegalStateException exception) {
             // [修改] TLS 证书、端口或后端启动失败时，单进程部署必须返回非零退出码。
+            showStartupFailureDialog(exception);
             System.exit(1);
         }
 
@@ -40,6 +47,75 @@ public class NetServer {
         //GlobalNettyServer.startServerBootstrap();
 
         //test();
+    }
+
+    static String resolveCommandLinePublicIp(String[] args) {
+        if (args == null) {
+            return null;
+        }
+        for (int index = 0; index < args.length; index++) {
+            String argument = args[index];
+            if (argument == null) {
+                continue;
+            }
+            if (argument.startsWith("--server-ip=")) {
+                return nonBlank(argument.substring("--server-ip=".length()));
+            }
+            if ("--server-ip".equals(argument) && index + 1 < args.length) {
+                return nonBlank(args[index + 1]);
+            }
+            if (index == 0 && !argument.startsWith("-")) {
+                return nonBlank(argument);
+            }
+        }
+        return null;
+    }
+
+    private static String nonBlank(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    // [修改] Finder 启动没有终端窗口，端口冲突时必须给出可见原因，避免用户误以为应用闪退。
+    private static void showStartupFailureDialog(Throwable exception) {
+        if (!OSinfo.isMacOS() && !OSinfo.isMacOSX()) {
+            return;
+        }
+
+        String message = hasPortConflict(exception)
+                ? "服务端口已被其他 Net Server 进程占用，请先关闭正在运行的服务后重试。"
+                : "服务启动失败，请从终端启动 Net Server 查看详细日志。";
+        String appleScript = "display alert "
+                + appleScriptString("Net Server 启动失败")
+                + " message "
+                + appleScriptString(message)
+                + " as critical";
+        try {
+            Process process = new ProcessBuilder("/usr/bin/osascript", "-e", appleScript).start();
+            process.waitFor();
+        } catch (IOException exceptionWhileShowingDialog) {
+            log.warn("无法显示 Net Server 启动失败提示, error={}", exceptionWhileShowingDialog.getMessage());
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static boolean hasPortConflict(Throwable exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof java.net.BindException
+                    || "Address already in use".equals(current.getMessage())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static String appleScriptString(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     private static void test() {

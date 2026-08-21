@@ -28,6 +28,7 @@ import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
+import com.alibaba.server.nio.service.file.StorageRootResolver;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -209,7 +210,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             new FileTransferAccessAuthorizer().requireDownloadAccess(fileDto, identity);
 
             // 3. 路径只能由数据库记录和服务端存储根目录解析，不能信任客户端路径
-            String storageRoot = String.valueOf(BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC));
+            String storageRoot = StorageRootResolver.resolve(BasicServer.getMap());
             File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
             if (file == null || !file.exists() || !file.isFile()) {
                 log.warn("文件系统中文件不存在: path={}", fileDto.getFilePath());
