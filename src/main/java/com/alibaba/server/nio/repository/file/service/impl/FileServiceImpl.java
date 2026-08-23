@@ -990,9 +990,7 @@ public class FileServiceImpl implements FileService {
         if (Objects.isNull(fileQueryParam.getUserId())) {
             throw new IllegalArgumentException("用户ID不能为空");
         }
-        if (Objects.isNull(fileQueryParam.getParentId()) || fileQueryParam.getParentId() <= 0) {
-            throw new IllegalArgumentException("目录ID不能为空");
-        }
+        // 允许 parentId 为空：为空时查询当前用户全部文件（mapper 中 parentId 为可选条件）
         // 默认分页参数
         if (fileQueryParam.getCurrentPage() < 1) {
             fileQueryParam.setCurrentPage(1);
@@ -1092,19 +1090,21 @@ public class FileServiceImpl implements FileService {
             throw new IllegalArgumentException("不能使用此方法删除目录");
         }
 
-        // 1. 删除文件系统文件
+        // 1. 先删除文件系统文件；失败时禁止继续删除数据库记录。
         String filePath = fileDo.getFilePath();
         if (filePath != null && !filePath.isEmpty()) {
-            File file = new File(filePath);
-            if (file.exists() && file.isFile()) {
-                boolean deleted = file.delete();
-                if (!deleted) {
-                    log.warn("文件系统删除失败: {}", filePath);
+            Path physicalFile = Paths.get(filePath).toAbsolutePath().normalize();
+            try {
+                if (Files.exists(physicalFile) && !Files.isRegularFile(physicalFile, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalStateException("文件路径不是普通文件: " + physicalFile);
                 }
+                Files.deleteIfExists(physicalFile);
+            } catch (IOException e) {
+                throw new IllegalStateException("文件系统删除失败: " + physicalFile, e);
             }
         }
 
-        // 2. 删除DB记录
+        // 2. 物理文件已删除或原本不存在，随后删除数据库记录。
         this.fileRepository.logicDelete(fileId);
         log.info("文件删除成功: fileId={}, fileName={}", fileId, fileDo.getFileName());
         return true;

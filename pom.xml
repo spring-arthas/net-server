@@ -192,6 +192,13 @@
       <version>3.2.2</version>
     </dependency>
 
+    <!-- 在 JVM 内提取视频首帧，供桌面端文件详情缩略图使用。 -->
+    <dependency>
+      <groupId>org.jcodec</groupId>
+      <artifactId>jcodec-javase</artifactId>
+      <version>0.2.5</version>
+    </dependency>
+
     <!-- 跨平台在 JVM 内生成本机 TLS CA 和服务端证书，避免依赖外部 OpenSSL。 -->
     <dependency>
       <groupId>org.bouncycastle</groupId>

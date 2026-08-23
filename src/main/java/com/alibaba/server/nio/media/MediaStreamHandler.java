@@ -11,7 +11,19 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
+import org.jcodec.api.FrameGrab;
+import org.jcodec.api.JCodecException;
+import org.jcodec.common.io.NIOUtils;
+import org.jcodec.common.io.SeekableByteChannel;
+import org.jcodec.common.model.Picture;
+import org.jcodec.scale.AWTUtil;
 
+import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -22,6 +34,8 @@ import java.util.Map;
 
 @Slf4j
 public class MediaStreamHandler implements HttpHandler {
+    private static final int THUMBNAIL_MAX_WIDTH = 960;
+    private static final int THUMBNAIL_MAX_HEIGHT = 540;
     private final MediaAccessService accessService;
     private final MediaTokenService tokenService;
     private final TransferTokenService transferTokenService;
@@ -58,6 +72,10 @@ public class MediaStreamHandler implements HttpHandler {
         try {
             if (path.startsWith("/media/play-url/")) {
                 handlePlayUrl(exchange);
+                return;
+            }
+            if (path.startsWith("/media/thumbnail/")) {
+                handleThumbnail(exchange);
                 return;
             }
             if (path.startsWith("/media/stream/")) {
@@ -141,6 +159,88 @@ public class MediaStreamHandler implements HttpHandler {
         } catch (MediaAccessException e) {
             sendJson(exchange, e.getStatusCode(), e.getMessage(), null);
         }
+    }
+
+    private void handleThumbnail(HttpExchange exchange) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendSimple(exchange, 405, "method not allowed");
+            return;
+        }
+
+        Long fileId = null;
+        try {
+            fileId = parseFileId(exchange.getRequestURI().getPath(), "/media/thumbnail/");
+            TransferTokenService.ValidationResult identity = requireTransferIdentity(exchange);
+            ResolvedMediaFile mediaFile = accessService.resolveForStreaming(
+                    fileId, identity.getUserId(), identity.getUserName());
+            BufferedImage source = createThumbnailSource(mediaFile);
+            if (source == null) {
+                sendSimple(exchange, 415, "unsupported preview format");
+                return;
+            }
+            BufferedImage thumbnail = scaleToFit(source, THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_HEIGHT);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(thumbnail, "jpg", output);
+            byte[] bytes = output.toByteArray();
+            Headers headers = exchange.getResponseHeaders();
+            headers.set("Content-Type", "image/jpeg");
+            headers.set("Cache-Control", "private, max-age=300");
+            headers.set("Content-Length", String.valueOf(bytes.length));
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream response = exchange.getResponseBody()) {
+                response.write(bytes);
+            }
+            log.debug("生成媒体缩略图成功，fileId={}, width={}, height={}",
+                    fileId, thumbnail.getWidth(), thumbnail.getHeight());
+        } catch (MediaAccessException e) {
+            log.warn("生成媒体缩略图被拒绝，fileId={}，原因={}", fileId, e.getMessage());
+            sendSimple(exchange, e.getStatusCode(), e.getMessage());
+        } catch (IOException e) {
+            log.error("生成媒体缩略图失败，fileId={}，原因={}", fileId, e.getMessage(), e);
+            sendSimple(exchange, 500, "缩略图生成失败");
+        }
+    }
+
+    private BufferedImage createThumbnailSource(ResolvedMediaFile mediaFile) throws IOException {
+        String fileName = mediaFile.getFileDto().getFileName();
+        File file = mediaFile.getFile();
+        if (MediaContentTypeResolver.isPreviewableImage(fileName)) {
+            return ImageIO.read(file);
+        }
+        if (MediaContentTypeResolver.isPlayableVideo(fileName)) {
+            try (SeekableByteChannel channel = NIOUtils.readableChannel(file)) {
+                Picture picture = FrameGrab.createFrameGrab(channel).getNativeFrame();
+                return picture == null ? null : AWTUtil.toBufferedImage(picture);
+            } catch (JCodecException e) {
+                throw new IOException("无法解析视频首帧", e);
+            }
+        }
+        return null;
+    }
+
+    private BufferedImage scaleToFit(BufferedImage source, int maxWidth, int maxHeight) {
+        double ratio = Math.min((double) maxWidth / source.getWidth(),
+                (double) maxHeight / source.getHeight());
+        ratio = Math.min(1.0D, ratio);
+        int width = Math.max(1, (int) Math.round(source.getWidth() * ratio));
+        int height = Math.max(1, (int) Math.round(source.getHeight() * ratio));
+        if (width == source.getWidth() && height == source.getHeight()
+                && source.getType() == BufferedImage.TYPE_INT_RGB) {
+            return source;
+        }
+        BufferedImage target = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = target.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setColor(java.awt.Color.WHITE);
+            graphics.fillRect(0, 0, width, height);
+            graphics.drawImage(source, 0, 0, width, height, null);
+        } finally {
+            graphics.dispose();
+        }
+        return target;
     }
 
     private void handleStream(HttpExchange exchange) throws IOException {

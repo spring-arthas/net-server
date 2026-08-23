@@ -42,6 +42,7 @@ public final class MediaStreamServer {
                 transferTokenService,
                 bufferSize);
         httpServer.createContext("/media/play-url", handler);
+        httpServer.createContext("/media/thumbnail", handler);
         httpServer.createContext("/media/stream", handler);
         httpServer.createContext("/media/seek", handler);
         httpServer.setExecutor(Executors.newFixedThreadPool(maxThreads));

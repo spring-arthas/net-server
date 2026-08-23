@@ -1506,12 +1506,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             Integer userId = context.getUserDTO().getId().intValue();
-            Long dirId = request.getLong("dirId"); // 所选择的目录id(目录树上点击的目录Id、目录下拉树中选择目录Id)
+            Long dirId = request.getLong("dirId"); // 所选择的目录id；null 或 <=0 表示查询当前用户全部文件
             String fileName = request.getString("fileName"); //
-            if (dirId == null || dirId <= 0) {
-                sendErrorResponse(context, FrameType.FILE_RESPONSE, "请选择目录后再查询文件", "INVALID_REQUEST");
-                return;
-            }
+            // 允许 dirId 为空/<=0：此时查询该用户在所有目录下的全部文件（mapper 中 parentId 为可选条件）。
             int pageNum = request.getIntValue("pageNum");
             int pageSize = request.getIntValue("pageSize");
             if (pageNum < 1) {
@@ -1523,8 +1520,10 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
 
             FileQueryParam fileQueryParam = new FileQueryParam();
             fileQueryParam.setUserId(userId);
-            // 文件名搜索仍然限定在左侧目录树当前选中的目录内，不能退化为全用户搜索。
-            fileQueryParam.setParentId(dirId);
+            // 仅在明确指定目录时才限定 parentId；dirId 为空/<=0 时查询该用户全部文件。
+            if (dirId != null && dirId > 0) {
+                fileQueryParam.setParentId(dirId);
+            }
             fileQueryParam.setFileName(null);
             if (org.apache.commons.lang.StringUtils.isNotBlank(fileName)) {
                 fileQueryParam.setFileName(fileName);
@@ -1589,11 +1588,22 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleFileDelete(FileUploadFrame frame, SocketChannelContext context) {
         try {
             JSONObject request = JSON.parseObject(frame.getDataAsString());
-            Long fileId = request.getLong("fileId");
-
-            getFileService().deleteFileWithFs(fileId);
-            sendSuccessResponse(context, FrameType.FILE_RESPONSE, "文件删除成功", null);
-            log.info("文件删除成功: fileId={}", fileId);
+            JSONArray fileIds = request.getJSONArray("fileIds");
+            if (fileIds != null && !fileIds.isEmpty()) {
+                if (fileIds.size() > 200) {
+                    throw new IllegalArgumentException("单次最多删除200个文件");
+                }
+                for (int i = 0; i < fileIds.size(); i++) {
+                    getFileService().deleteFileWithFs(fileIds.getLong(i));
+                }
+                sendSuccessResponse(context, FrameType.FILE_RESPONSE, "批量删除文件成功", null);
+                log.info("批量删除文件成功: count={}", fileIds.size());
+            } else {
+                Long fileId = request.getLong("fileId");
+                getFileService().deleteFileWithFs(fileId);
+                sendSuccessResponse(context, FrameType.FILE_RESPONSE, "文件删除成功", null);
+                log.info("文件删除成功: fileId={}", fileId);
+            }
         } catch (IllegalArgumentException e) {
             sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "FILE_NOT_FOUND");
         } catch (RuntimeException e) {
