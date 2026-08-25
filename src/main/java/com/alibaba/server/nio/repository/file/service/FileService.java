@@ -230,11 +230,23 @@ public interface FileService {
     FileDto renameFile(Long fileId, String newFileName);
 
     /**
-     * 移动单个文件（DB + 文件系统）
+     * 移动网盘文件（文件系统 + 数据库）。
      *
-     * @param fileId         文件ID
-     * @param targetParentId 目标目录ID
-     * @return 移动后的文件信息
+     * @param fileId 待移动的文件 ID
+     * @param targetParentId 目标目录 ID
+     * @param userDTO 当前登录用户，用于归属校验
      */
     FileDto moveFile(Long fileId, Long targetParentId);
+
+    /**
+     * 移动网盘文件，并校验当前登录用户对文件的归属。
+     *
+     * @param fileId 待移动的文件 ID
+     * @param targetParentId 目标目录 ID
+     * @param userDTO 当前登录用户
+     * @return 移动后的文件信息
+     */
+    default FileDto moveFile(Long fileId, Long targetParentId, UserDTO userDTO) {
+        return moveFile(fileId, targetParentId);
+    }
 }

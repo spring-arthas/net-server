@@ -55,7 +55,7 @@ public class FileDownloadClient {
         // 要下载的文件 ID
         Long fileId = 1L;
         // 保存目录
-        String saveDir = "/Users/hljy/Downloads/";
+        String saveDir = "/Users/debugcode/Downloads/";
 
         try {
             downloadFile(fileId, saveDir);

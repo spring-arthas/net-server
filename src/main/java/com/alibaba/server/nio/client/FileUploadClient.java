@@ -60,7 +60,7 @@ public class FileUploadClient {
     /**
      * 测试文件路径
      */
-    private static final String TEST_FILE_PATH = "/Users/hljy/Downloads/中式美女在旗袍店试穿旗袍_小样.mov";
+    private static final String TEST_FILE_PATH = "/Users/debugcode/Downloads/中式美女在旗袍店试穿旗袍_小样.mov";
 
     public static void main(String[] args) {
         SocketChannel socketChannel = null;

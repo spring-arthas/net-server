@@ -5,6 +5,7 @@ import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam;
+import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -278,19 +279,43 @@ public class FileServiceUploadDirectoryTest {
     }
 
     @Test
-    public void renamingDirectoryStillUpdatesDatabaseWhenPhysicalDirectoryIsMissing() {
-        Path missingDirectory = storageRoot.resolve(USER_NAME).resolve("历史目录");
-        directories.put(1L, directory(1L, -1L, USER_NAME, USER_ID, USER_NAME));
-        directories.put(2L, directory(2L, 1L, "历史目录", USER_ID, USER_NAME));
-        directories.get(1L).setFilePath(storageRoot.resolve(USER_NAME).toString());
-        directories.get(2L).setFilePath(missingDirectory.toString());
+    public void movingFileMovesPhysicalFileAndUpdatesDatabaseParentAndPath() throws Exception {
+        addValidChain();
+        FileDo destination = directory(4L, 1L, "归档", USER_ID, USER_NAME);
+        directories.put(destination.getId(), destination);
+        Path sourceDirectory = storageRoot.resolve(USER_NAME).resolve("果果").resolve("日常");
+        Path source = sourceDirectory.resolve("task-1_movie.mp4");
+        Files.createDirectories(sourceDirectory);
+        Files.write(source, new byte[] { 1, 2, 3 });
+        FileDo file = directory(5L, 3L, "movie.mp4", USER_ID, USER_NAME);
+        file.setIsFile("Y");
+        file.setFilePath(source.toString());
+        directories.put(file.getId(), file);
 
-        fileService.updateDirectory(2L, "新目录");
+        fileService.moveFile(5L, 4L, user());
 
-        assertEquals("新目录", directories.get(2L).getFileName());
-        assertEquals(storageRoot.resolve(USER_NAME).resolve("新目录").toString(),
-                directories.get(2L).getFilePath());
-        assertFalse(Files.exists(missingDirectory));
+        Path destinationFile = storageRoot.resolve(USER_NAME).resolve("归档").resolve("task-1_movie.mp4");
+        assertFalse(Files.exists(source));
+        assertTrue(Files.isRegularFile(destinationFile));
+        assertEquals(Long.valueOf(4L), directories.get(5L).getParentId());
+        assertEquals(destinationFile.toString(), directories.get(5L).getFilePath());
+    }
+
+    @Test
+    public void movingFileRejectsAFileOwnedByAnotherUserWithoutTouchingDisk() throws Exception {
+        addValidChain();
+        Path sourceDirectory = storageRoot.resolve(USER_NAME).resolve("果果").resolve("日常");
+        Path source = sourceDirectory.resolve("task-1_movie.mp4");
+        Files.createDirectories(sourceDirectory);
+        Files.write(source, new byte[] { 1, 2, 3 });
+        FileDo file = directory(5L, 3L, "movie.mp4", 99, "other-user");
+        file.setIsFile("Y");
+        file.setFilePath(source.toString());
+        directories.put(file.getId(), file);
+
+        assertRejected("文件不属于当前用户", () -> fileService.moveFile(5L, 2L, user()));
+        assertTrue(Files.isRegularFile(source));
+        assertEquals(Long.valueOf(3L), directories.get(5L).getParentId());
     }
 
     @Test
@@ -384,6 +409,13 @@ public class FileServiceUploadDirectoryTest {
         directory.setIsExist("Y");
         directory.setDel("N");
         return directory;
+    }
+
+    private UserDTO user() {
+        UserDTO user = new UserDTO();
+        user.setId(USER_ID.longValue());
+        user.setUserName(USER_NAME);
+        return user;
     }
 
     private void assertRejected(String message, ThrowingRunnable runnable) throws Exception {

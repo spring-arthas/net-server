@@ -1337,6 +1337,23 @@ public class FileServiceImpl implements FileService {
         return getFileDetail(fileId);
     }
 
+    @Override
+    public FileDto moveFile(Long fileId, Long targetParentId, UserDTO userDTO) {
+        if (userDTO == null || userDTO.getId() == null || StringUtils.isBlank(userDTO.getUserName())) {
+            throw new IllegalArgumentException("当前用户信息无效");
+        }
+        if (fileId == null) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        FileDo fileDo = this.fileRepository.get(fileId);
+        Integer userId = Integer.valueOf(String.valueOf(userDTO.getId()));
+        if (fileDo == null || !userId.equals(fileDo.getUserId())
+                || !userDTO.getUserName().trim().equals(fileDo.getUserName())) {
+            throw new IllegalArgumentException("文件不属于当前用户");
+        }
+        return moveFile(fileId, targetParentId);
+    }
+
     private Path resolveFilePathForMutation(FileDo fileDo) {
         if (StringUtils.isBlank(fileDo.getFilePath())) {
             throw new IllegalStateException("文件物理路径为空: fileId=" + fileDo.getId());
