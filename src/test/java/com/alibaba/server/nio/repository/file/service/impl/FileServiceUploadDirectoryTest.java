@@ -4,6 +4,7 @@ import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
+import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -60,11 +61,45 @@ public class FileServiceUploadDirectoryTest {
                         if (current != null && update.getFilePath() != null) {
                             current.setFilePath(update.getFilePath());
                         }
+                        if (current != null && update.getFileName() != null) {
+                            current.setFileName(update.getFileName());
+                        }
+                        if (current != null && update.getParentId() != null) {
+                            current.setParentId(update.getParentId());
+                        }
+                        if (current != null && update.getHasChild() != null) {
+                            current.setHasChild(update.getHasChild());
+                        }
                         if (current != null && update.getUserName() != null) {
                             current.setUserName(update.getUserName());
                         }
                         updates.add(update);
                         return null;
+                    }
+                    if ("batchUpdateSelective".equals(methodName)) {
+                        @SuppressWarnings("unchecked")
+                        List<FileDo> batch = (List<FileDo>) args[0];
+                        for (FileDo update : batch) {
+                            FileDo current = directories.get(update.getId());
+                            if (current != null && update.getFilePath() != null) {
+                                current.setFilePath(update.getFilePath());
+                            }
+                            updates.add(update);
+                        }
+                        return null;
+                    }
+                    if ("getAssignFiles".equals(methodName)) {
+                        FileDalQueryParam query = (FileDalQueryParam) args[0];
+                        List<FileDo> result = new ArrayList<>();
+                        for (FileDo item : directories.values()) {
+                            if ((query.getParentId() == null || query.getParentId().equals(item.getParentId()))
+                                    && (query.getFileName() == null || query.getFileName().equals(item.getFileName()))
+                                    && (query.getIsFile() == null || query.getIsFile().equals(item.getIsFile()))
+                                    && (query.getDel() == null || query.getDel().equals(item.getDel()))) {
+                                result.add(item);
+                            }
+                        }
+                        return result;
                     }
                     if ("toString".equals(methodName)) {
                         return "InMemoryFileRepository";
@@ -210,6 +245,73 @@ public class FileServiceUploadDirectoryTest {
         locksField.setAccessible(true);
         Map<?, ?> locks = (Map<?, ?>) locksField.get(fileService);
         assertTrue(locks.isEmpty());
+    }
+
+    @Test
+    public void renamingDirectoryUpdatesDescendantVideoPathsBeforeReturning() throws Exception {
+        Path oldDirectory = storageRoot.resolve(USER_NAME).resolve("旧目录");
+        Path nestedDirectory = oldDirectory.resolve("子目录");
+        Path video = nestedDirectory.resolve("movie.mp4");
+        Files.createDirectories(nestedDirectory);
+        Files.write(video, new byte[] { 1, 2, 3 });
+
+        directories.put(1L, directory(1L, -1L, USER_NAME, USER_ID, USER_NAME));
+        directories.put(2L, directory(2L, 1L, "旧目录", USER_ID, USER_NAME));
+        directories.put(3L, directory(3L, 2L, "子目录", USER_ID, USER_NAME));
+        FileDo videoRecord = directory(4L, 3L, "movie.mp4", USER_ID, USER_NAME);
+        videoRecord.setIsFile("Y");
+        directories.put(4L, videoRecord);
+        directories.get(1L).setFilePath(storageRoot.resolve(USER_NAME).toString());
+        directories.get(2L).setFilePath(oldDirectory.toString());
+        directories.get(3L).setFilePath(nestedDirectory.toString());
+        videoRecord.setFilePath(video.toString());
+
+        fileService.updateDirectory(2L, "新目录");
+
+        Path renamedVideo = storageRoot.resolve(USER_NAME).resolve("新目录").resolve("子目录").resolve("movie.mp4");
+        assertTrue(Files.isRegularFile(renamedVideo));
+        assertEquals(storageRoot.resolve(USER_NAME).resolve("新目录").toString(), directories.get(2L).getFilePath());
+        assertEquals(storageRoot.resolve(USER_NAME).resolve("新目录").resolve("子目录").toString(), directories.get(3L).getFilePath());
+        assertEquals(renamedVideo.toString(), directories.get(4L).getFilePath());
+    }
+
+    @Test
+    public void movingDirectoryUpdatesDescendantPathsAndBothParentStatesBeforeReturning() throws Exception {
+        Path sourceParentDirectory = storageRoot.resolve(USER_NAME).resolve("原父目录");
+        Path sourceDirectory = sourceParentDirectory.resolve("源目录");
+        Path nestedDirectory = sourceDirectory.resolve("子目录");
+        Path video = nestedDirectory.resolve("movie.mp4");
+        Path targetDirectory = storageRoot.resolve(USER_NAME).resolve("目标目录");
+        Files.createDirectories(nestedDirectory);
+        Files.createDirectories(targetDirectory);
+        Files.write(video, new byte[] { 1, 2, 3 });
+
+        directories.put(1L, directory(1L, -1L, USER_NAME, USER_ID, USER_NAME));
+        directories.put(6L, directory(6L, 1L, "原父目录", USER_ID, USER_NAME));
+        directories.put(2L, directory(2L, 6L, "源目录", USER_ID, USER_NAME));
+        directories.put(3L, directory(3L, 2L, "子目录", USER_ID, USER_NAME));
+        directories.put(5L, directory(5L, 1L, "目标目录", USER_ID, USER_NAME));
+        FileDo videoRecord = directory(4L, 3L, "movie.mp4", USER_ID, USER_NAME);
+        videoRecord.setIsFile("Y");
+        directories.put(4L, videoRecord);
+        directories.get(1L).setFilePath(storageRoot.resolve(USER_NAME).toString());
+        directories.get(6L).setFilePath(sourceParentDirectory.toString());
+        directories.get(2L).setFilePath(sourceDirectory.toString());
+        directories.get(3L).setFilePath(nestedDirectory.toString());
+        directories.get(5L).setFilePath(targetDirectory.toString());
+        videoRecord.setFilePath(video.toString());
+
+        fileService.moveDirectory(2L, 5L);
+
+        Path movedVideo = targetDirectory.resolve("源目录").resolve("子目录").resolve("movie.mp4");
+        assertTrue(Files.isRegularFile(movedVideo));
+        assertFalse(Files.exists(sourceDirectory));
+        assertEquals(Long.valueOf(5L), directories.get(2L).getParentId());
+        assertEquals(targetDirectory.resolve("源目录").toString(), directories.get(2L).getFilePath());
+        assertEquals(targetDirectory.resolve("源目录").resolve("子目录").toString(), directories.get(3L).getFilePath());
+        assertEquals(movedVideo.toString(), directories.get(4L).getFilePath());
+        assertEquals("N", directories.get(6L).getHasChild());
+        assertEquals("Y", directories.get(5L).getHasChild());
     }
 
     private void addValidChain() {

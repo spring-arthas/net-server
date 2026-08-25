@@ -41,7 +41,6 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -794,15 +793,17 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = RuntimeException.class)
     public FileDto updateDirectory(Long dirId, String newName) {
         // 1. 校验参数
-        if (newName == null || newName.trim().isEmpty()) {
+        if (dirId == null || newName == null || newName.trim().isEmpty()) {
             throw new IllegalArgumentException("新名称不能为空");
         }
         newName = newName.trim();
         if (newName.length() > MAX_DIR_NAME_LENGTH) {
             throw new IllegalArgumentException("目录名称超过" + MAX_DIR_NAME_LENGTH + "个字符");
         }
+        validatePathSegment(newName);
 
         // 2. 获取目录信息
         FileDo dirDo = this.fileRepository.get(dirId);
@@ -814,66 +815,54 @@ public class FileServiceImpl implements FileService {
         if (dirDo.getParentId() != null && dirDo.getParentId() == -1L) {
             throw new IllegalArgumentException("顶层目录名称不允许修改");
         }
+        if (newName.equals(dirDo.getFileName())) {
+            return this.doToDto(dirDo);
+        }
 
         // 3. 检查同级重名（排除自身）
         if (existsSameName(dirDo.getParentId(), newName, dirId)) {
             throw new IllegalArgumentException("同级目录已存在同名目录");
         }
 
-        // 4. 重命名文件系统目录
-        String oldPath = buildDirectoryPath(dirId);
-        String parentPath = oldPath.substring(0, oldPath.lastIndexOf(File.separator));
-        String newPath = parentPath + File.separator + newName;
-        File oldDir = new File(oldPath);
-        File newDir = new File(newPath);
-        if (oldDir.exists() && oldDir.isDirectory()) {
-            if (!oldDir.renameTo(newDir)) {
-                throw new RuntimeException("文件系统目录重命名失败");
-            }
+        // 4. 先完成物理目录移动，再同步更新目录树中的全部数据库路径。
+        Path oldDirectoryPath = requireExistingDirectory(buildDirectoryPath(dirId), "待重命名目录");
+        Path parentPath = oldDirectoryPath.getParent();
+        if (parentPath == null) {
+            throw new IllegalStateException("待重命名目录缺少父路径");
         }
+        Path newDirectoryPath = parentPath.resolve(newName).normalize();
+        List<FileDo> descendants = collectAllDescendants(dirId);
+        moveDirectoryOnFileSystem(oldDirectoryPath, newDirectoryPath, "重命名");
 
-        // 5. 更新DB记录
-        FileDo updateDo = new FileDo();
-        updateDo.setId(dirId);
-        updateDo.setFileName(newName);
-        updateDo.setFilePath(newPath);
-        updateDo.setGmtModified(new Date());
-        this.fileRepository.updateSelective(updateDo);
+        try {
+            FileDo updateDo = new FileDo();
+            updateDo.setId(dirId);
+            updateDo.setFileName(newName);
+            updateDo.setFilePath(newDirectoryPath.toString());
+            updateDo.setGmtModified(new Date());
+            this.fileRepository.updateSelective(updateDo);
 
-        // 6. 异步批量更新所有子节点的 filePath（替换路径前缀，不阻塞接口响应）
-        final String oldPathFinal = oldPath;
-        final String newPathFinal = newPath;
-        CompletableFuture.runAsync(() -> {
-            try {
-                List<FileDo> descendants = collectAllDescendants(dirId);
-                if (!descendants.isEmpty()) {
-                    Date now = new Date();
-                    List<FileDo> updates = new ArrayList<>(descendants.size());
-                    for (FileDo desc : descendants) {
-                        if (desc.getFilePath() != null && desc.getFilePath().startsWith(oldPathFinal)) {
-                            FileDo up = new FileDo();
-                            up.setId(desc.getId());
-                            up.setFilePath(newPathFinal + desc.getFilePath().substring(oldPathFinal.length()));
-                            up.setGmtModified(now);
-                            updates.add(up);
-                        }
-                    }
-                    if (!updates.isEmpty()) {
-                        fileRepository.batchUpdateSelective(updates);
-                        log.info("异步更新子节点filePath完成: dirId={}, 更新数量={}", dirId, updates.size());
-                    }
-                }
-            } catch (Exception e) {
-                log.error("异步更新子节点filePath失败: dirId={}", dirId, e);
-            }
-        });
+            // 必须在成功响应前完成，否则媒体服务会从旧 file_path 读取并返回 404。
+            updateDescendantPaths(descendants, oldDirectoryPath, newDirectoryPath);
+        } catch (RuntimeException e) {
+            restoreDirectoryAfterDatabaseFailure(newDirectoryPath, oldDirectoryPath, dirId, e);
+            throw e;
+        }
 
         log.info("更新目录成功: id={}, newName={}", dirId, newName);
         return this.doToDto(this.fileRepository.get(dirId));
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = RuntimeException.class)
     public FileDto moveDirectory(Long dirId, Long targetParentId) {
+        if (dirId == null || targetParentId == null) {
+            throw new IllegalArgumentException("目录ID和目标父目录ID不能为空");
+        }
+        if (dirId.equals(targetParentId)) {
+            throw new IllegalArgumentException("目录不能移动到自身");
+        }
+
         // 1. 校验目标父目录
         if (!isDirectory(targetParentId)) {
             throw new IllegalArgumentException("目标父目录不存在或不是目录类型");
@@ -885,37 +874,45 @@ public class FileServiceImpl implements FileService {
             throw new IllegalArgumentException("目录不存在");
         }
         rejectChatAttachmentDirectoryMutation(dirDo);
+        if (Long.valueOf(-1L).equals(dirDo.getParentId())) {
+            throw new IllegalArgumentException("顶层目录不允许移动");
+        }
+        if (targetParentId.equals(dirDo.getParentId())) {
+            return this.doToDto(dirDo);
+        }
+        Long originalParentId = dirDo.getParentId();
+
+        List<FileDo> descendants = collectAllDescendants(dirId);
+        if (descendants.stream().anyMatch(item -> targetParentId.equals(item.getId()))) {
+            throw new IllegalArgumentException("目录不能移动到自己的子目录");
+        }
 
         // 3. 检查目标目录下是否有同名
         if (existsSameName(targetParentId, dirDo.getFileName(), null)) {
             throw new IllegalArgumentException("目标目录下已存在同名目录");
         }
 
-        // 4. 移动文件系统目录
-        String oldPath = buildDirectoryPath(dirId);
-        String targetParentPath = buildDirectoryPath(targetParentId);
-        String newPath = targetParentPath + File.separator + dirDo.getFileName();
-        File oldDir = new File(oldPath);
-        File newDir = new File(newPath);
-        if (oldDir.exists() && oldDir.isDirectory()) {
-            if (!oldDir.renameTo(newDir)) {
-                throw new RuntimeException("文件系统目录移动失败");
-            }
+        // 4. 移动物理目录，并把整个子树的 file_path 同步到数据库。
+        Path oldDirectoryPath = requireExistingDirectory(buildDirectoryPath(dirId), "待移动目录");
+        Path targetParentPath = requireExistingDirectory(buildDirectoryPath(targetParentId), "目标父目录");
+        Path newDirectoryPath = targetParentPath.resolve(dirDo.getFileName()).normalize();
+        moveDirectoryOnFileSystem(oldDirectoryPath, newDirectoryPath, "移动");
+
+        try {
+            FileDo updateDo = new FileDo();
+            updateDo.setId(dirId);
+            updateDo.setParentId(targetParentId);
+            updateDo.setFilePath(newDirectoryPath.toString());
+            updateDo.setGmtModified(new Date());
+            this.fileRepository.updateSelective(updateDo);
+
+            updateDescendantPaths(descendants, oldDirectoryPath, newDirectoryPath);
+            refreshParentHasChild(originalParentId);
+            refreshParentHasChild(targetParentId);
+        } catch (RuntimeException e) {
+            restoreDirectoryAfterDatabaseFailure(newDirectoryPath, oldDirectoryPath, dirId, e);
+            throw e;
         }
-
-        // 5. 更新DB记录
-        FileDo updateDo = new FileDo();
-        updateDo.setId(dirId);
-        updateDo.setParentId(targetParentId);
-        updateDo.setFilePath(newPath);
-        updateDo.setGmtModified(new Date());
-        this.fileRepository.updateSelective(updateDo);
-
-        // 6. 更新目标父目录的hasChild状态
-        FileDo parentUpdate = new FileDo();
-        parentUpdate.setId(targetParentId);
-        parentUpdate.setHasChild(YesOrNoEnum.Y.name());
-        this.fileRepository.updateSelective(parentUpdate);
 
         log.info("移动目录成功: id={}, targetParentId={}", dirId, targetParentId);
         return this.doToDto(this.fileRepository.get(dirId));
@@ -925,18 +922,81 @@ public class FileServiceImpl implements FileService {
      * 递归收集指定目录下的所有子孙节点（目录+文件）
      */
     private List<FileDo> collectAllDescendants(Long parentId) {
-        List<FileDo> result = new ArrayList<>();
-        FileDalQueryParam queryParam = new FileDalQueryParam();
-        queryParam.setParentId(parentId);
-        queryParam.setDel(YesOrNoEnum.N.name());
-        List<FileDo> children = this.fileRepository.getAssignFiles(queryParam);
-        if (!CollectionUtils.isEmpty(children)) {
-            result.addAll(children);
-            for (FileDo child : children) {
-                result.addAll(collectAllDescendants(child.getId()));
-            }
+        return collectActiveDescendants(parentId, new HashSet<Long>());
+    }
+
+    private void updateDescendantPaths(List<FileDo> descendants, Path oldPath, Path newPath) {
+        if (descendants.isEmpty()) {
+            return;
         }
-        return result;
+        Date now = new Date();
+        List<FileDo> updates = new ArrayList<>(descendants.size());
+        for (FileDo descendant : descendants) {
+            if (StringUtils.isBlank(descendant.getFilePath())) {
+                throw new IllegalStateException("子节点文件路径为空: id=" + descendant.getId());
+            }
+            Path descendantPath = Paths.get(descendant.getFilePath()).toAbsolutePath().normalize();
+            if (!descendantPath.startsWith(oldPath)) {
+                throw new IllegalStateException("子节点文件路径不属于待移动目录: id=" + descendant.getId());
+            }
+            FileDo update = new FileDo();
+            update.setId(descendant.getId());
+            update.setFilePath(newPath.resolve(oldPath.relativize(descendantPath)).toString());
+            update.setGmtModified(now);
+            updates.add(update);
+        }
+        if (!updates.isEmpty()) {
+            fileRepository.batchUpdateSelective(updates);
+            log.info("同步更新子节点filePath完成: oldPath={}, newPath={}, 更新数量={}",
+                    oldPath, newPath, updates.size());
+        }
+    }
+
+    private Path requireExistingDirectory(String directoryPath, String description) {
+        if (StringUtils.isBlank(directoryPath)) {
+            throw new IllegalStateException(description + "路径为空");
+        }
+        Path path = Paths.get(directoryPath).toAbsolutePath().normalize();
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalStateException(description + "不存在: " + path);
+        }
+        if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalStateException(description + "不是安全目录: " + path);
+        }
+        // file_path 存储的是规范绝对路径而非 realPath；macOS 的 /var 与 /private/var
+        // 会指向同一位置，若这里改成 realPath，会使子节点的已存路径无法正确替换前缀。
+        return path;
+    }
+
+    private void moveDirectoryOnFileSystem(Path sourcePath, Path targetPath, String operation) {
+        if (sourcePath.equals(targetPath)) {
+            return;
+        }
+        if (targetPath.startsWith(sourcePath)) {
+            throw new IllegalArgumentException("目录不能移动到自身或自己的子目录");
+        }
+        if (Files.exists(targetPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("目标目录已存在: " + targetPath.getFileName());
+        }
+        try {
+            Files.move(sourcePath, targetPath);
+        } catch (IOException e) {
+            throw new IllegalStateException("文件系统目录" + operation + "失败: " + sourcePath, e);
+        }
+    }
+
+    private void restoreDirectoryAfterDatabaseFailure(
+            Path currentPath, Path originalPath, Long dirId, RuntimeException originalException) {
+        try {
+            if (Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.exists(originalPath, LinkOption.NOFOLLOW_LINKS)) {
+                Files.move(currentPath, originalPath);
+            }
+        } catch (IOException rollbackException) {
+            log.error("目录数据库更新失败后恢复物理路径失败: dirId={}, currentPath={}, originalPath={}",
+                    dirId, currentPath, originalPath, rollbackException);
+            originalException.addSuppressed(rollbackException);
+        }
     }
 
     @Override
