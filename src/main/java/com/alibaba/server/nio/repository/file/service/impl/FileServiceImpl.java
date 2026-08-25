@@ -825,14 +825,21 @@ public class FileServiceImpl implements FileService {
         }
 
         // 4. 先完成物理目录移动，再同步更新目录树中的全部数据库路径。
-        Path oldDirectoryPath = requireExistingDirectory(buildDirectoryPath(dirId), "待重命名目录");
+        Path oldDirectoryPath = resolveDirectoryPathForMutation(
+                dirDo, buildDirectoryPath(dirId), "待重命名目录");
         Path parentPath = oldDirectoryPath.getParent();
         if (parentPath == null) {
             throw new IllegalStateException("待重命名目录缺少父路径");
         }
         Path newDirectoryPath = parentPath.resolve(newName).normalize();
         List<FileDo> descendants = collectAllDescendants(dirId);
-        moveDirectoryOnFileSystem(oldDirectoryPath, newDirectoryPath, "重命名");
+        boolean physicalDirectoryExists = Files.exists(oldDirectoryPath, LinkOption.NOFOLLOW_LINKS);
+        if (physicalDirectoryExists) {
+            moveDirectoryOnFileSystem(oldDirectoryPath, newDirectoryPath, "重命名");
+        } else {
+            log.warn("待重命名目录物理路径不存在，仅同步数据库路径: dirId={}, path={}",
+                    dirId, oldDirectoryPath);
+        }
 
         try {
             FileDo updateDo = new FileDo();
@@ -845,7 +852,9 @@ public class FileServiceImpl implements FileService {
             // 必须在成功响应前完成，否则媒体服务会从旧 file_path 读取并返回 404。
             updateDescendantPaths(descendants, oldDirectoryPath, newDirectoryPath);
         } catch (RuntimeException e) {
-            restoreDirectoryAfterDatabaseFailure(newDirectoryPath, oldDirectoryPath, dirId, e);
+            if (physicalDirectoryExists) {
+                restoreDirectoryAfterDatabaseFailure(newDirectoryPath, oldDirectoryPath, dirId, e);
+            }
             throw e;
         }
 
@@ -893,8 +902,11 @@ public class FileServiceImpl implements FileService {
         }
 
         // 4. 移动物理目录，并把整个子树的 file_path 同步到数据库。
-        Path oldDirectoryPath = requireExistingDirectory(buildDirectoryPath(dirId), "待移动目录");
-        Path targetParentPath = requireExistingDirectory(buildDirectoryPath(targetParentId), "目标父目录");
+        FileDo targetParentDo = this.fileRepository.get(targetParentId);
+        Path oldDirectoryPath = resolveDirectoryPathForMutation(
+                dirDo, buildDirectoryPath(dirId), "待移动目录");
+        Path targetParentPath = resolveDirectoryPathForMutation(
+                targetParentDo, buildDirectoryPath(targetParentId), "目标父目录");
         Path newDirectoryPath = targetParentPath.resolve(dirDo.getFileName()).normalize();
         moveDirectoryOnFileSystem(oldDirectoryPath, newDirectoryPath, "移动");
 
@@ -946,26 +958,47 @@ public class FileServiceImpl implements FileService {
             updates.add(update);
         }
         if (!updates.isEmpty()) {
-            fileRepository.batchUpdateSelective(updates);
+            // BaseMapperRepository 的批量实现会把多条 update 用分号拼接；
+            // MySQL JDBC 默认禁止多语句执行，批量更新会在第二条 SQL 处失败。
+            // 当前方法已处于事务中，逐条更新仍能保持原子性且兼容所有连接配置。
+            for (FileDo update : updates) {
+                fileRepository.updateSelective(update);
+            }
             log.info("同步更新子节点filePath完成: oldPath={}, newPath={}, 更新数量={}",
                     oldPath, newPath, updates.size());
         }
     }
 
-    private Path requireExistingDirectory(String directoryPath, String description) {
-        if (StringUtils.isBlank(directoryPath)) {
-            throw new IllegalStateException(description + "路径为空");
+    private Path resolveDirectoryPathForMutation(FileDo directory, String rebuiltPath, String description) {
+        Path storageRoot = resolveStorageRoot();
+        List<String> candidates = Arrays.asList(
+                directory == null ? null : directory.getFilePath(), rebuiltPath);
+        Path fallback = null;
+        for (String candidateValue : candidates) {
+            if (StringUtils.isBlank(candidateValue)) {
+                continue;
+            }
+            Path candidate = Paths.get(candidateValue.trim()).toAbsolutePath().normalize();
+            if (!candidate.startsWith(storageRoot)) {
+                continue;
+            }
+            if (fallback == null) {
+                fallback = candidate;
+            }
+            if (!Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
+                continue;
+            }
+            if (Files.isSymbolicLink(candidate) || !Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) {
+                continue;
+            }
+            // 优先使用数据库中仍然有效的 file_path；层级名称变更后再回退到拼接路径。
+            return candidate;
         }
-        Path path = Paths.get(directoryPath).toAbsolutePath().normalize();
-        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IllegalStateException(description + "不存在: " + path);
+
+        if (fallback != null) {
+            return fallback;
         }
-        if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IllegalStateException(description + "不是安全目录: " + path);
-        }
-        // file_path 存储的是规范绝对路径而非 realPath；macOS 的 /var 与 /private/var
-        // 会指向同一位置，若这里改成 realPath，会使子节点的已存路径无法正确替换前缀。
-        return path;
+        throw new IllegalStateException(description + "路径为空或超出存储根目录");
     }
 
     private void moveDirectoryOnFileSystem(Path sourcePath, Path targetPath, String operation) {
@@ -1041,6 +1074,19 @@ public class FileServiceImpl implements FileService {
             return true;
         }
         return list.stream().anyMatch(f -> !f.getId().equals(excludeId));
+    }
+
+    private boolean existsSameFileName(Long parentId, String fileName, Long excludeId) {
+        FileDalQueryParam queryParam = new FileDalQueryParam();
+        queryParam.setParentId(parentId);
+        queryParam.setFileName(fileName);
+        queryParam.setIsFile(YesOrNoEnum.Y.name());
+        queryParam.setDel(YesOrNoEnum.N.name());
+        List<FileDo> list = this.fileRepository.getAssignFiles(queryParam);
+        if (CollectionUtils.isEmpty(list)) {
+            return false;
+        }
+        return excludeId == null || list.stream().anyMatch(f -> !f.getId().equals(excludeId));
     }
 
     // ========== 文件操作实现 ==========
@@ -1218,6 +1264,134 @@ public class FileServiceImpl implements FileService {
         } catch (RuntimeException e) {
             log.error("重命名文件失败，fileId={}, newFileName={}, 原因: {}", fileId, newFileName, e.getMessage(), e);
             throw e;
+        }
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = RuntimeException.class)
+    public FileDto moveFile(Long fileId, Long targetParentId) {
+        if (fileId == null || targetParentId == null) {
+            throw new IllegalArgumentException("文件ID和目标目录ID不能为空");
+        }
+
+        FileDo fileDo = this.fileRepository.get(fileId);
+        if (fileDo == null || !YesOrNoEnum.Y.name().equals(fileDo.getIsFile())) {
+            throw new IllegalArgumentException("文件不存在");
+        }
+        FileDo targetParentDo = this.fileRepository.get(targetParentId);
+        if (targetParentDo == null || !YesOrNoEnum.N.name().equals(targetParentDo.getIsFile())) {
+            throw new IllegalArgumentException("目标目录不存在或不是目录类型");
+        }
+        rejectChatAttachmentDirectoryMutation(targetParentDo);
+        if (!Objects.equals(fileDo.getUserId(), targetParentDo.getUserId())
+                || (fileDo.getUserName() != null && targetParentDo.getUserName() != null
+                && !Objects.equals(fileDo.getUserName(), targetParentDo.getUserName()))) {
+            throw new IllegalArgumentException("文件和目标目录不属于同一用户");
+        }
+        if (Objects.equals(fileDo.getParentId(), targetParentId)) {
+            return getFileDetail(fileId);
+        }
+        if (existsSameFileName(targetParentId, fileDo.getFileName(), fileId)) {
+            throw new IllegalArgumentException("目标目录下已存在同名文件: " + fileDo.getFileName());
+        }
+
+        Long originalParentId = fileDo.getParentId();
+        Path sourcePath = resolveFilePathForMutation(fileDo);
+        Path targetDirectoryPath = resolveDirectoryPathForMutation(
+                targetParentDo, buildDirectoryPath(targetParentId), "目标目录");
+        ensureMutationDirectory(targetDirectoryPath, "目标目录");
+        Path targetPath = targetDirectoryPath.resolve(sourcePath.getFileName()).normalize();
+        Path storageRoot = resolveStorageRoot();
+        if (!targetPath.startsWith(storageRoot)) {
+            throw new IllegalArgumentException("目标文件路径超出存储根目录");
+        }
+        if (Files.exists(targetPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("目标目录下已存在同名物理文件: " + targetPath.getFileName());
+        }
+
+        boolean physicalFileExists = Files.exists(sourcePath, LinkOption.NOFOLLOW_LINKS);
+        if (physicalFileExists) {
+            moveFileOnFileSystem(sourcePath, targetPath);
+        } else {
+            log.warn("待移动文件物理路径不存在，仅同步数据库路径: fileId={}, path={}", fileId, sourcePath);
+        }
+
+        try {
+            FileDo updateDo = new FileDo();
+            updateDo.setId(fileId);
+            updateDo.setParentId(targetParentId);
+            updateDo.setFilePath(targetPath.toString());
+            updateDo.setGmtModified(new Date());
+            this.fileRepository.updateSelective(updateDo);
+            refreshParentHasChild(originalParentId);
+            refreshParentHasChild(targetParentId);
+        } catch (RuntimeException e) {
+            if (physicalFileExists) {
+                restoreFileAfterDatabaseFailure(targetPath, sourcePath, fileId, e);
+            }
+            throw e;
+        }
+
+        log.info("移动文件成功: fileId={}, targetParentId={}, targetPath={}",
+                fileId, targetParentId, targetPath);
+        return getFileDetail(fileId);
+    }
+
+    private Path resolveFilePathForMutation(FileDo fileDo) {
+        if (StringUtils.isBlank(fileDo.getFilePath())) {
+            throw new IllegalStateException("文件物理路径为空: fileId=" + fileDo.getId());
+        }
+        Path storageRoot = resolveStorageRoot();
+        Path filePath = Paths.get(fileDo.getFilePath().trim()).toAbsolutePath().normalize();
+        if (!filePath.startsWith(storageRoot)) {
+            throw new IllegalArgumentException("文件路径超出存储根目录");
+        }
+        if (Files.exists(filePath, LinkOption.NOFOLLOW_LINKS)
+                && (Files.isSymbolicLink(filePath)
+                || !Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS))) {
+            throw new IllegalStateException("文件路径不是普通文件: " + filePath);
+        }
+        return filePath;
+    }
+
+    private void ensureMutationDirectory(Path directoryPath, String description) {
+        try {
+            if (Files.exists(directoryPath, LinkOption.NOFOLLOW_LINKS)) {
+                if (Files.isSymbolicLink(directoryPath)
+                        || !Files.isDirectory(directoryPath, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalStateException(description + "不是普通目录: " + directoryPath);
+                }
+                return;
+            }
+            Files.createDirectories(directoryPath);
+            if (Files.isSymbolicLink(directoryPath)
+                    || !Files.isDirectory(directoryPath, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalStateException(description + "创建后不是普通目录: " + directoryPath);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException(description + "创建失败: " + directoryPath, e);
+        }
+    }
+
+    private void moveFileOnFileSystem(Path sourcePath, Path targetPath) {
+        try {
+            Files.move(sourcePath, targetPath);
+        } catch (IOException e) {
+            throw new IllegalStateException("文件系统移动失败: " + sourcePath, e);
+        }
+    }
+
+    private void restoreFileAfterDatabaseFailure(
+            Path currentPath, Path originalPath, Long fileId, RuntimeException originalException) {
+        try {
+            if (Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.exists(originalPath, LinkOption.NOFOLLOW_LINKS)) {
+                Files.move(currentPath, originalPath);
+            }
+        } catch (IOException rollbackException) {
+            log.error("文件数据库更新失败后恢复物理路径失败: fileId={}, currentPath={}, originalPath={}",
+                    fileId, currentPath, originalPath, rollbackException);
+            originalException.addSuppressed(rollbackException);
         }
     }
 

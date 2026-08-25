@@ -383,6 +383,7 @@ public class MediaStreamHandlerIntegrationTest {
         @Override public FileDto handleUserTwoLevelDirectory(UserDTO userDTO) { throw new UnsupportedOperationException(); }
         @Override public FileDo createByTask(FileTaskDto fileTaskDto) { throw new UnsupportedOperationException(); }
         @Override public FileDto renameFile(Long fileId, String newFileName) { throw new UnsupportedOperationException(); }
+        @Override public FileDto moveFile(Long fileId, Long targetParentId) { throw new UnsupportedOperationException(); }
     }
 
     private static class HttpResult {

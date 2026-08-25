@@ -184,6 +184,8 @@ public class FileUploadFrame {
         CONNECTION_HEARTBEAT_REQ(0x47, "控制连接心跳请求"),
         /** 控制连接心跳响应 */
         CONNECTION_HEARTBEAT_RESPONSE(0x48, "控制连接心跳响应"),
+        /** 文件移动请求 */
+        FILE_MOVE_REQ(0x49, "文件移动请求"),
 
         // ========== 聊天消息帧 (0x50-0x5F) ==========
         /**

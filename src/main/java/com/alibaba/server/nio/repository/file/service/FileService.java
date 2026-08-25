@@ -228,4 +228,13 @@ public interface FileService {
      * @throws RuntimeException         文件系统重命名失败
      */
     FileDto renameFile(Long fileId, String newFileName);
+
+    /**
+     * 移动单个文件（DB + 文件系统）
+     *
+     * @param fileId         文件ID
+     * @param targetParentId 目标目录ID
+     * @return 移动后的文件信息
+     */
+    FileDto moveFile(Long fileId, Long targetParentId);
 }

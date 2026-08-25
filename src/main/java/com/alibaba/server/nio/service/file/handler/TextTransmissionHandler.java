@@ -211,6 +211,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case FILE_RENAME_REQ:
                     handleFileRename(frame, context);
                     break;
+                case FILE_MOVE_REQ:
+                    handleFileMove(frame, context);
+                    break;
                 case USER_AVATAR_UPDATE_REQ:
                     handleAvatarUpdate(frame, context);
                     break;
@@ -1582,6 +1585,36 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("文件重命名系统异常", e);
             sendErrorResponse(context, FrameType.FILE_RESPONSE, "文件重命名失败，请稍后重试", "DB_ERROR");
+        }
+    }
+
+    private void handleFileMove(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            if (context.getUserDTO() == null) {
+                sendErrorResponse(context, FrameType.FILE_RESPONSE, "未登录，无法移动文件", "NOT_LOGGED_IN");
+                return;
+            }
+
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Long fileId = request.getLong("fileId");
+            Long targetParentId = request.getLong("targetParentId");
+            if (fileId == null || targetParentId == null) {
+                sendErrorResponse(context, FrameType.FILE_RESPONSE,
+                        "fileId 和 targetParentId 不能为空", "INVALID_REQUEST");
+                return;
+            }
+
+            FileDto result = getFileService().moveFile(fileId, targetParentId);
+            sendSuccessResponse(context, FrameType.FILE_RESPONSE, "文件移动成功", result);
+            log.info("文件移动成功: fileId={}, targetParentId={}", fileId, targetParentId);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, e.getMessage(), "FILE_MOVE_INVALID");
+        } catch (RuntimeException e) {
+            log.error("文件移动文件系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "文件移动失败，请稍后重试", "FS_ERROR");
+        } catch (Exception e) {
+            log.error("文件移动系统异常", e);
+            sendErrorResponse(context, FrameType.FILE_RESPONSE, "文件移动失败，请稍后重试", "DB_ERROR");
         }
     }
 

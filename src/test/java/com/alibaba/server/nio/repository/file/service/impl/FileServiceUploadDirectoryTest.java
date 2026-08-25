@@ -263,6 +263,8 @@ public class FileServiceUploadDirectoryTest {
         directories.put(4L, videoRecord);
         directories.get(1L).setFilePath(storageRoot.resolve(USER_NAME).toString());
         directories.get(2L).setFilePath(oldDirectory.toString());
+        // 模拟历史重命名后层级名称已更新、但目录自身 file_path 仍指向真实物理目录的情况。
+        directories.get(2L).setFileName("数据库旧名称");
         directories.get(3L).setFilePath(nestedDirectory.toString());
         videoRecord.setFilePath(video.toString());
 
@@ -273,6 +275,22 @@ public class FileServiceUploadDirectoryTest {
         assertEquals(storageRoot.resolve(USER_NAME).resolve("新目录").toString(), directories.get(2L).getFilePath());
         assertEquals(storageRoot.resolve(USER_NAME).resolve("新目录").resolve("子目录").toString(), directories.get(3L).getFilePath());
         assertEquals(renamedVideo.toString(), directories.get(4L).getFilePath());
+    }
+
+    @Test
+    public void renamingDirectoryStillUpdatesDatabaseWhenPhysicalDirectoryIsMissing() {
+        Path missingDirectory = storageRoot.resolve(USER_NAME).resolve("历史目录");
+        directories.put(1L, directory(1L, -1L, USER_NAME, USER_ID, USER_NAME));
+        directories.put(2L, directory(2L, 1L, "历史目录", USER_ID, USER_NAME));
+        directories.get(1L).setFilePath(storageRoot.resolve(USER_NAME).toString());
+        directories.get(2L).setFilePath(missingDirectory.toString());
+
+        fileService.updateDirectory(2L, "新目录");
+
+        assertEquals("新目录", directories.get(2L).getFileName());
+        assertEquals(storageRoot.resolve(USER_NAME).resolve("新目录").toString(),
+                directories.get(2L).getFilePath());
+        assertFalse(Files.exists(missingDirectory));
     }
 
     @Test
@@ -312,6 +330,38 @@ public class FileServiceUploadDirectoryTest {
         assertEquals(movedVideo.toString(), directories.get(4L).getFilePath());
         assertEquals("N", directories.get(6L).getHasChild());
         assertEquals("Y", directories.get(5L).getHasChild());
+    }
+
+    @Test
+    public void movingFileUpdatesPhysicalPathDatabaseParentAndBothParentStates() throws Exception {
+        Path sourceDirectory = storageRoot.resolve(USER_NAME).resolve("源目录");
+        Path targetDirectory = storageRoot.resolve(USER_NAME).resolve("目标目录");
+        Path sourceFile = sourceDirectory.resolve("upload-task-123.bin");
+        Files.createDirectories(sourceDirectory);
+        Files.createDirectories(targetDirectory);
+        Files.write(sourceFile, new byte[] { 4, 5, 6 });
+
+        directories.put(1L, directory(1L, -1L, USER_NAME, USER_ID, USER_NAME));
+        directories.put(2L, directory(2L, 1L, "源目录", USER_ID, USER_NAME));
+        directories.put(3L, directory(3L, 1L, "目标目录", USER_ID, USER_NAME));
+        FileDo file = directory(4L, 2L, "说明.txt", USER_ID, USER_NAME);
+        file.setIsFile("Y");
+        file.setFilePath(sourceFile.toString());
+        directories.put(4L, file);
+        directories.get(1L).setFilePath(storageRoot.resolve(USER_NAME).toString());
+        directories.get(2L).setFilePath(sourceDirectory.toString());
+        directories.get(3L).setFilePath(targetDirectory.toString());
+
+        fileService.moveFile(4L, 3L);
+
+        Path movedFile = targetDirectory.resolve("upload-task-123.bin");
+        assertTrue(Files.isRegularFile(movedFile));
+        assertFalse(Files.exists(sourceFile));
+        assertEquals(Long.valueOf(3L), file.getParentId());
+        assertEquals(movedFile.toString(), file.getFilePath());
+        assertEquals("说明.txt", file.getFileName());
+        assertEquals("N", directories.get(2L).getHasChild());
+        assertEquals("Y", directories.get(3L).getHasChild());
     }
 
     private void addValidChain() {
