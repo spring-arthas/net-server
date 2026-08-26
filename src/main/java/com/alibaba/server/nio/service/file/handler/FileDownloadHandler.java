@@ -28,7 +28,6 @@ import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
-import com.alibaba.server.nio.service.file.StorageRootResolver;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -186,8 +185,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             Long fileId = request.getLong("fileId");
             // 客户端生成的任务ID，用于标识本次下载会话
             String taskId = request.getString("taskId");
-            // [修改] 原始请求包含 transferToken，日志只保留任务和文件标识。
-            log.info("接收到客户端文件下载请求: taskId={}, fileId={}", taskId, fileId);
+            log.info("【接收到客户端文件传输请求】入参 = {}", jsonData);
             if (org.apache.commons.lang.StringUtils.isBlank(taskId)) {
                 sendErrorFrame(socketChannelContext, "taskId不能为空");
                 return;
@@ -210,7 +208,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             new FileTransferAccessAuthorizer().requireDownloadAccess(fileDto, identity);
 
             // 3. 路径只能由数据库记录和服务端存储根目录解析，不能信任客户端路径
-            String storageRoot = StorageRootResolver.resolve(BasicServer.getMap());
+            String storageRoot = String.valueOf(BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC));
             File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
             if (file == null || !file.exists() || !file.isFile()) {
                 log.warn("文件系统中文件不存在: path={}", fileDto.getFilePath());
@@ -271,8 +269,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 log.warn("ACK帧缺少taskId");
                 return;
             }
-            // [修改] ACK 只记录任务状态，不打印完整协议载荷。
-            log.info("接收到客户端文件下载确认: taskId={}, status={}", taskId, status);
+            log.info("【接收到客户端文件传输请求确认】入参 = {}", jsonData);
             // 2. 从缓存获取任务上下文
             FileDownloadContext context = contextMap.get(taskId);
             if (Objects.isNull(context)) {
@@ -412,13 +409,13 @@ public class FileDownloadHandler extends AbstractChannelHandler {
                 }
 
                 // ========== 读取文件数据 ==========
-                com.alibaba.server.nio.util.NioBufferCompat.clear(readBuffer);
+                readBuffer.clear();
                 int bytesRead = context.readChunk(readBuffer);
                 if (bytesRead == -1) {
                     break; // 文件读取完毕
                 }
                 if (bytesRead > 0) {
-                    com.alibaba.server.nio.util.NioBufferCompat.flip(readBuffer);
+                    readBuffer.flip();
                     byte[] data = new byte[readBuffer.remaining()];
                     readBuffer.get(data);
                     sendDataFrame(socketChannelContext, data);
@@ -465,7 +462,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
+        buffer.flip();
 
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
     }
@@ -483,7 +480,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
+        buffer.flip();
 
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
         log.debug("发送帧: type={}, dataLength={}", type, data.length);

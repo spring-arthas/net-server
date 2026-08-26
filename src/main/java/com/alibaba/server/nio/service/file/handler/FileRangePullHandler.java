@@ -23,7 +23,6 @@ import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
-import com.alibaba.server.nio.service.file.StorageRootResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 
@@ -172,7 +171,7 @@ public class FileRangePullHandler extends AbstractChannelHandler {
             return;
         }
         // 查询文件是否在文件系统存在
-        String storageRoot = StorageRootResolver.resolve(BasicServer.getMap());
+        String storageRoot = String.valueOf(BasicServer.getMap().get(BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC));
         File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
         if (file == null || !file.exists() || !file.isFile()) {
             sendAckError(socketChannelContext, taskId, requestId, 40410, "file not found");
@@ -292,8 +291,8 @@ public class FileRangePullHandler extends AbstractChannelHandler {
                 applyBackpressure(socketChannelContext, lastProgressTs);
 
                 int toRead = (int) Math.min(BUFFER_SIZE, endExclusive - (startOffset + sent));
-                com.alibaba.server.nio.util.NioBufferCompat.clear(readBuffer);
-                com.alibaba.server.nio.util.NioBufferCompat.limit(readBuffer, toRead);
+                readBuffer.clear();
+                readBuffer.limit(toRead);
 
                 int n = channel.read(readBuffer);
                 if (n < 0) {
@@ -337,7 +336,7 @@ public class FileRangePullHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
+        buffer.flip();
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
     }
 
@@ -414,7 +413,7 @@ public class FileRangePullHandler extends AbstractChannelHandler {
         buffer.put((byte) 0);
         buffer.putInt(data.length);
         buffer.put(data);
-        com.alibaba.server.nio.util.NioBufferCompat.flip(buffer);
+        buffer.flip();
         WriteQueueHelper.submitWrite(socketChannelContext, buffer);
     }
 

@@ -6,25 +6,31 @@ import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
 
-/** 用户动态及时间线查询结果。 */
+/**
+ * 用户动态表(user_dynamic)实体类
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class UserDynamicDO extends BaseDO implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private Long userId;
-    private String content;
-    private String imagePaths;
-    private String mediaJson;
-    private String referenceJson;
+    /**
+     * 主键
+     */
+    private Long id;
 
-    // [修改] 以下字段仅承载时间线联表结果，不参与动态写入。
-    private String userName;
-    private String nickName;
-    private String avatar;
-    private Integer likeCount;
-    private Integer replyCount;
-    private Integer repostCount;
-    private Boolean liked;
-    private Boolean reposted;
+    /**
+     * 发布者用户ID
+     */
+    private Long userId;
+
+    /**
+     * 动态文字内容，最多500字
+     */
+    private String content;
+
+    /**
+     * 图片路径，逗号分隔，最多9张
+     */
+    private String imagePaths;
 }

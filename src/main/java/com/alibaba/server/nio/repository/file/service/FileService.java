@@ -80,9 +80,6 @@ public interface FileService {
      */
     void deleteFileById(Long fileId);
 
-    /** 按用户和完整路径查询有效文件记录。 */
-    FileDo findFileByPath(String filePath, Integer userId);
-
     // ========== 目录操作接口 ==========
 
     /**
@@ -98,13 +95,11 @@ public interface FileService {
     /**
      * 删除目录（DB + 文件系统）
      * 
-     * @param dirId   目录ID
-     * @param userDTO 当前登录用户
+     * @param dirId 目录ID
      * @return true=成功
-     * @throws com.alibaba.server.nio.repository.file.service.exception.DirectoryContainsFileException
-     *         目录或其子目录下存在有效文件
+     * @throws IllegalStateException 目录下有子项
      */
-    boolean deleteDirectory(Long dirId, UserDTO userDTO);
+    boolean deleteDirectory(Long dirId);
 
     /**
      * 更新目录名称（DB + 文件系统）
@@ -185,30 +180,6 @@ public interface FileService {
     String validateDirectory(Long dirId);
 
     /**
-     * 校验并准备上传目标目录。
-     *
-     * 数据库目录链完整且属于当前认证用户时，自动恢复缺失的物理目录并校正目录路径；
-     * 数据库链无效时直接拒绝，不根据客户端路径补建数据库记录。
-     *
-     * @param dirId    目标目录ID
-     * @param userId   当前认证用户ID
-     * @param userName 当前认证用户名
-     * @return 可用于上传的规范目录路径
-     * @throws IllegalArgumentException 目录链或用户信息无效
-     * @throws IllegalStateException    文件系统目录无法安全创建
-     */
-    String ensureUploadDirectory(Long dirId, Integer userId, String userName);
-
-    /**
-     * 获取或创建当前认证用户的服务端聊天附件目录。
-     *
-     * @param userId   当前认证用户ID
-     * @param userName 当前认证用户名
-     * @return 隐藏附件目录信息
-     */
-    FileDto ensureChatAttachmentDirectory(Integer userId, String userName);
-
-    /**
      * 获取当前用户顶层和第二层目录数据
      * @param userDTO
      * */
@@ -228,25 +199,4 @@ public interface FileService {
      * @throws RuntimeException         文件系统重命名失败
      */
     FileDto renameFile(Long fileId, String newFileName);
-
-    /**
-     * 移动网盘文件（文件系统 + 数据库）。
-     *
-     * @param fileId 待移动的文件 ID
-     * @param targetParentId 目标目录 ID
-     * @param userDTO 当前登录用户，用于归属校验
-     */
-    FileDto moveFile(Long fileId, Long targetParentId);
-
-    /**
-     * 移动网盘文件，并校验当前登录用户对文件的归属。
-     *
-     * @param fileId 待移动的文件 ID
-     * @param targetParentId 目标目录 ID
-     * @param userDTO 当前登录用户
-     * @return 移动后的文件信息
-     */
-    default FileDto moveFile(Long fileId, Long targetParentId, UserDTO userDTO) {
-        return moveFile(fileId, targetParentId);
-    }
 }

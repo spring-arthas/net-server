@@ -3,7 +3,6 @@ package com.alibaba.server.nio.core.server;
 import com.alibaba.server.common.BasicConstant;
 import com.alibaba.server.nio.model.constant.ChannelEventModelEnum;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
-import com.alibaba.server.nio.service.file.security.SessionTokenFactory;
 import com.alibaba.server.util.PropertiesUtil;
 import com.google.common.collect.Maps;
 import lombok.extern.slf4j.Slf4j;
@@ -48,10 +47,7 @@ public class BasicServer {
         // 1、读取配置文件
         loadConfigProperties();
 
-        // 2、启动前校验会话令牌配置，避免真实登录时才暴露配置错误
-        SessionTokenFactory.getInstance();
-
-        // 3、设置枚举
+        // 2、设置枚举
         setEnumsType();
     }
 
@@ -80,9 +76,8 @@ public class BasicServer {
         if (!map.isEmpty()) {
             iterator = map.entrySet().iterator();
             while (iterator.hasNext()) {
-                entry = (Map.Entry<String, Object>) iterator.next();
                 System.out.println("/+------------------------------------------ "
-                        + entry.getKey() + " = " + safeConfigValue(entry.getKey(), entry.getValue())
+                        + (entry = (Map.Entry<String, Object>) iterator.next()).getKey() + " = " + entry.getValue()
                         + " ------------------------------------------+/");
             }
         }
@@ -122,13 +117,5 @@ public class BasicServer {
      */
     public static Map<String, Object> getMap() {
         return map;
-    }
-
-    static String safeConfigValue(String key, Object value) {
-        String normalizedKey = key == null ? "" : key.toUpperCase(java.util.Locale.ROOT);
-        if (normalizedKey.contains("SECRET") || normalizedKey.contains("PASSWORD")) {
-            return "[REDACTED]";
-        }
-        return String.valueOf(value);
     }
 }

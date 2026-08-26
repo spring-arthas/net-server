@@ -192,26 +192,6 @@
       <version>3.2.2</version>
     </dependency>
 
-    <!-- 在 JVM 内提取视频首帧，供桌面端文件详情缩略图使用。 -->
-    <dependency>
-      <groupId>org.jcodec</groupId>
-      <artifactId>jcodec-javase</artifactId>
-      <version>0.2.5</version>
-    </dependency>
-
-    <!-- 跨平台在 JVM 内生成本机 TLS CA 和服务端证书，避免依赖外部 OpenSSL。 -->
-    <dependency>
-      <groupId>org.bouncycastle</groupId>
-      <artifactId>bcprov-jdk18on</artifactId>
-      <version>1.85</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.bouncycastle</groupId>
-      <artifactId>bcpkix-jdk18on</artifactId>
-      <version>1.85</version>
-    </dependency>
-
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
@@ -239,9 +219,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
-          <!-- 3.5.1 supports Java 8; newer versions map maven.compiler.release
-               to the release flag, which is unavailable in a JDK 8 compiler. -->
-          <version>3.5.1</version>
+          <version>3.8.1</version>
         </plugin>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>

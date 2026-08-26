@@ -7,7 +7,6 @@ import com.alibaba.server.nio.repository.user.repository.dataobject.UserDo;
 import com.alibaba.server.nio.repository.user.repository.param.UserDalQueryParam;
 import com.alibaba.server.nio.repository.user.service.UserService;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
-import com.alibaba.server.nio.repository.user.service.dto.UserSearchDTO;
 import com.alibaba.server.nio.repository.user.service.param.UserCreateParam;
 import com.alibaba.server.nio.repository.user.service.param.UserQueryParam;
 import com.alibaba.server.nio.repository.user.service.param.UserUpdateParam;
@@ -98,7 +97,6 @@ public class UserServiceImpl implements UserService {
         userDo.setPassword(param.getPassword());
         userDo.setPhone(param.getPhone());
         userDo.setMail(param.getMail());
-        userDo.setAvatar(param.getAvatar());
         userDo.setLastLoginDate(param.getLastLoginDate());
         userDo.setRegisterDate(param.getRegisterDate());
         userDo.setGmtModified(param.getLastLoginDate() == null ? new Date() : param.getLastLoginDate());
@@ -232,28 +230,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserDTO updateAvatar(Long userId, String avatar) {
-        if (userId == null) {
-            throw new IllegalArgumentException("用户ID不能为空");
-        }
-        if (avatar == null || avatar.trim().isEmpty()) {
-            throw new IllegalArgumentException("头像不能为空");
-        }
-
-        UserDo userDo = this.userRepository.get(userId);
-        if (userDo == null || String.valueOf(BasicConstant.YES).equals(userDo.getDel())) {
-            throw new IllegalArgumentException("用户不存在");
-        }
-
-        UserUpdateParam updateParam = new UserUpdateParam();
-        updateParam.setId(userId);
-        updateParam.setAvatar(avatar.trim());
-        this.update(updateParam);
-
-        return this.doToDto(this.userRepository.get(userId));
-    }
-
-    @Override
     public UserDTO getById(Long id) {
         if (id == null) {
             return null;
@@ -284,23 +260,5 @@ public class UserServiceImpl implements UserService {
         return doList.stream()
                 .map(this::doToDto)
                 .collect(Collectors.toMap(UserDTO::getId, dto -> dto));
-    }
-
-    @Override
-    public List<UserSearchDTO> searchUsers(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return Collections.emptyList();
-        }
-        String normalizedKeyword = keyword.trim();
-        String likeKeyword = normalizedKeyword
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
-        return userRepository.searchUsers(normalizedKeyword, likeKeyword);
-    }
-
-    @Override
-    public boolean existsActiveUser(Long userId) {
-        return userId != null && userRepository.countActiveById(userId) > 0;
     }
 }

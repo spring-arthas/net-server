@@ -2,12 +2,6 @@ package com.alibaba.server.nio.core.server;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.server.common.BasicConstant;
-import com.alibaba.server.nio.tls.EmbeddedTlsGateway;
-import com.alibaba.server.nio.tls.TlsBackendReadinessProbe;
-import com.alibaba.server.nio.tls.TlsContextFactory;
-import com.alibaba.server.nio.tls.TlsGatewayConfig;
-import com.alibaba.server.nio.tls.TlsKeyStoreProvisioner;
-import com.alibaba.server.nio.tls.TlsNetworkAddressResolver;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -23,10 +17,8 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @Auther: YSFY
@@ -41,9 +33,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class NioServerContext {
 
     private static final Object lock = new Object();
-    private static final AtomicBoolean TLS_SHUTDOWN_HOOK_REGISTERED = new AtomicBoolean(false);
-
-    private static volatile EmbeddedTlsGateway tlsGateway;
 
     /**
      * 限速恢复调度器
@@ -76,28 +65,9 @@ public class NioServerContext {
      * @return
      */
     public static void startupServerContext() {
-        EmbeddedTlsGateway preparingGateway = null;
         try {
-            // 1、启动基础服务并校验内置 TLS Gateway 配置。
+            // 1、启动基础服务（加载配置文件）
             BasicServer.startupBasicServer();
-            TlsGatewayConfig tlsConfig = TlsGatewayConfig.load(BasicServer.getMap(), System::getenv);
-            if (tlsConfig.isEnabled()) {
-                applyResolvedTlsConfiguration(BasicServer.getMap(), tlsConfig);
-                new TlsKeyStoreProvisioner().provision(tlsConfig);
-                char[] keyStorePassword = tlsConfig.copyKeyStorePassword();
-                try {
-                    preparingGateway = new EmbeddedTlsGateway(
-                            tlsConfig,
-                            new TlsContextFactory().create(
-                                    tlsConfig.getKeyStorePath(),
-                                    keyStorePassword),
-                            NioServerContext::handleTlsGatewayFailure);
-                } finally {
-                    Arrays.fill(keyStorePassword, '\0');
-                }
-                // [修改] 先一次性预绑定四个公网端口，任意端口失败都不启动业务后端。
-                preparingGateway.prepare();
-            }
 
             // 2、启动 IOC 容器
             startupIocContainer();
@@ -105,71 +75,12 @@ public class NioServerContext {
             // 3、启动核心服务
             CoreServer.startupCoreServer();
 
-            if (preparingGateway != null) {
-                // [修改] 后端真正可连接后才开放 TLS Acceptor，不再依赖固定 sleep。
-                TlsBackendReadinessProbe.await(
-                        tlsConfig.getEndpoints(),
-                        tlsConfig.getConnectTimeoutMillis());
-                preparingGateway.start();
-                tlsGateway = preparingGateway;
-                registerTlsShutdownHook();
-            }
-        } catch (IOException | RuntimeException exception) {
-            if (preparingGateway != null) {
-                preparingGateway.stop();
-            }
-            shutdownTlsGateway();
-            // [修改] 启动失败必须传到 main，让单进程部署以非零状态退出。
-            log.error("net-server 服务启动失败", exception);
-            throw new IllegalStateException("net-server 服务启动失败", exception);
+            // 4、追加额外处理
+            // CoreServer.appendHandler();
+        } catch (Exception e) {
+            log.error("NioServerContext: 服务启动失败, error = {}",
+                    org.apache.commons.lang.exception.ExceptionUtils.getStackTrace(e));
         }
-    }
-
-    static void applyResolvedTlsConfiguration(
-            Map<String, Object> configuration,
-            TlsGatewayConfig tlsConfig) {
-        String resolvedAddress = tlsConfig.getBindAddress().getHostAddress();
-        if (isAutomaticValue(configuration.get(BasicConstant.TLS_GATEWAY_PUBLIC_IP))) {
-            configuration.put(BasicConstant.TLS_GATEWAY_PUBLIC_IP, resolvedAddress);
-        }
-        if (isAutomaticValue(configuration.get(BasicConstant.MEDIA_STREAM_PUBLIC_HOST))) {
-            configuration.put(BasicConstant.MEDIA_STREAM_PUBLIC_HOST, resolvedAddress);
-        }
-        log.info("TLS 运行环境已解析: os={}, address={}, keyStore={}",
-                System.getProperty(BasicConstant.OS_NAME),
-                resolvedAddress,
-                tlsConfig.getKeyStorePath());
-    }
-
-    private static boolean isAutomaticValue(Object value) {
-        return value == null || TlsNetworkAddressResolver.isAutomatic(value.toString());
-    }
-
-    /**
-     * 关闭内置 TLS Gateway，供 JVM shutdown hook 和启动失败清理复用。
-     */
-    public static void shutdownTlsGateway() {
-        EmbeddedTlsGateway stoppingGateway = tlsGateway;
-        tlsGateway = null;
-        if (stoppingGateway != null) {
-            stoppingGateway.stop();
-        }
-    }
-
-    static void handleTlsGatewayFailure(Throwable exception) {
-        // [修改] 四个公网 TLS 端口属于单进程核心能力，监听失效后必须让守护进程重启 Java。
-        log.error("TLS Gateway 监听发生致命故障，net-server 将以退出码 1 结束", exception);
-        shutdownTlsGateway();
-        System.exit(1);
-    }
-
-    private static void registerTlsShutdownHook() {
-        if (!TLS_SHUTDOWN_HOOK_REGISTERED.compareAndSet(false, true)) {
-            return;
-        }
-        Runtime.getRuntime().addShutdownHook(new Thread(
-                NioServerContext::shutdownTlsGateway,
-                "NET-SERVER-TLS-SHUTDOWN"));
     }
 
     /**
@@ -316,7 +227,6 @@ public class NioServerContext {
         if (!Optional.ofNullable(socketChannel).isPresent()) {
             return false;
         }
-        com.alibaba.server.nio.service.file.handler.TextTransmissionHandler.cleanupSocketChannel(socketChannel);
         if (!socketChannel.isOpen()) {
             log.info("NioServerContext: SocketChannel已关闭, 忽略本次资源释放请求");
             return true;

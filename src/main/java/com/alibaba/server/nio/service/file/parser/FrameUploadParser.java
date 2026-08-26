@@ -45,12 +45,11 @@ public class FrameUploadParser {
      */
     private static final int HEADER_LENGTH = FileUploadFrame.HEADER_LENGTH;
 
-    private static final int MAX_FRAME_DATA_SIZE = 10 * 1024 * 1024;
-
     /**
-     * [修改] 缓冲区必须容纳完整帧头和最大数据体，协议上限与内存上限保持一致。
+     * 缓冲区最大大小限制（10MB）
+     * 防止限速期间数据积压导致内存泄漏
      */
-    private static final int MAX_BUFFER_SIZE = HEADER_LENGTH + MAX_FRAME_DATA_SIZE;
+    private static final int MAX_BUFFER_SIZE = 10 * 1024 * 1024;
 
     /**
      * 当前解析状态
@@ -213,7 +212,7 @@ public class FrameUploadParser {
         int dataLength = ByteBuffer.wrap(buf, headerStart + 2, 4).getInt();
 
         // 验证数据长度合理性
-        if (dataLength < 0 || dataLength > MAX_FRAME_DATA_SIZE) {
+        if (dataLength < 0 || dataLength > 100 * 1024 * 1024) { // 最大100MB
             // *** BUG FIX: 只跳过1字节而非2字节，理由同上 ***
             log.warn("无效的数据长度: {}，当前 position={}，跳过1字节继续扫描", dataLength, position);
             position++; // 跳过1字节，回 WAIT_MAGIC 重新扫描

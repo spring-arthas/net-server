@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-08-16
+- **Total Sessions**: 0
+- **Last Active**: -
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~71 | Active |
+| `journal-1.md` | ~0 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,8 +29,6 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
-| 2 | 2026-08-16 | 核对并推送 feature-v1.0 | `14bc2f6` |
-| 1 | 2026-08-16 | 推送 feature-v1.0 本地全部改动 | `299bba0` |
 <!-- @@@/auto:session-history -->
 
 ---

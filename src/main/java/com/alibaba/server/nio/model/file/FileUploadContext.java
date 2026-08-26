@@ -1,6 +1,5 @@
 package com.alibaba.server.nio.model.file;
 
-import com.alibaba.server.nio.service.file.security.UploadPathResolver;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,7 +24,7 @@ public class FileUploadContext {
     /**
      * 文件存储根目录
      */
-    private static final String FILE_STORAGE_ROOT = "/Users/debugcode/Downloads/西班牙的荷包蛋/";
+    private static final String FILE_STORAGE_ROOT = "/Users/hljy/Downloads/西班牙的荷包蛋/";
 
     /**
      * 生成唯一任务ID
@@ -91,19 +90,12 @@ public class FileUploadContext {
 
     private String userName;
 
-    /** 当前文件完成后是否保留上传连接，仅允许聊天附件请求启用。 */
-    private boolean connectionReuse = false;
-
-    /** 聊天消息批次标识。 */
-    private String batchId;
-
     /**
      * 上传状态
      */
     public enum UploadStatus {
         INITIALIZED, // 已初始化
         UPLOADING, // 上传中
-        FINALIZING, // 数据已接收，正在校验并入库
         COMPLETED, // 已完成
         FAILED // 失败
     }
@@ -161,12 +153,6 @@ public class FileUploadContext {
      */
     private boolean firstWriteLogged = false;
 
-    /** 当前 ACK 窗口累计写入字节数。 */
-    private long windowBytesWritten = 0L;
-
-    /** 当前 ACK 窗口累计写盘耗时，单位纳秒。 */
-    private long windowWriteNanos = 0L;
-
     /**
      * 更新最后活跃时间
      */
@@ -197,16 +183,15 @@ public class FileUploadContext {
      * 否则使用默认格式：/data/file-storage/yyyy/MM/dd/{taskId}_{fileName}
      */
     public String buildFilePath() {
-        Path directory;
         if (basePath != null && !basePath.isEmpty()) {
-            directory = Paths.get(basePath);
+            // 使用自定义目录路径
+            this.filePath = basePath + "/" + requestTaskId + "_" + fileName;
         } else {
+            // 使用默认路径
             LocalDateTime now = LocalDateTime.now();
             String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            directory = Paths.get(FILE_STORAGE_ROOT, datePath);
+            this.filePath = FILE_STORAGE_ROOT + datePath + "/" + requestTaskId + "_" + fileName;
         }
-        // [修改] 所有上传路径统一规范化并限制在认证目录的直接子级。
-        this.filePath = UploadPathResolver.resolve(directory, requestTaskId, fileName).toString();
         return this.filePath;
     }
 
@@ -215,18 +200,12 @@ public class FileUploadContext {
      * 支持断点续传：根据 isResume 标志选择打开模式
      */
     public FileChannel openFileChannel() throws IOException {
-        if (basePath != null && !basePath.isEmpty()) {
-            Path validatedPath = UploadPathResolver.resolve(Paths.get(basePath), requestTaskId, fileName);
-            if (filePath != null && !validatedPath.equals(Paths.get(filePath).toAbsolutePath().normalize())) {
-                throw new IOException("上传文件路径与认证目录不一致");
-            }
-            filePath = validatedPath.toString();
-        } else if (filePath == null) {
-            filePath = buildFilePath();
+        if (filePath == null) {
+            buildFilePath();
         }
 
         // 确保目录存在
-        Path path = Paths.get(filePath).toAbsolutePath().normalize();
+        Path path = Paths.get(filePath);
         Path parentDir = path.getParent();
         if (parentDir != null && !java.nio.file.Files.exists(parentDir)) {
             java.nio.file.Files.createDirectories(parentDir);
@@ -375,35 +354,6 @@ public class FileUploadContext {
     }
 
     /**
-     * 记录当前 ACK 窗口的一次写盘指标。
-     *
-     * @param writtenBytes 实际写入字节数
-     * @param writeNanos 写盘耗时，单位纳秒
-     */
-    public synchronized void recordWindowWrite(long writtenBytes, long writeNanos) {
-        if (writtenBytes > 0L) {
-            windowBytesWritten += writtenBytes;
-        }
-        if (writeNanos > 0L) {
-            windowWriteNanos += writeNanos;
-        }
-    }
-
-    public synchronized long getWindowBytesWritten() {
-        return windowBytesWritten;
-    }
-
-    public synchronized long getWindowWriteMillis() {
-        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(windowWriteNanos);
-    }
-
-    /** 重置当前 ACK 窗口指标。 */
-    public synchronized void resetWindowMetrics() {
-        windowBytesWritten = 0L;
-        windowWriteNanos = 0L;
-    }
-
-    /**
      * 获取当前上传速率（字节/秒）
      */
     public long getCurrentSpeed() {
@@ -448,12 +398,6 @@ public class FileUploadContext {
         log.info("文件上传完成: taskId={}, fileName={}, size={}，文件通道关闭成功: bytesWritten={}/{}", requestTaskId, fileName,
                 fileSize,
                 bytesWritten, fileSize);
-    }
-
-    /** 标记为完成校验中，断连清理不得再将任务回写为暂停。 */
-    public void markFinalizing() {
-        this.status = UploadStatus.FINALIZING;
-        closeFileChannel();
     }
 
     /**

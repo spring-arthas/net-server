@@ -64,10 +64,7 @@ public interface FileTaskService {
      * @param userId 用户ID
      * @return 任务DTO
      */
-    FileTaskDto findPausedTask(String md5, Integer userId, Long parentId, String filePath);
-
-    /** 根据用户、MD5 和目标位置查询已经成功完成的上传任务。 */
-    FileTaskDto findSuccessfulTask(String md5, Integer userId, Long parentId, String filePath);
+    FileTaskDto findPausedTask(String md5, Integer userId);
 
     Boolean deleteById(Long id);
 }

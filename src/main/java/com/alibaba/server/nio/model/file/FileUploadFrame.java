@@ -140,18 +140,6 @@ public class FileUploadFrame {
          * 处理好友申请
          */
         USER_FRIEND_APPLY_HANDLE_REQ(0x39, "处理好友申请"),
-        /** 好友搜索响应 */
-        USER_FRIEND_QUERY_RESPONSE(0x3A, "好友搜索响应"),
-        /** 发送好友申请响应 */
-        USER_FRIEND_ADD_RESPONSE(0x3B, "发送好友申请响应"),
-        /** 好友申请列表响应 */
-        USER_FRIEND_APPLY_RESPONSE(0x3C, "好友申请列表响应"),
-        /** 处理好友申请响应 */
-        USER_FRIEND_APPLY_HANDLE_RESPONSE(0x3D, "处理好友申请响应"),
-        /** 好友关系事件推送 */
-        USER_FRIEND_EVENT_PUSH(0x3E, "好友关系事件推送"),
-        /** 好友列表响应 */
-        USER_FRIEND_LIST_RESPONSE(0x3F, "好友列表响应"),
 
         // ========== 文件操作帧 (0x40-0x4F) ==========
         /**
@@ -174,18 +162,6 @@ public class FileUploadFrame {
          * 文件重命名请求
          */
         FILE_RENAME_REQ(0x44, "文件重命名请求"),
-        /**
-         * 当前用户头像更新请求
-         */
-        USER_AVATAR_UPDATE_REQ(0x45, "当前用户头像更新请求"),
-        /** 使用持久会话凭证恢复文本连接身份 */
-        USER_SESSION_RESUME_REQ(0x46, "用户会话恢复请求"),
-        /** 控制连接心跳请求 */
-        CONNECTION_HEARTBEAT_REQ(0x47, "控制连接心跳请求"),
-        /** 控制连接心跳响应 */
-        CONNECTION_HEARTBEAT_RESPONSE(0x48, "控制连接心跳响应"),
-        /** 文件移动请求 */
-        FILE_MOVE_REQ(0x49, "文件移动请求"),
 
         // ========== 聊天消息帧 (0x50-0x5F) ==========
         /**
@@ -230,65 +206,16 @@ public class FileUploadFrame {
          */
         USER_FRIEND_UPDATE_ALIAS_RESPONSE(0x58, "更新好友别名回执"),
 
-        /**
-         * 更新好友置顶请求
-         */
-        USER_FRIEND_PIN_UPDATE_REQ(0x5C, "更新好友置顶请求"),
-
-        /**
-         * 更新好友置顶回执
-         */
-        USER_FRIEND_PIN_UPDATE_RESPONSE(0x5D, "更新好友置顶回执"),
-
-        /**
-         * 聊天消息操作请求(撤回/表情回应)
-         */
-        CHAT_MSG_ACTION_REQ(0x59, "聊天消息操作请求"),
-
-        /**
-         * 聊天消息操作回执
-         */
-        CHAT_MSG_ACTION_RESPONSE(0x5A, "聊天消息操作回执"),
-
-        /**
-         * 聊天消息操作推送
-         */
-        CHAT_MSG_ACTION_PUSH(0x5B, "聊天消息操作推送"),
-
-        /**
-         * 聊天消息搜索请求
-         */
-        CHAT_MSG_SEARCH_REQ(0x5E, "聊天消息搜索请求"),
-
-        /**
-         * 聊天消息搜索回执
-         */
-        CHAT_MSG_SEARCH_RESPONSE(0x5F, "聊天消息搜索回执"),
-
         // ========== 动态帧 (0x60-0x6F) ==========
         /**
          * 新建动态请求
          */
         DYNAMIC_CREATE_REQ(0x60, "新建动态请求"),
 
-        /** 新建动态回执 */
-        DYNAMIC_CREATE_RESPONSE(0x61, "新建动态回执"),
-        /** 时间线分页请求 */
-        DYNAMIC_TIMELINE_REQ(0x62, "动态时间线请求"),
-        /** 时间线分页回执 */
-        DYNAMIC_TIMELINE_RESPONSE(0x63, "动态时间线回执"),
-        /** 点赞、回复和转发请求 */
-        DYNAMIC_ACTION_REQ(0x64, "动态互动请求"),
-        /** 点赞、回复和转发回执 */
-        DYNAMIC_ACTION_RESPONSE(0x65, "动态互动回执"),
-        /** 动态详情请求 */
-        DYNAMIC_DETAIL_REQ(0x66, "动态详情请求"),
-        /** 动态详情回执 */
-        DYNAMIC_DETAIL_RESPONSE(0x67, "动态详情回执"),
-        /** 删除自己的动态请求 */
-        DYNAMIC_DELETE_REQ(0x68, "动态删除请求"),
-        /** 删除自己的动态回执 */
-        DYNAMIC_DELETE_RESPONSE(0x69, "动态删除回执");
+        /**
+         * 动态操作响应
+         */
+        DYNAMIC_RESPONSE(0x61, "动态操作响应");
 
         private final int code;
         private final String description;
@@ -324,7 +251,6 @@ public class FileUploadFrame {
      */
     public static final byte FLAG_LAST_FRAME = 0x01; // bit0: 是否最后一帧
     public static final byte FLAG_NEED_ACK = 0x02; // bit1: 是否需要确认
-    public static final byte FLAG_HAS_OFFSET = 0x04; // bit2: 数据前8字节为大端序文件偏移量
 
     /**
      * 帧类型
@@ -382,13 +308,6 @@ public class FileUploadFrame {
      */
     public boolean needAck() {
         return (flags & FLAG_NEED_ACK) != 0;
-    }
-
-    /**
-     * 数据帧是否携带文件偏移量
-     */
-    public boolean hasOffset() {
-        return (flags & FLAG_HAS_OFFSET) != 0;
     }
 
     /**

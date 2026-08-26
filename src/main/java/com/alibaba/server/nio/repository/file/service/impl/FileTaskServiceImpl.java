@@ -156,28 +156,13 @@ public class FileTaskServiceImpl implements FileTaskService {
     }
 
     @Override
-    public FileTaskDto findPausedTask(String md5, Integer userId, Long parentId, String filePath) {
-        return findTaskByStatus(md5, userId, parentId, filePath,
-                com.alibaba.server.common.FileTaskStatusEnum.PAUSED.getCode());
-    }
-
-    @Override
-    public FileTaskDto findSuccessfulTask(String md5, Integer userId, Long parentId, String filePath) {
-        return findTaskByStatus(md5, userId, parentId, filePath,
-                com.alibaba.server.common.FileTaskStatusEnum.UPLOAD_SUCCESS.getCode());
-    }
-
-    private FileTaskDto findTaskByStatus(String md5, Integer userId, Long parentId,
-            String filePath, int status) {
-        if (md5 == null || userId == null || filePath == null)
+    public FileTaskDto findPausedTask(String md5, Integer userId) {
+        if (md5 == null || userId == null)
             return null;
         FileTaskDalQueryParam param = new FileTaskDalQueryParam();
         param.setMd5(md5);
         param.setUserId(userId);
-        param.setParentId(parentId);
-        param.setFilePath(filePath);
-        param.setStatus(status);
-        param.setDel(com.alibaba.server.common.YesOrNoEnum.N.name());
+        param.setStatus(com.alibaba.server.common.FileTaskStatusEnum.PAUSED.getCode());
         param.setPageSize(1);
 
         List<FileTaskDo> list = fileTaskRepository.page(param);

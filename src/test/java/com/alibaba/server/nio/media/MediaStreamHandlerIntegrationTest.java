@@ -10,7 +10,6 @@ import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
 import com.alibaba.server.nio.repository.file.service.param.FileQueryParam;
 import com.alibaba.server.nio.repository.file.service.param.FileUpdateParam;
 import com.alibaba.server.nio.repository.user.service.dto.UserDTO;
-import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.After;
 import org.junit.Before;
@@ -34,7 +33,6 @@ import java.util.concurrent.Future;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class MediaStreamHandlerIntegrationTest {
     private static final long FILE_ID = 1001L;
@@ -45,8 +43,6 @@ public class MediaStreamHandlerIntegrationTest {
     private File mediaFile;
     private byte[] mediaBytes;
     private String playUrl;
-    private String transferToken;
-    private TransferTokenService transferTokenService;
 
     @Before
     public void setUp() throws Exception {
@@ -61,27 +57,18 @@ public class MediaStreamHandlerIntegrationTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         int port = server.getAddress().getPort();
         MediaTokenService tokenService = new MediaTokenService("test-secret", 60);
-        transferTokenService = new TransferTokenService("test-transfer-secret", 60);
-        transferToken = transferTokenService.generateToken(2001L, USER_NAME);
         MediaAccessService accessService = new MediaAccessService(
                 new FakeFileService(),
                 new SafeFileResolver(rootDir.getAbsolutePath()),
                 tokenService,
-                "http",
                 "127.0.0.1",
                 port);
-        MediaStreamHandler handler = new MediaStreamHandler(accessService, tokenService, transferTokenService, 256);
-        server.createContext("/media/play-url", handler);
-        server.createContext("/media/stream", handler);
-        server.createContext("/media/seek", handler);
+        server.createContext("/media/play-url", new MediaStreamHandler(accessService, tokenService, 256));
+        server.createContext("/media/stream", new MediaStreamHandler(accessService, tokenService, 256));
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.start();
 
-        HttpResult result = authenticatedRequest(
-                "GET",
-                "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID,
-                null,
-                transferToken);
+        HttpResult result = request("GET", "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID + "?userName=" + USER_NAME, null);
         assertEquals(200, result.status);
         JSONObject body = JSON.parseObject(new String(result.body, "UTF-8"));
         playUrl = body.getJSONObject("data").getString("playUrl");
@@ -166,63 +153,11 @@ public class MediaStreamHandlerIntegrationTest {
     }
 
     @Test
-    public void rejectsMissingTransferTokenWhenCreatingPlayUrl() throws Exception {
+    public void rejectsWrongUserWhenCreatingPlayUrl() throws Exception {
         int port = server.getAddress().getPort();
-        HttpResult result = request("GET", "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID, null);
-
-        assertEquals(401, result.status);
-    }
-
-    @Test
-    public void rejectsSpoofedUserNameWhenTransferTokenBelongsToAnotherUser() throws Exception {
-        int port = server.getAddress().getPort();
-        String attackerToken = transferTokenService.generateToken(2002L, "bob");
-        HttpResult result = authenticatedRequest(
-                "GET",
-                "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID + "?userName=" + USER_NAME,
-                null,
-                attackerToken);
+        HttpResult result = request("GET", "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID + "?userName=bob", null);
 
         assertEquals(403, result.status);
-    }
-
-    @Test
-    public void derivesUserFromTransferTokenInsteadOfSpoofedQueryValue() throws Exception {
-        int port = server.getAddress().getPort();
-        HttpResult result = authenticatedRequest(
-                "GET",
-                "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID + "?userName=bob",
-                null,
-                transferToken);
-
-        assertEquals(200, result.status);
-    }
-
-    @Test
-    public void registersPlaybackSessionAndAcceptsSeekNotification() throws Exception {
-        int port = server.getAddress().getPort();
-        String sessionId = "playback-session-1";
-        HttpResult playResult = authenticatedRequest(
-                "GET",
-                "http://127.0.0.1:" + port + "/media/play-url/" + FILE_ID
-                        + "?sessionId=" + sessionId,
-                null,
-                transferToken);
-
-        assertEquals(200, playResult.status);
-        JSONObject body = JSON.parseObject(new String(playResult.body, "UTF-8"));
-        String sessionPlayUrl = body.getJSONObject("data").getString("playUrl");
-        assertTrue(sessionPlayUrl.contains("sessionId=" + sessionId));
-
-        HttpResult seekResult = authenticatedRequest(
-                "POST",
-                "http://127.0.0.1:" + port + "/media/seek/" + FILE_ID
-                        + "?sessionId=" + sessionId + "&targetSeconds=12.5",
-                null,
-                transferToken);
-
-        assertEquals(204, seekResult.status);
-        assertEquals(0, seekResult.body.length);
     }
 
     @Test
@@ -260,27 +195,12 @@ public class MediaStreamHandlerIntegrationTest {
     }
 
     private HttpResult request(String method, String url, String rangeHeader) throws Exception {
-        return request(method, url, rangeHeader, null);
-    }
-
-    private HttpResult authenticatedRequest(
-            String method,
-            String url,
-            String rangeHeader,
-            String token) throws Exception {
-        return request(method, url, rangeHeader, "Bearer " + token);
-    }
-
-    private HttpResult request(String method, String url, String rangeHeader, String authorization) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setRequestMethod(method);
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(3000);
         if (rangeHeader != null) {
             connection.setRequestProperty("Range", rangeHeader);
-        }
-        if (authorization != null) {
-            connection.setRequestProperty("Authorization", authorization);
         }
         int status = connection.getResponseCode();
         InputStream inputStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
@@ -362,13 +282,8 @@ public class MediaStreamHandlerIntegrationTest {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public FileDo findFileByPath(String filePath, Integer userId) {
-            throw new UnsupportedOperationException();
-        }
-
         @Override public FileDto createDirectory(Long parentId, String dirName, UserDTO userDTO) { throw new UnsupportedOperationException(); }
-        @Override public boolean deleteDirectory(Long dirId, UserDTO userDTO) { throw new UnsupportedOperationException(); }
+        @Override public boolean deleteDirectory(Long dirId) { throw new UnsupportedOperationException(); }
         @Override public FileDto updateDirectory(Long dirId, String newName) { throw new UnsupportedOperationException(); }
         @Override public FileDto moveDirectory(Long dirId, Long targetParentId) { throw new UnsupportedOperationException(); }
         @Override public boolean isDirectory(Long id) { throw new UnsupportedOperationException(); }
@@ -378,12 +293,9 @@ public class MediaStreamHandlerIntegrationTest {
         @Override public FileDto getFileDetail(Long fileId) { throw new UnsupportedOperationException(); }
         @Override public boolean deleteFileWithFs(Long fileId) { throw new UnsupportedOperationException(); }
         @Override public String validateDirectory(Long dirId) { throw new UnsupportedOperationException(); }
-        @Override public String ensureUploadDirectory(Long dirId, Integer userId, String userName) { throw new UnsupportedOperationException(); }
-        @Override public FileDto ensureChatAttachmentDirectory(Integer userId, String userName) { throw new UnsupportedOperationException(); }
         @Override public FileDto handleUserTwoLevelDirectory(UserDTO userDTO) { throw new UnsupportedOperationException(); }
         @Override public FileDo createByTask(FileTaskDto fileTaskDto) { throw new UnsupportedOperationException(); }
         @Override public FileDto renameFile(Long fileId, String newFileName) { throw new UnsupportedOperationException(); }
-        @Override public FileDto moveFile(Long fileId, Long targetParentId) { throw new UnsupportedOperationException(); }
     }
 
     private static class HttpResult {

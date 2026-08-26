@@ -43,14 +43,4 @@ public class UserFriendMessageDO extends BaseDO implements Serializable {
      */
     private Integer status;
 
-    /**
-     * 表情回应 JSON, 形如 {"\uD83D\uDC4D":[1001,1002]}
-     */
-    private String reaction;
-
-    /**
-     * 是否撤回: 0-否, 1-已撤回
-     */
-    private Integer retracted;
-
 }

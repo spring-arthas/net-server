@@ -2,10 +2,7 @@ package com.alibaba.server.nio.repository.chat.service.impl;
 
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageDO;
 import com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageRepository;
-import com.alibaba.server.nio.repository.chat.service.ChatHistoryPage;
-import com.alibaba.server.nio.repository.chat.service.ChatMessageSearchPage;
 import com.alibaba.server.nio.repository.chat.service.UserFriendMessageService;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -61,58 +58,6 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
     }
 
     @Override
-    public ChatHistoryPage getChatHistoryPage(Integer userId1, Integer userId2,
-            Long beforeMessageId, Long afterMessageId, Integer legacyOffset, int limit) {
-        if (userId1 == null || userId2 == null) {
-            return new ChatHistoryPage(Collections.emptyList(), false, null, null);
-        }
-        if (beforeMessageId != null && afterMessageId != null) {
-            throw new IllegalArgumentException("beforeMessageId 和 afterMessageId 不能同时传入");
-        }
-
-        int pageSize = limit > 0 ? Math.min(limit, 100) : 50;
-        int fetchSize = pageSize + 1;
-        List<UserFriendMessageDO> fetched;
-        boolean descending = false;
-
-        if (beforeMessageId != null) {
-            fetched = chatMessageRepository.getChatHistoryBefore(
-                    userId1, userId2, beforeMessageId, fetchSize);
-            descending = true;
-        } else if (afterMessageId != null) {
-            fetched = chatMessageRepository.getChatHistoryAfter(
-                    userId1, userId2, afterMessageId, fetchSize);
-        } else if (legacyOffset != null) {
-            fetched = chatMessageRepository.getChatHistory(
-                    userId1, userId2, Math.max(0, legacyOffset), fetchSize);
-        } else {
-            fetched = chatMessageRepository.getLatestChatHistory(userId1, userId2, fetchSize);
-            descending = true;
-        }
-
-        List<UserFriendMessageDO> safeFetched = fetched == null ? Collections.emptyList() : fetched;
-        boolean hasMore = safeFetched.size() > pageSize;
-        int pageEnd = Math.min(pageSize, safeFetched.size());
-        int pageStart = 0;
-        if (legacyOffset != null && safeFetched.size() > pageSize) {
-            // The legacy mapper returns the over-fetched rows in ascending order,
-            // so the extra row is the oldest item at the front of the list.
-            pageStart = safeFetched.size() - pageSize;
-            pageEnd = safeFetched.size();
-        }
-        List<UserFriendMessageDO> pageMessages = new ArrayList<>(
-                safeFetched.subList(pageStart, pageEnd));
-        if (descending) {
-            Collections.reverse(pageMessages);
-        }
-
-        Long nextBeforeMessageId = pageMessages.isEmpty() ? null : pageMessages.get(0).getId();
-        Long latestMessageId = pageMessages.isEmpty() ? null
-                : pageMessages.get(pageMessages.size() - 1).getId();
-        return new ChatHistoryPage(pageMessages, hasMore, nextBeforeMessageId, latestMessageId);
-    }
-
-    @Override
     public int getUnreadMessageCount(Integer senderId, Integer receiverId) {
         if (senderId == null || receiverId == null) {
             return 0;
@@ -134,74 +79,5 @@ public class UserFriendMessageServiceImpl implements UserFriendMessageService {
             return 0;
         }
         return chatMessageRepository.updateMessageStatusRead(senderId, receiverId);
-    }
-
-    @Override
-    public List<UserFriendMessageDO> searchMessages(Integer userId, String keyword, int limit) {
-        return searchMessages(userId, null, keyword, limit);
-    }
-
-    @Override
-    public List<UserFriendMessageDO> searchMessages(Integer userId, Integer friendId, String keyword, int limit) {
-        if (userId == null || org.apache.commons.lang.StringUtils.isBlank(keyword)) {
-            return Collections.emptyList();
-        }
-        if (friendId != null && friendId <= 0) {
-            throw new IllegalArgumentException("friendId无效");
-        }
-        String safeKeyword = keyword.trim();
-        int safeLimit = limit > 0 ? Math.min(limit, 100) : 50;
-        // [修改] 保留 Android/macOS 旧调用的查询上限语义；新分页调用走 searchMessagesPage。
-        List<UserFriendMessageDO> rows = friendId == null
-                ? chatMessageRepository.searchMessages(userId, safeKeyword, safeLimit)
-                : chatMessageRepository.searchMessagesInConversation(userId, friendId, safeKeyword, safeLimit);
-        return rows == null ? Collections.<UserFriendMessageDO>emptyList() : rows;
-    }
-
-    @Override
-    public ChatMessageSearchPage searchMessagesPage(Integer userId, Integer friendId, String keyword, int limit) {
-        if (userId == null || org.apache.commons.lang.StringUtils.isBlank(keyword)) {
-            return new ChatMessageSearchPage(Collections.<UserFriendMessageDO>emptyList(), false);
-        }
-        if (friendId != null && friendId <= 0) {
-            throw new IllegalArgumentException("friendId无效");
-        }
-        String safeKeyword = keyword.trim();
-        int safeLimit = limit > 0 ? Math.min(limit, 100) : 50;
-        int fetchLimit = safeLimit + 1;
-        // [修改] iOS 会传 friendId 搜当前会话；旧 Android/macOS 不传时仍走全局搜索。
-        List<UserFriendMessageDO> rows = friendId == null
-                ? chatMessageRepository.searchMessages(userId, safeKeyword, fetchLimit)
-                : chatMessageRepository.searchMessagesInConversation(userId, friendId, safeKeyword, fetchLimit);
-        List<UserFriendMessageDO> safeRows = rows == null
-                ? Collections.<UserFriendMessageDO>emptyList() : rows;
-        boolean hasMore = safeRows.size() > safeLimit;
-        List<UserFriendMessageDO> pageRows = hasMore
-                ? safeRows.subList(0, safeLimit) : safeRows;
-        return new ChatMessageSearchPage(pageRows, hasMore);
-    }
-
-    @Override
-    public int updateMessageReaction(Long messageId, String reaction) {
-        if (messageId == null || messageId <= 0) {
-            return 0;
-        }
-        return chatMessageRepository.updateMessageReaction(messageId, reaction);
-    }
-
-    @Override
-    public int retractMessage(Long messageId) {
-        if (messageId == null || messageId <= 0) {
-            return 0;
-        }
-        return chatMessageRepository.updateMessageRetracted(messageId);
-    }
-
-    @Override
-    public UserFriendMessageDO getMessageById(Long messageId) {
-        if (messageId == null || messageId <= 0) {
-            return null;
-        }
-        return chatMessageRepository.getMessageById(messageId);
     }
 }

@@ -23,12 +23,6 @@ public class UserFriendsDTO implements Serializable {
     /** 好友备注名 */
     private String alias;
 
-    /** 是否置顶 */
-    private Boolean pinned;
-
-    /** 置顶时间 */
-    private Date pinnedAt;
-
     /** 是否删除 */
     private String del;
 
