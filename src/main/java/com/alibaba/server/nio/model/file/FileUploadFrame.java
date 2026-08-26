@@ -80,6 +80,10 @@ public class FileUploadFrame {
          * 获取当前用户顶层和第二层所有目录数据
          */
         DIR_USER_GET_TWO_LEVEL_REQ(0x15, "获取当前用户顶层和第二层目录数据"),
+        /**
+         * 批量递归删除目录和文件请求
+         */
+        DIR_BATCH_DELETE_REQ(0x16, "批量递归删除目录和文件请求"),
 
         // ========== 目录文件上传帧 (0x20-0x2F) ==========
         /**

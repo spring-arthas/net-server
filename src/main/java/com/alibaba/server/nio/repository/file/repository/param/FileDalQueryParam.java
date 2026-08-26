@@ -6,6 +6,8 @@ import com.alibaba.server.nio.core.param.DalPageQueryParam;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.util.List;
+
 /**
  * 文件查询dal param
  * 
@@ -14,6 +16,11 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class FileDalQueryParam extends DalPageQueryParam {
+
+    /**
+     * 按主键批量查询。
+     */
+    private List<Long> idList;
 
     /**
      * 父id

@@ -191,6 +191,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 case DIR_DELETE_REQ:
                     handleDeleteDirectory(frame, context);
                     break;
+                case DIR_BATCH_DELETE_REQ:
+                    handleBatchDeleteEntries(frame, context);
+                    break;
                 case DIR_UPDATE_REQ:
                     handleUpdateDirectory(frame, context);
                     break;
@@ -1460,6 +1463,31 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("删除目录系统异常", e);
             sendErrorResponse(context, FrameType.DIR_RESPONSE, "删除目录失败，请稍后重试", DirectoryFrame.ErrorCode.DB_ERROR);
+        }
+    }
+
+    private void handleBatchDeleteEntries(FileUploadFrame frame, SocketChannelContext context) {
+        try {
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            List<Long> fileIds = request.getJSONArray("fileIds") == null
+                    ? java.util.Collections.emptyList()
+                    : request.getJSONArray("fileIds").toJavaList(Long.class);
+            List<Long> directoryIds = request.getJSONArray("directoryIds") == null
+                    ? java.util.Collections.emptyList()
+                    : request.getJSONArray("directoryIds").toJavaList(Long.class);
+            getFileService().deleteEntries(fileIds, directoryIds, context.getUserDTO());
+            sendSuccessResponse(context, FrameType.DIR_RESPONSE, "批量删除成功", null);
+        } catch (IllegalArgumentException e) {
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, e.getMessage(),
+                    DirectoryFrame.ErrorCode.INVALID_REQUEST);
+        } catch (RuntimeException e) {
+            log.error("批量删除目录和文件系统异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "批量删除失败，请稍后重试",
+                    DirectoryFrame.ErrorCode.FS_ERROR);
+        } catch (Exception e) {
+            log.error("批量删除目录和文件数据库异常", e);
+            sendErrorResponse(context, FrameType.DIR_RESPONSE, "批量删除失败，请稍后重试",
+                    DirectoryFrame.ErrorCode.DB_ERROR);
         }
     }
 

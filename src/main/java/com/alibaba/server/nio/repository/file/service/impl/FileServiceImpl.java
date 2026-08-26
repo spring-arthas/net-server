@@ -28,6 +28,8 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.CollectionUtils;
 
 import java.io.File;
@@ -691,6 +693,313 @@ public class FileServiceImpl implements FileService {
         return true;
     }
 
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = RuntimeException.class)
+    public boolean deleteEntries(List<Long> fileIds, List<Long> directoryIds, UserDTO userDTO) {
+        validateDeleteUser(userDTO);
+        FileDo rootDirectory = findUserRootDirectory(userDTO.getId().intValue(), userDTO.getUserName());
+        UploadDirectoryLock directoryLock = acquireUploadDirectoryLock(rootDirectory.getId());
+        directoryLock.lock.lock();
+        try {
+            return deleteEntriesLocked(fileIds, directoryIds, userDTO);
+        } finally {
+            directoryLock.lock.unlock();
+            releaseUploadDirectoryLock(rootDirectory.getId(), directoryLock);
+        }
+    }
+
+    private boolean deleteEntriesLocked(List<Long> fileIds, List<Long> directoryIds, UserDTO userDTO) {
+        List<Long> normalizedFileIds = normalizeDeleteIds(fileIds);
+        List<Long> normalizedDirectoryIds = normalizeDeleteIds(directoryIds);
+        if (normalizedFileIds.isEmpty() && normalizedDirectoryIds.isEmpty()) {
+            throw new IllegalArgumentException("至少选择一个文件或目录");
+        }
+        if (normalizedFileIds.size() + normalizedDirectoryIds.size() > 200) {
+            throw new IllegalArgumentException("单次最多删除200个项目");
+        }
+
+        List<Long> targetIds = new ArrayList<>(normalizedFileIds.size() + normalizedDirectoryIds.size());
+        targetIds.addAll(normalizedFileIds);
+        targetIds.addAll(normalizedDirectoryIds);
+        FileDalQueryParam targetQuery = new FileDalQueryParam();
+        targetQuery.setIdList(targetIds);
+        targetQuery.setUserId(userDTO.getId().intValue());
+        targetQuery.setDel(YesOrNoEnum.N.name());
+        List<FileDo> targetRecords = fileRepository.getAssignFiles(targetQuery);
+        Map<Long, FileDo> targetById = targetRecords.stream()
+                .collect(Collectors.toMap(FileDo::getId, item -> item));
+        if (targetById.size() != targetIds.size()) {
+            throw new IllegalArgumentException("待删除项目不存在或不属于当前用户");
+        }
+
+        for (Long fileId : normalizedFileIds) {
+            validateBatchFileTarget(targetById.get(fileId), userDTO);
+        }
+
+        Map<Long, List<FileDo>> descendantsByDirectory = new LinkedHashMap<>();
+        for (Long directoryId : normalizedDirectoryIds) {
+            FileDo directory = targetById.get(directoryId);
+            validateBatchDirectoryTarget(directory, userDTO);
+            loadAndValidateUploadDirectoryChain(directoryId,
+                    userDTO.getId().intValue(), userDTO.getUserName());
+            List<FileDo> descendants = collectActiveDescendants(directoryId, new HashSet<Long>());
+            validateDirectoryDescendants(descendants, userDTO.getId().intValue(), userDTO.getUserName());
+            descendantsByDirectory.put(directoryId, descendants);
+        }
+
+        Set<Long> rootDirectoryIds = new LinkedHashSet<>();
+        for (Long directoryId : normalizedDirectoryIds) {
+            boolean coveredByAnotherDirectory = normalizedDirectoryIds.stream()
+                    .filter(otherId -> !otherId.equals(directoryId))
+                    .map(descendantsByDirectory::get)
+                    .filter(Objects::nonNull)
+                    .flatMap(Collection::stream)
+                    .anyMatch(item -> directoryId.equals(item.getId()));
+            if (!coveredByAnotherDirectory) {
+                rootDirectoryIds.add(directoryId);
+            }
+        }
+
+        Set<Long> deletedRecordIds = new LinkedHashSet<>();
+        Set<Long> deletedFileIds = new LinkedHashSet<>();
+        Set<Long> parentIdsToRefresh = new LinkedHashSet<>();
+        List<Path> directoryPaths = new ArrayList<>();
+        for (Long directoryId : rootDirectoryIds) {
+            FileDo directory = targetById.get(directoryId);
+            List<FileDo> directoryChain = loadAndValidateUploadDirectoryChain(
+                    directoryId, userDTO.getId().intValue(), userDTO.getUserName());
+            directoryPaths.add(resolveDirectoryPath(directoryChain, userDTO.getUserName()));
+            deletedRecordIds.add(directoryId);
+            deletedRecordIds.addAll(descendantsByDirectory.get(directoryId).stream()
+                    .map(FileDo::getId)
+                    .collect(Collectors.toList()));
+            deletedFileIds.addAll(descendantsByDirectory.get(directoryId).stream()
+                    .filter(item -> YesOrNoEnum.Y.name().equals(item.getIsFile()))
+                    .map(FileDo::getId)
+                    .collect(Collectors.toList()));
+            parentIdsToRefresh.add(directory.getParentId());
+        }
+
+        PendingDeletionBatch pendingDeletion = new PendingDeletionBatch(createDeletionStagingRoot());
+        try {
+            for (Long fileId : normalizedFileIds) {
+                if (deletedFileIds.contains(fileId)) {
+                    continue;
+                }
+                FileDo file = targetById.get(fileId);
+                validateBatchFileParent(file, userDTO);
+                pendingDeletion.stageFile(file);
+                deletedRecordIds.add(fileId);
+                parentIdsToRefresh.add(file.getParentId());
+            }
+            for (Path directoryPath : directoryPaths) {
+                pendingDeletion.stageDirectory(directoryPath);
+            }
+
+            fileRepository.batchLogicDelete(new ArrayList<>(deletedRecordIds));
+            for (Long parentId : parentIdsToRefresh) {
+                refreshParentHasChild(parentId);
+            }
+            registerPendingDeletionCleanup(pendingDeletion);
+            log.info("批量递归删除成功: userId={}, selectedFileCount={}, selectedDirectoryCount={}, recordCount={}",
+                    userDTO.getId(), normalizedFileIds.size(), normalizedDirectoryIds.size(), deletedRecordIds.size());
+            return true;
+        } catch (RuntimeException e) {
+            pendingDeletion.restore();
+            throw e;
+        }
+    }
+
+    private void validateDeleteUser(UserDTO userDTO) {
+        if (userDTO == null || userDTO.getId() == null || StringUtils.isBlank(userDTO.getUserName())) {
+            throw new IllegalArgumentException("当前用户信息无效");
+        }
+        if (userDTO.getId() > Integer.MAX_VALUE || userDTO.getId() < Integer.MIN_VALUE) {
+            throw new IllegalArgumentException("当前用户ID无效");
+        }
+    }
+
+    private List<Long> normalizeDeleteIds(List<Long> ids) {
+        if (CollectionUtils.isEmpty(ids)) {
+            return new ArrayList<>();
+        }
+        LinkedHashSet<Long> normalized = new LinkedHashSet<>();
+        for (Long id : ids) {
+            if (id == null || id <= 0) {
+                throw new IllegalArgumentException("删除项目ID无效");
+            }
+            normalized.add(id);
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private void validateBatchFileTarget(FileDo file, UserDTO userDTO) {
+        if (file == null
+                || !YesOrNoEnum.Y.name().equals(file.getIsFile())
+                || !YesOrNoEnum.Y.name().equals(file.getIsExist())
+                || !YesOrNoEnum.N.name().equals(file.getDel())
+                || !Objects.equals(userDTO.getId().intValue(), file.getUserId())
+                || !userDTO.getUserName().equals(file.getUserName())) {
+            throw new IllegalArgumentException("文件不存在或不属于当前用户");
+        }
+    }
+
+    private void validateBatchFileParent(FileDo file, UserDTO userDTO) {
+        List<FileDo> directoryChain = loadAndValidateUploadDirectoryChain(
+                file.getParentId(), userDTO.getId().intValue(), userDTO.getUserName());
+        if (directoryChain.stream().anyMatch(FileServiceImpl::isChatAttachmentDirectory)) {
+            throw new IllegalArgumentException("聊天附件系统目录中的文件不允许删除");
+        }
+        if (StringUtils.isBlank(file.getFilePath())) {
+            return;
+        }
+        Path expectedPath = resolveSafeChild(
+                resolveDirectoryPath(directoryChain, userDTO.getUserName()), file.getFileName());
+        Path storedPath = Paths.get(file.getFilePath()).toAbsolutePath().normalize();
+        ensureContained(resolveStorageRoot(), expectedPath);
+        try {
+            if (Files.exists(storedPath, LinkOption.NOFOLLOW_LINKS)) {
+                if (!storedPath.toRealPath().equals(expectedPath.toRealPath())) {
+                    throw new IllegalArgumentException("文件路径与目录记录不一致");
+                }
+            } else if (!storedPath.equals(expectedPath)) {
+                throw new IllegalArgumentException("文件路径与目录记录不一致");
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("文件路径无法解析: " + storedPath, e);
+        }
+    }
+
+    private void validateBatchDirectoryTarget(FileDo directory, UserDTO userDTO) {
+        if (directory == null
+                || !YesOrNoEnum.N.name().equals(directory.getIsFile())
+                || !YesOrNoEnum.Y.name().equals(directory.getIsExist())) {
+            throw new IllegalArgumentException("目录不存在");
+        }
+        if (Long.valueOf(-1L).equals(directory.getParentId())) {
+            throw new IllegalArgumentException("用户根目录不允许删除");
+        }
+        rejectChatAttachmentDirectoryMutation(directory);
+        if (!Objects.equals(userDTO.getId().intValue(), directory.getUserId())
+                || !userDTO.getUserName().equals(directory.getUserName())) {
+            throw new IllegalArgumentException("目录不属于当前用户");
+        }
+    }
+
+    private Path createDeletionStagingRoot() {
+        Path storageRoot = resolveStorageRoot();
+        Path stagingRoot = storageRoot.resolve(".delete-pending-" + UUID.randomUUID()).normalize();
+        ensureContained(storageRoot, stagingRoot);
+        return stagingRoot;
+    }
+
+    private void registerPendingDeletionCleanup(PendingDeletionBatch pendingDeletion) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            pendingDeletion.cleanup();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                pendingDeletion.cleanup();
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    pendingDeletion.restore();
+                }
+            }
+        });
+    }
+
+    private final class PendingDeletionBatch {
+        private final Path stagingRoot;
+        private final List<StagedPath> stagedPaths = new ArrayList<>();
+
+        private PendingDeletionBatch(Path stagingRoot) {
+            this.stagingRoot = stagingRoot;
+        }
+
+        private void stageFile(FileDo file) {
+            if (StringUtils.isBlank(file.getFilePath())) {
+                return;
+            }
+            Path source = Paths.get(file.getFilePath()).toAbsolutePath().normalize();
+            stage(source, "file-" + file.getId());
+        }
+
+        private void stageDirectory(Path source) {
+            stage(source, "directory-" + stagedPaths.size());
+        }
+
+        private void stage(Path source, String stagedName) {
+            Path storageRoot = resolveStorageRoot();
+            if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
+                ensureContained(storageRoot, source);
+                return;
+            }
+            if (Files.isSymbolicLink(source)
+                    || (!Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS))) {
+                throw new IllegalStateException("待删除路径不是普通文件或目录: " + source);
+            }
+            try {
+                // [修改] macOS 的 /var 可能映射到 /private/var，存在文件统一按真实路径校验根目录。
+                ensureContained(storageRoot, source.toRealPath());
+                Files.createDirectories(stagingRoot);
+                Path staged = stagingRoot.resolve(stagedName).normalize();
+                ensureContained(stagingRoot, staged);
+                Files.move(source, staged);
+                stagedPaths.add(new StagedPath(source, staged));
+            } catch (IOException e) {
+                throw new IllegalStateException("文件系统隔离失败: " + source, e);
+            }
+        }
+
+        private void cleanup() {
+            try {
+                if (Files.exists(stagingRoot, LinkOption.NOFOLLOW_LINKS)) {
+                    deleteDirectoryTree(stagingRoot);
+                }
+            } catch (RuntimeException e) {
+                log.error("批量删除隔离目录清理失败: path={}", stagingRoot, e);
+            }
+        }
+
+        private void restore() {
+            ListIterator<StagedPath> iterator = stagedPaths.listIterator(stagedPaths.size());
+            while (iterator.hasPrevious()) {
+                StagedPath stagedPath = iterator.previous();
+                try {
+                    if (Files.exists(stagedPath.staged, LinkOption.NOFOLLOW_LINKS)) {
+                        Files.move(stagedPath.staged, stagedPath.original);
+                    }
+                } catch (IOException e) {
+                    log.error("批量删除失败后恢复文件失败: originalPath={}, stagedPath={}",
+                            stagedPath.original, stagedPath.staged, e);
+                }
+            }
+            try {
+                if (Files.exists(stagingRoot, LinkOption.NOFOLLOW_LINKS)) {
+                    Files.deleteIfExists(stagingRoot);
+                }
+            } catch (IOException e) {
+                log.error("批量删除失败后清理隔离目录失败: path={}", stagingRoot, e);
+            }
+        }
+    }
+
+    private static final class StagedPath {
+        private final Path original;
+        private final Path staged;
+
+        private StagedPath(Path original, Path staged) {
+            this.original = original;
+            this.staged = staged;
+        }
+    }
+
     private List<FileDo> collectActiveDescendants(Long parentId, Set<Long> visitedDirectoryIds) {
         if (!visitedDirectoryIds.add(parentId)) {
             throw new IllegalArgumentException("目录层级存在循环引用");
@@ -720,10 +1029,14 @@ public class FileServiceImpl implements FileService {
             if (!file && !directory) {
                 throw new IllegalArgumentException("目录数据异常: 节点类型无效，id=" + item.getId());
             }
+            if (directory && !YesOrNoEnum.Y.name().equals(item.getIsExist())) {
+                throw new IllegalArgumentException("目录数据异常: 节点状态无效，id=" + item.getId());
+            }
             if (!userId.equals(item.getUserId()) || !userName.equals(item.getUserName())) {
                 throw new IllegalArgumentException("目录数据异常: 存在非当前用户节点，id=" + item.getId());
             }
             if (directory) {
+                rejectChatAttachmentDirectoryMutation(item);
                 validatePathSegment(item.getFileName());
             }
         }
@@ -1235,6 +1548,9 @@ public class FileServiceImpl implements FileService {
                 throw new IllegalArgumentException("只能对文件进行重命名，不支持目录");
             }
 
+            // [修改] 物理文件名由 taskId 保证唯一，展示名称只能替换主文件名，不能改变真实后缀。
+            newFileName = preserveOriginalFileExtension(fileDo, newFileName);
+
             // 同名校验：DB 中同一目录下是否已存在同名文件（排除自身）
             FileDalQueryParam sameNameCheck = new FileDalQueryParam();
             sameNameCheck.setParentId(fileDo.getParentId());
@@ -1265,6 +1581,49 @@ public class FileServiceImpl implements FileService {
             log.error("重命名文件失败，fileId={}, newFileName={}, 原因: {}", fileId, newFileName, e.getMessage(), e);
             throw e;
         }
+    }
+
+    /**
+     * 保留物理文件的原始扩展名，避免重命名展示名称时破坏文件类型。
+     *
+     * <p>优先从 filePath 读取扩展名，因为数据库中的展示名称可能已经被改错；
+     * filePath 没有扩展名时，再回退到原展示名称。</p>
+     */
+    public static String preserveOriginalFileExtension(FileDo file, String requestedName) {
+        if (StringUtils.isBlank(requestedName)) {
+            return requestedName;
+        }
+
+        String originalExtension = extractFileExtension(file == null ? null : file.getFilePath());
+        if (StringUtils.isBlank(originalExtension)) {
+            originalExtension = extractFileExtension(file == null ? null : file.getFileName());
+        }
+        if (StringUtils.isBlank(originalExtension)) {
+            return requestedName;
+        }
+
+        return removeFileExtension(requestedName) + "." + originalExtension;
+    }
+
+    private static String extractFileExtension(String value) {
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+        int lastSeparator = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+        int dot = value.lastIndexOf('.');
+        if (dot <= lastSeparator || dot == value.length() - 1) {
+            return null;
+        }
+        return value.substring(dot + 1);
+    }
+
+    private static String removeFileExtension(String value) {
+        int lastSeparator = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+        int dot = value.lastIndexOf('.');
+        if (dot <= lastSeparator || dot <= 0) {
+            return value;
+        }
+        return value.substring(0, dot);
     }
 
     @Override

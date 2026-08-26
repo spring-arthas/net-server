@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -156,6 +157,37 @@ public class FileServiceDirectoryDeleteTest {
     }
 
     @Test
+    public void batchDeleteRemovesSelectedFilesAndDirectoryTreeFromDatabaseAndFileSystem() throws Exception {
+        addDirectoryTree();
+        FileDo nestedFile = file(4L, 3L, "nested.pdf", "Y");
+        nestedFile.setFilePath(storageRoot.resolve(USER_NAME).resolve("target")
+                .resolve("empty-child").resolve("nested.pdf").toString());
+        records.put(nestedFile.getId(), nestedFile);
+        FileDo selectedFile = file(5L, 1L, "outside.pdf", "Y");
+        selectedFile.setFilePath(storageRoot.resolve(USER_NAME).resolve("outside.pdf").toString());
+        records.put(selectedFile.getId(), selectedFile);
+
+        Path target = createTargetTree();
+        Files.write(target.resolve("empty-child").resolve("nested.pdf"), new byte[] { 1 });
+        Path outside = storageRoot.resolve(USER_NAME).resolve("outside.pdf");
+        Files.createDirectories(outside.getParent());
+        Files.write(outside, new byte[] { 2 });
+
+        assertTrue(fileService.deleteEntries(
+                Arrays.asList(selectedFile.getId()),
+                Arrays.asList(2L),
+                user));
+
+        assertFalse(Files.exists(target));
+        assertFalse(Files.exists(outside));
+        assertEquals("Y", records.get(2L).getDel());
+        assertEquals("Y", records.get(3L).getDel());
+        assertEquals("Y", records.get(4L).getDel());
+        assertEquals("Y", records.get(5L).getDel());
+        assertEquals("N", records.get(1L).getHasChild());
+    }
+
+    @Test
     public void rejectsDirectoryOwnedByAnotherUser() throws Exception {
         addDirectoryTree();
         records.get(2L).setUserId(99);
@@ -185,6 +217,9 @@ public class FileServiceDirectoryDeleteTest {
     private List<FileDo> findRecords(FileDalQueryParam param) {
         List<FileDo> matches = new ArrayList<>();
         for (FileDo record : records.values()) {
+            if (param.getIdList() != null && !param.getIdList().contains(record.getId())) {
+                continue;
+            }
             if (param.getParentId() != null && !param.getParentId().equals(record.getParentId())) {
                 continue;
             }

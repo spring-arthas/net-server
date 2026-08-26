@@ -1,0 +1,8 @@
+{
+  "name": "dsh-plugin-vision-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Let text-only DSH models analyze pasted/attached images by transcribing them through a vision-capable model route",
+  "type": "module",
+  "main": "index.js"
+}

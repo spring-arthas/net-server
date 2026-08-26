@@ -107,6 +107,18 @@ public interface FileService {
     boolean deleteDirectory(Long dirId, UserDTO userDTO);
 
     /**
+     * 批量递归删除文件和目录（数据库记录 + 文件系统）。
+     *
+     * @param fileIds      直接选中的文件ID
+     * @param directoryIds 直接选中的目录ID，目录会递归删除全部子目录和文件
+     * @param userDTO      当前登录用户
+     * @return true=删除成功
+     */
+    default boolean deleteEntries(List<Long> fileIds, List<Long> directoryIds, UserDTO userDTO) {
+        throw new UnsupportedOperationException("当前文件服务不支持批量递归删除");
+    }
+
+    /**
      * 更新目录名称（DB + 文件系统）
      * 
      * @param dirId   目录ID
