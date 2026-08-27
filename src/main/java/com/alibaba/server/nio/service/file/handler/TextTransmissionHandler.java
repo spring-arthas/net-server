@@ -1761,6 +1761,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             if (userId == null) return;
             UserDynamicCreateParam request = JSON.parseObject(frame.getDataAsString(), UserDynamicCreateParam.class);
             DynamicCreateResult result = getUserDynamicService().create(userId, request);
+            DynamicAvatarResponseEnricher.enrich(result);
             sendSuccessResponse(context, FrameType.DYNAMIC_CREATE_RESPONSE, "发布动态成功", result);
             log.info("发布动态请求完成, userId={}, dynamicId={}", userId, result.getDynamicId());
         } catch (JSONException e) {
@@ -1784,6 +1785,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject request = parseDynamicRequest(frame);
             DynamicTimelinePage result = getUserDynamicService().timeline(userId,
                     request.getString("scope"), request.getLong("beforeId"), request.getIntValue("limit"));
+            DynamicAvatarResponseEnricher.enrich(result);
             sendSuccessResponse(context, FrameType.DYNAMIC_TIMELINE_RESPONSE, "获取动态成功", result);
             log.info("动态时间线请求完成, userId={}, scope={}, recordCount={}, hasMore={}",
                     userId, request.getString("scope"), result.getPosts().size(), result.isHasMore());
@@ -1832,6 +1834,7 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             JSONObject request = parseDynamicRequest(frame);
             DynamicDetailResult result = getUserDynamicService().detail(userId,
                     request.getLong("dynamicId"), request.getLong("beforeReplyId"), request.getIntValue("limit"));
+            DynamicAvatarResponseEnricher.enrich(result);
             sendSuccessResponse(context, FrameType.DYNAMIC_DETAIL_RESPONSE, "获取动态详情成功", result);
             log.info("动态详情请求完成, userId={}, dynamicId={}, replyCount={}, hasMore={}",
                     userId, request.getLong("dynamicId"), result.getReplies().size(), result.isHasMore());

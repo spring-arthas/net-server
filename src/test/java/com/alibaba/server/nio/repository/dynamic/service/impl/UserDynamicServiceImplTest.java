@@ -131,7 +131,7 @@ public class UserDynamicServiceImplTest {
         Assert.assertEquals(2, dynamicRepository.inserted.getMediaJson().split("fileId").length - 1);
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void mediaTypeUsesStoredFileMetadataInsteadOfClientKind() {
         UserDynamicCreateParam param = new UserDynamicCreateParam();
         param.setContent("spoofed");
@@ -139,7 +139,10 @@ public class UserDynamicServiceImplTest {
         mediaAccessRepository.accessibleIds = Arrays.asList(11L, 12L);
         mediaAccessRepository.files = Arrays.asList(file(11L, "one.jpg", "jpg"), file(12L, "movie.mp4", "mp4"));
 
-        service.create(7L, param);
+        DynamicCreateResult result = service.create(7L, param);
+
+        Assert.assertEquals("image", result.getPost().getMedia().get(0).getKind());
+        Assert.assertEquals("video", result.getPost().getMedia().get(1).getKind());
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -153,22 +156,50 @@ public class UserDynamicServiceImplTest {
         service.create(7L, param);
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void createRejectsMixedImageAndVideo() {
+    @Test
+    public void createAllowsMixedImageAndVideo() {
         UserDynamicCreateParam param = new UserDynamicCreateParam();
         param.setContent("mixed");
         param.setMedia(Arrays.asList(media("IMAGE", 11L), media("VIDEO", 12L)));
+        mediaAccessRepository.accessibleIds = Arrays.asList(11L, 12L);
+        mediaAccessRepository.files = Arrays.asList(file(11L, "one.jpg", "jpg"), file(12L, "movie.mp4", "mp4"));
 
-        service.create(7L, param);
+        DynamicCreateResult result = service.create(7L, param);
+
+        Assert.assertEquals(2, result.getPost().getMedia().size());
+    }
+
+    @Test
+    public void createAllowsNineMixedImagesAndVideos() {
+        UserDynamicCreateParam param = new UserDynamicCreateParam();
+        param.setContent("nine media");
+        List<DynamicMediaDTO> media = new ArrayList<DynamicMediaDTO>();
+        List<com.alibaba.server.nio.repository.file.repository.dataobject.FileDo> files =
+                new ArrayList<com.alibaba.server.nio.repository.file.repository.dataobject.FileDo>();
+        for (long fileId = 11L; fileId <= 19L; fileId++) {
+            boolean image = fileId <= 15L;
+            media.add(media(image ? "IMAGE" : "VIDEO", fileId));
+            files.add(file(fileId, fileId + (image ? ".jpg" : ".mp4"), image ? "jpg" : "mp4"));
+        }
+        param.setMedia(media);
+        mediaAccessRepository.accessibleIds = Arrays.asList(11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L);
+        mediaAccessRepository.files = files;
+
+        DynamicCreateResult result = service.create(7L, param);
+
+        Assert.assertEquals(9, result.getPost().getMedia().size());
+        Assert.assertEquals(9, mediaAccessRepository.requestedIds.size());
     }
 
     @Test(expected = IllegalArgumentException.class)
-    public void createRejectsMoreThanFourImages() {
+    public void createRejectsMoreThanNineMedia() {
         UserDynamicCreateParam param = new UserDynamicCreateParam();
         param.setContent("too many");
-        param.setMedia(Arrays.asList(
-                media("IMAGE", 11L), media("IMAGE", 12L), media("IMAGE", 13L),
-                media("IMAGE", 14L), media("IMAGE", 15L)));
+        List<DynamicMediaDTO> media = new ArrayList<DynamicMediaDTO>();
+        for (long fileId = 11L; fileId <= 20L; fileId++) {
+            media.add(media("IMAGE", fileId));
+        }
+        param.setMedia(media);
 
         service.create(7L, param);
     }

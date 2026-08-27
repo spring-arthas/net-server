@@ -41,6 +41,7 @@ public class UserDynamicServiceImpl implements UserDynamicService {
     private static final int MAX_REPLY_LENGTH = 280;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 50;
+    private static final int MAX_MEDIA_COUNT = 9;
     private static final int MAX_REFERENCE_MEDIA_COUNT = 4;
 
     @Autowired
@@ -196,25 +197,16 @@ public class UserDynamicServiceImpl implements UserDynamicService {
         if (param.getContent().isEmpty() && param.getMedia().isEmpty() && param.getReference() == null) {
             throw new IllegalArgumentException("请输入内容或添加媒体");
         }
+        if (param.getMedia().size() > MAX_MEDIA_COUNT) {
+            throw new IllegalArgumentException("动态附件不能超过9个");
+        }
 
-        int declaredImageCount = 0;
-        int declaredVideoCount = 0;
         List<Long> fileIds = new ArrayList<Long>();
         for (DynamicMediaDTO media : param.getMedia()) {
             if (media == null || media.getFileId() == null || media.getFileId() <= 0L) {
                 throw new IllegalArgumentException("动态附件无效");
             }
-            String declaredKind = normalizeMediaKind(media.getKind(), media.getMimeType());
-            if ("IMAGE".equals(declaredKind)) declaredImageCount++;
-            if ("VIDEO".equals(declaredKind)) declaredVideoCount++;
             fileIds.add(media.getFileId());
-        }
-        if (declaredImageCount > 4) throw new IllegalArgumentException("图片不能超过4张");
-        if (declaredVideoCount > 1 || (declaredVideoCount > 0 && param.getMedia().size() > 1)) {
-            throw new IllegalArgumentException("视频只能单独选择1个");
-        }
-        if (declaredImageCount > 0 && declaredImageCount != param.getMedia().size()) {
-            throw new IllegalArgumentException("不能同时选择图片和其他文件");
         }
         // [修改] 引用卡片也可携带文件，必须和正文媒体一起批量校验访问权。
         if (param.getReference() != null && param.getReference().getMedia() != null) {
@@ -230,26 +222,13 @@ public class UserDynamicServiceImpl implements UserDynamicService {
         }
 
         Map<Long, FileDo> accessibleFiles = validateFileAccess(userId, fileIds);
-        int imageCount = 0;
-        int videoCount = 0;
         for (DynamicMediaDTO media : param.getMedia()) {
-            String kind = applyStoredFileMetadata(media, accessibleFiles.get(media.getFileId()), true);
-            if ("IMAGE".equals(kind)) imageCount++;
-            if ("VIDEO".equals(kind)) videoCount++;
+            applyStoredFileMetadata(media, accessibleFiles.get(media.getFileId()), true);
         }
         if (param.getReference() != null && param.getReference().getMedia() != null) {
             for (DynamicMediaDTO media : param.getReference().getMedia()) {
                 applyStoredFileMetadata(media, accessibleFiles.get(media.getFileId()), false);
             }
-        }
-        if (imageCount > 4) {
-            throw new IllegalArgumentException("图片不能超过4张");
-        }
-        if (videoCount > 1 || (videoCount > 0 && param.getMedia().size() > 1)) {
-            throw new IllegalArgumentException("视频只能单独选择1个");
-        }
-        if (imageCount > 0 && imageCount != param.getMedia().size()) {
-            throw new IllegalArgumentException("不能同时选择图片和其他文件");
         }
     }
 
