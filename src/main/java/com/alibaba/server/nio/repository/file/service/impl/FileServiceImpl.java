@@ -9,6 +9,7 @@ import com.alibaba.server.nio.core.result.PageResult;
 import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.nio.core.server.NioServerContext;
 import com.alibaba.server.nio.repository.file.mapper.FileRepository;
+import com.alibaba.server.nio.repository.file.repository.dataobject.DriveStatsDo;
 import com.alibaba.server.nio.repository.file.repository.dataobject.FileDo;
 import com.alibaba.server.nio.repository.file.repository.param.FileDalQueryParam;
 import com.alibaba.server.nio.repository.file.service.FileService;
@@ -482,6 +483,20 @@ public class FileServiceImpl implements FileService {
             // 4. 构建树形结构
             FileDto rootDto = this.doToDto(rootDirDo);
             buildDirectoryTree(rootDto, parentIdToChildrenMap);
+
+            // 5. 聚合查询云盘统计数据，附加到根目录节点
+            try {
+                DriveStatsDo stats = this.fileRepository.getDriveStats(
+                        Integer.valueOf(String.valueOf(userDTO.getId())));
+                if (stats != null) {
+                    rootDto.setTotalDirectories(stats.getTotalDirectories());
+                    rootDto.setTotalFiles(stats.getTotalFiles());
+                    rootDto.setTotalBytes(stats.getTotalBytes());
+                }
+            } catch (Exception statsEx) {
+                log.warn("handleUserTwoLevelDirectory: 云盘统计查询失败，忽略统计数据, userId={}",
+                        userDTO.getId(), statsEx);
+            }
 
             log.info("handleUserTwoLevelDirectory: 用户 {} 完整目录树查询成功，根目录ID={}",
                     userDTO.getUserName(), rootDto.getId());

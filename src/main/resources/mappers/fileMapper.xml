@@ -114,4 +114,15 @@
                 AND f.user_id = #{userId}
             </if>
     </select>
+
+    <!-- 聚合查询用户云盘统计：目录总数、文件总数、已使用空间 -->
+    <select id="getDriveStats" parameterType="java.lang.Integer"
+        resultType="com.alibaba.server.nio.repository.file.repository.dataobject.DriveStatsDo">
+        SELECT
+            SUM(CASE WHEN is_file = 'N' THEN 1 ELSE 0 END) AS totalDirectories,
+            SUM(CASE WHEN is_file = 'Y' THEN 1 ELSE 0 END) AS totalFiles,
+            COALESCE(SUM(CASE WHEN is_file = 'Y' THEN file_size ELSE 0 END), 0) AS totalBytes
+        FROM file
+        WHERE user_id = #{userId} AND is_exist = 'Y' AND del = 'N'
+    </select>
 </mapper>

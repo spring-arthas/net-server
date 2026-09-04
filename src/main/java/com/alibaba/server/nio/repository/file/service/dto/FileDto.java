@@ -71,4 +71,19 @@ public class FileDto extends BaseDTO {
      * 所属目录名称（用于文件详情展示）
      */
     private String parentDirName;
+
+    /**
+     * 整个云盘目录总数（仅根目录节点填充）
+     */
+    private Integer totalDirectories;
+
+    /**
+     * 整个云盘文件总数（仅根目录节点填充）
+     */
+    private Long totalFiles;
+
+    /**
+     * 整个云盘已使用空间（字节，仅根目录节点填充）
+     */
+    private Long totalBytes;
 }
