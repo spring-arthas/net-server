@@ -26,9 +26,27 @@ final class UploadDataFramePayloadDecoder {
 
         long frameOffset = ByteBuffer.wrap(payload, 0, OFFSET_BYTES).getLong();
         if (frameOffset != expectedOffset) {
-            throw new IllegalArgumentException(
-                    "上传数据帧偏移不一致: expected=" + expectedOffset + ", actual=" + frameOffset);
+            throw new UploadDataFrameOffsetMismatchException(expectedOffset, frameOffset);
         }
         return Arrays.copyOfRange(payload, OFFSET_BYTES, payload.length);
+    }
+}
+
+final class UploadDataFrameOffsetMismatchException extends IllegalArgumentException {
+    private final long expectedOffset;
+    private final long actualOffset;
+
+    UploadDataFrameOffsetMismatchException(long expectedOffset, long actualOffset) {
+        super("上传数据帧偏移不一致: expected=" + expectedOffset + ", actual=" + actualOffset);
+        this.expectedOffset = expectedOffset;
+        this.actualOffset = actualOffset;
+    }
+
+    long getExpectedOffset() {
+        return expectedOffset;
+    }
+
+    long getActualOffset() {
+        return actualOffset;
     }
 }

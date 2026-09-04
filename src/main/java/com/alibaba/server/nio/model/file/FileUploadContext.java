@@ -1,6 +1,7 @@
 package com.alibaba.server.nio.model.file;
 
 import com.alibaba.server.nio.service.file.security.UploadPathResolver;
+import com.alibaba.server.nio.service.file.WindowsUploadStorageAllocator;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -129,6 +130,9 @@ public class FileUploadContext {
      * 文件MD5值（用于断点续传唯一标识）
      */
     private String md5;
+
+    /** Windows 上传容量预占，释放时必须与任务生命周期一致。 */
+    private transient WindowsUploadStorageAllocator.Allocation storageAllocation;
     /**
      * 起始偏移量（断点续传时非0）
      */

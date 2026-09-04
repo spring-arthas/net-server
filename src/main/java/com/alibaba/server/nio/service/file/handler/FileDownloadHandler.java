@@ -210,8 +210,8 @@ public class FileDownloadHandler extends AbstractChannelHandler {
             new FileTransferAccessAuthorizer().requireDownloadAccess(fileDto, identity);
 
             // 3. 路径只能由数据库记录和服务端存储根目录解析，不能信任客户端路径
-            String storageRoot = StorageRootResolver.resolve(BasicServer.getMap());
-            File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
+            File file = FileDownloadPathResolver.resolve(fileDto, null,
+                    StorageRootResolver.resolveRoots(BasicServer.getMap()));
             if (file == null || !file.exists() || !file.isFile()) {
                 log.warn("文件系统中文件不存在: path={}", fileDto.getFilePath());
                 sendErrorFrame(socketChannelContext, "文件不存在");

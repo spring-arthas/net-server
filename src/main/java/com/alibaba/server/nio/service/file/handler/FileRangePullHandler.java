@@ -172,8 +172,8 @@ public class FileRangePullHandler extends AbstractChannelHandler {
             return;
         }
         // 查询文件是否在文件系统存在
-        String storageRoot = StorageRootResolver.resolve(BasicServer.getMap());
-        File file = FileDownloadPathResolver.resolve(fileDto, null, storageRoot);
+        File file = FileDownloadPathResolver.resolve(fileDto, null,
+                StorageRootResolver.resolveRoots(BasicServer.getMap()));
         if (file == null || !file.exists() || !file.isFile()) {
             sendAckError(socketChannelContext, taskId, requestId, 40410, "file not found");
             return;

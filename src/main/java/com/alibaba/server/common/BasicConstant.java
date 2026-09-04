@@ -124,6 +124,7 @@ public class BasicConstant {
     public static final String FILE_TRANSPORT_PROTOCOL = "FILE.TRANSPORT.PROTOCOL";
     public static final String WEBSOCKET_MESSAGE_PROTOCOL = "WEBSOCKET.MESSAGE.PROTOCOL";
     public static final String NIO_FILE_BASE_PATH_WINDOWS = "NIO.FILE.BASE.PATH.WINDOWS";
+    public static final String NIO_FILE_BASE_PATH_WINDOWS_SECONDARY = "NIO.FILE.BASE.PATH.WINDOWS.SECONDARY";
     public static final String NIO_FILE_BASE_PATH_LINUX_MAC = "NIO.FILE.BASE.PATH.LINUX.MAC";
     public static final String CLIENT_CLOSE_SOCKET = "CLIENT.CLOSE.SOCKET"; // 关闭socketChannel
     public static final String REGISTER_TYPE_CHAT = "接入客户端聊天服务", REGISTER_TYPE_FILE = "接入客户端文件服务";

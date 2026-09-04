@@ -35,6 +35,7 @@ import com.alibaba.server.nio.service.file.parser.FrameUploadParser;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.alibaba.server.nio.service.file.security.UploadPathResolver;
+import com.alibaba.server.nio.service.file.WindowsUploadStorageAllocator;
 import com.alibaba.server.nio.service.ratelimit.TokenBucketRateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
@@ -251,7 +252,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
             // 2. 检查是否有断点记录
             UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(
                     fileUploadRequest.getMd5(), fileUploadRequest.getUserId());
-            if (checkpoint != null && !targetFilePath.equals(checkpoint.getFilePath())) {
+            if (checkpoint != null && !targetFilePath.equals(checkpoint.getFilePath())
+                    && !isConfiguredStoragePath(checkpoint.getFilePath())) {
                 checkpoint = null;
             }
             // 2.1 如果内存中没有，尝试从数据库查找 PAUSED 状态的任务，如果内存有，说明服务端没宕机还保留数据，此时直接按照内存中的进行使用
@@ -259,6 +261,16 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 FileTaskDto pausedTask = fileTaskService.findPausedTask(
                         fileUploadRequest.getMd5(), fileUploadRequest.getUserId(),
                         fileUploadRequest.getDirId(), targetFilePath);
+                if (pausedTask == null && !WindowsUploadStorageAllocator.configuredRoots().isEmpty()) {
+                    for (String candidate : candidateTargetPaths(targetDirectory, fileUploadRequest)) {
+                        pausedTask = fileTaskService.findPausedTask(
+                                fileUploadRequest.getMd5(), fileUploadRequest.getUserId(),
+                                fileUploadRequest.getDirId(), candidate);
+                        if (pausedTask != null) {
+                            break;
+                        }
+                    }
+                }
                 if (pausedTask != null) {
                     // 构造 Checkpoint 对象
                     checkpoint = new UploadCheckpoint();
@@ -389,11 +401,15 @@ public class FileUploadHandler extends AbstractChannelHandler {
 
         // 4. 创建上传上下文（断点续传时数据来自断点对象，如果是全新上传时来自请求）
         FileUploadContext uploadContext = new FileUploadContext();
+        WindowsUploadStorageAllocator.Allocation allocation = null;
         if (isResume && checkpoint != null) {
             Path checkpointPath = Paths.get(checkpoint.getFilePath()).toAbsolutePath().normalize();
-            if (!targetFilePath.equals(checkpointPath.toString())) {
+            if (!WindowsUploadStorageAllocator.configuredRoots().isEmpty()
+                    && WindowsUploadStorageAllocator.configuredRoots().stream().noneMatch(checkpointPath::startsWith)) {
                 throw new SecurityException("断点文件路径与认证目录不一致");
             }
+            targetFilePath = checkpointPath.toString();
+            dirPath = checkpointPath.getParent().toString();
             // 断点续传模式, 从断点续传对象中恢复元数据
             uploadContext.setMd5(checkpoint.getMd5());
             uploadContext.setFileName(checkpoint.getFileName());
@@ -433,11 +449,32 @@ public class FileUploadHandler extends AbstractChannelHandler {
         if (dirPath != null) {
             uploadContext.setBasePath(dirPath);
         }
+        // 新任务按 F -> E 路由；续传按 checkpoint 原盘固定，不能迁移半成品。
+        try {
+            if (isResume) {
+                long remaining = Math.max(0L, uploadContext.getFileSize() - uploadContext.getStartOffset());
+                allocation = WindowsUploadStorageAllocator.reserveAt(Paths.get(targetFilePath), remaining);
+            } else if (!WindowsUploadStorageAllocator.configuredRoots().isEmpty()) {
+                allocation = WindowsUploadStorageAllocator.reserve(Paths.get(dirPath), uploadContext.getFileSize());
+                uploadContext.setBasePath(allocation.getDirectory().toString());
+                uploadContext.setFilePath(resolveTargetFilePath(allocation.getDirectory().toString(), request));
+                if (fileTaskId != null) {
+                    FileTaskDto routedTask = new FileTaskDto();
+                    routedTask.setId(fileTaskId);
+                    routedTask.setFilePath(uploadContext.getFilePath());
+                    fileTaskService.update(routedTask);
+                }
+            }
+        } catch (IOException | RuntimeException allocationError) {
+            discardCreatedTask(fileTaskId);
+            throw allocationError;
+        }
+        uploadContext.setStorageAllocation(allocation);
         // 7. 获取并发许可
         // [修改] 自适应并发上限检查：资源压力高时提前拒绝，保护 CPU/磁盘/内存
         int adaptiveMax = AdaptiveThrottlePolicy.uploadMaxConcurrent();
         int currentUploads = config.getMaxConcurrentUploads() - uploadSemaphore.availablePermits();
-        if (currentUploads >= adaptiveMax) {
+            if (currentUploads >= adaptiveMax) {
             ResourcePressureLevel pressureLevel = ServerResourceMonitor.getInstance().getCurrentLevel();
             log.warn("上传并发已达自适应上限: current={}/{}, 压力等级={}", currentUploads, adaptiveMax, pressureLevel);
             if (Objects.nonNull(fileTaskId)) {
@@ -451,6 +488,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     log.error("自适应拒绝时删除数据库记录失败", e);
                 }
             }
+            WindowsUploadStorageAllocator.release(uploadContext.getStorageAllocation());
+            uploadContext.setStorageAllocation(null);
             return null;
         }
         if (!uploadSemaphore.tryAcquire()) {
@@ -468,6 +507,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
                     log.error("删除数据库记录失败", e);
                 }
             }
+            WindowsUploadStorageAllocator.release(uploadContext.getStorageAllocation());
+            uploadContext.setStorageAllocation(null);
             return null;
         }
         uploadContext.setSemaphoreAcquired(true);
@@ -476,6 +517,7 @@ public class FileUploadHandler extends AbstractChannelHandler {
             uploadContext.openFileChannel();
         } catch (IOException e) {
             log.error("打开文件通道失败", e);
+            WindowsUploadStorageAllocator.release(uploadContext.getStorageAllocation());
             uploadContext.releaseSemaphore(uploadSemaphore);
             // 删除数据库记录
             if (uploadContext.getFileTaskId() != null) {
@@ -645,6 +687,21 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 uploadContext.resetWindowMetrics();
             }
 
+        } catch (UploadDataFrameOffsetMismatchException e) {
+            // 客户端可能因断线重连、服务端恢复或旧数据重传而落后/超前。
+            // 丢弃当前不连续的数据块，并在客户端请求 ACK 时返回服务端真实进度，
+            // 让 C#、iOS、macOS 客户端统一回退文件读取位置后重传，避免上传直接失败。
+            log.warn("上传数据帧偏移不一致，等待客户端按服务端进度重传: taskId={}, expected={}, actual={}, needAck={}",
+                    uploadContext == null ? null : uploadContext.getRequestTaskId(),
+                    e.getExpectedOffset(), e.getActualOffset(), frame.needAck());
+            if (frame.needAck() && uploadContext != null) {
+                try {
+                    sendAckFrame(socketChannelContext, uploadContext, null, "progress",
+                            "数据帧偏移已校正，请按服务端进度重传", uploadContext.getBytesWritten());
+                } catch (IOException ackError) {
+                    log.error("发送偏移校正 ACK 失败", ackError);
+                }
+            }
         } catch (Exception e) {
             log.error("处理数据帧失败, error={}", ExceptionUtils.getStackTrace(e));
             if (frame.needAck()) {
@@ -907,6 +964,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
         if (fileUploadContext == null) {
             return;
         }
+        WindowsUploadStorageAllocator.release(fileUploadContext.getStorageAllocation());
+        fileUploadContext.setStorageAllocation(null);
         fileUploadContext.releaseSemaphore(uploadSemaphore);
         uploadContextMap.remove(fileUploadContext.getRequestTaskId());
         uploadChannelContextMap.remove(fileUploadContext.getRequestTaskId());
@@ -1229,6 +1288,8 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 log.info("无断点信息，删除临时文件: fileName={}", ctx.getFileName());
             }
             // 2. 释放并发许可
+            WindowsUploadStorageAllocator.release(ctx.getStorageAllocation());
+            ctx.setStorageAllocation(null);
             ctx.releaseSemaphore(uploadSemaphore);
             uploadChannelContextMap.remove(ctx.getRequestTaskId());
             rebalanceUploadRateLimiters();
@@ -1309,6 +1370,43 @@ public class FileUploadHandler extends AbstractChannelHandler {
         // [修改] 目录来自服务端权限校验，客户端只能提供经过严格校验的单层文件名。
         return UploadPathResolver.resolve(
                 Paths.get(directory), request.getTaskId(), request.getFileName()).toString();
+    }
+
+    private boolean isConfiguredStoragePath(String filePath) {
+        if (StringUtils.isBlank(filePath)) {
+            return false;
+        }
+        Path path = Paths.get(filePath).toAbsolutePath().normalize();
+        return WindowsUploadStorageAllocator.configuredRoots().stream().anyMatch(path::startsWith);
+    }
+
+    private List<String> candidateTargetPaths(String directory, FileUploadRequest request) {
+        List<String> candidates = new java.util.ArrayList<>();
+        Path primary = Paths.get(directory).toAbsolutePath().normalize();
+        List<Path> roots = WindowsUploadStorageAllocator.configuredRoots();
+        if (roots.isEmpty() || !primary.startsWith(roots.get(0))) {
+            return candidates;
+        }
+        Path relative = roots.get(0).relativize(primary);
+        for (Path root : roots) {
+            candidates.add(resolveTargetFilePath(root.resolve(relative).toString(), request));
+        }
+        return candidates;
+    }
+
+    private void discardCreatedTask(Long fileTaskId) {
+        if (fileTaskId == null) {
+            return;
+        }
+        try {
+            FileTaskDto task = new FileTaskDto();
+            task.setId(fileTaskId);
+            task.setDel(YesOrNoEnum.Y.name());
+            task.setGmtModified(new Date());
+            fileTaskService.update(task);
+        } catch (Exception cleanupError) {
+            log.error("容量路由失败后清理文件任务记录失败: fileTaskId={}", fileTaskId, cleanupError);
+        }
     }
 
 }

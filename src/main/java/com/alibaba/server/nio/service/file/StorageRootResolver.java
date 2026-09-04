@@ -4,6 +4,9 @@ import com.alibaba.server.common.BasicConstant;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,6 +23,35 @@ public final class StorageRootResolver {
 
     public static String resolveRequired(Map<String, Object> configuration) {
         return resolve(configuration, "");
+    }
+
+    /** Windows 仅支持按配置顺序返回主、备用存储根目录。 */
+    public static List<String> resolveWindowsRoots(Map<String, Object> configuration) {
+        String osName = value(configuration, BasicConstant.OS_NAME);
+        if (!osName.toLowerCase(Locale.ROOT).contains("win")) {
+            return Collections.emptyList();
+        }
+        List<String> roots = new ArrayList<>();
+        addIfPresent(roots, value(configuration, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS));
+        addIfPresent(roots, value(configuration, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS_SECONDARY));
+        return roots;
+    }
+
+    public static List<String> resolveRoots(Map<String, Object> configuration) {
+        List<String> windowsRoots = resolveWindowsRoots(configuration);
+        if (!windowsRoots.isEmpty()) {
+            return windowsRoots;
+        }
+        String root = resolveRequired(configuration);
+        return StringUtils.isBlank(root)
+                ? Collections.<String>emptyList()
+                : Collections.singletonList(root);
+    }
+
+    private static void addIfPresent(List<String> roots, String root) {
+        if (StringUtils.isNotBlank(root) && !roots.contains(root)) {
+            roots.add(root);
+        }
     }
 
     private static String resolve(Map<String, Object> configuration, String defaultValue) {

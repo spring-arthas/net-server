@@ -50,6 +50,14 @@ public class DirectoryInitializer {
 
             // 2. 确保文件系统目录存在
             ensureDirectoryExists(baseDirectoryPath);
+            if (OSinfo.isWindows()) {
+                String secondaryPath = NioServerContext.getValue(
+                        BasicConstant.NIO_FILE_BASE_PATH_WINDOWS_SECONDARY);
+                if (secondaryPath != null && !secondaryPath.trim().isEmpty()) {
+                    ensureDirectoryExists(secondaryPath.trim());
+                    log.info("DirectoryInitializer: Windows 备用上传目录 = {}", secondaryPath.trim());
+                }
+            }
 
             // 3. 确保数据库记录存在
             ensureDatabaseRecordExists(baseDirectoryPath, userDTO);

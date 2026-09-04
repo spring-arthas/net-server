@@ -30,7 +30,7 @@ public class TlsDeploymentConfigurationTest {
         assertProperty(properties, "MEDIA.STREAM.PUBLIC.HOST", "auto");
         assertProperty(properties, "MEDIA.STREAM.PUBLIC.SCHEME", "http");
         assertProperty(properties, "TLS.GATEWAY.ENABLED", "false");
-        assertProperty(properties, "NIO.FILE.BASE.PATH.WINDOWS", "E:\\storage\\upload\\file");
+        assertProperty(properties, "NIO.FILE.BASE.PATH.WINDOWS", "F:\\storage\\upload\\file");
         assertProperty(properties, "NIO.FILE.BASE.PATH.LINUX.MAC", "/Users/hljy/Documents/storages/");
         assertProperty(properties, "TLS.GATEWAY.PUBLIC.IP", "auto");
         assertProperty(properties, "TLS.GATEWAY.KEYSTORE.AUTO.CREATE", "true");

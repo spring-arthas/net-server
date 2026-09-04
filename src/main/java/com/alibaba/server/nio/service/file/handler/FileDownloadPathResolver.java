@@ -30,6 +30,19 @@ final class FileDownloadPathResolver {
         return resolveByFileName(fileDto, root);
     }
 
+    static File resolve(FileDto fileDto, String requestedFilePath, List<String> storageRoots) throws IOException {
+        if (storageRoots == null || storageRoots.isEmpty()) {
+            return null;
+        }
+        for (String storageRoot : storageRoots) {
+            File resolved = resolve(fileDto, requestedFilePath, storageRoot);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+        return null;
+    }
+
     private static File resolveConfiguredPath(String filePath, Path root, FileDto fileDto)
             throws IOException {
         if (StringUtils.isBlank(filePath)) {
