@@ -28,6 +28,7 @@ import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
+import com.alibaba.server.nio.service.file.StorageRootResolver;
 import com.alibaba.server.nio.service.file.WindowsUploadStorageAllocator;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
@@ -598,10 +599,20 @@ public class FileDownloadHandler extends AbstractChannelHandler {
     }
 
     /** 返回所有候选存储根（含自动发现的备用盘），供下载侧遍历查找文件。 */
+    /**
+     * 返回下载侧遍历查找文件的候选存储根。
+     * 仅 Windows 多盘符场景使用 WindowsUploadStorageAllocator（主盘+备用盘+自动发现盘）；
+     * 非 Windows（macOS/Linux）或候选为空时，回退到通用单根解析。
+     */
     private List<String> uploadStorageRoots() {
         List<String> roots = new java.util.ArrayList<>();
-        for (java.nio.file.Path p : WindowsUploadStorageAllocator.configuredRoots()) {
-            roots.add(p.toString());
+        if (!StorageRootResolver.resolveWindowsRoots(BasicServer.getMap()).isEmpty()) {
+            for (java.nio.file.Path p : WindowsUploadStorageAllocator.configuredRoots()) {
+                roots.add(p.toString());
+            }
+        }
+        if (roots.isEmpty()) {
+            roots.addAll(StorageRootResolver.resolveRoots(BasicServer.getMap()));
         }
         return roots;
     }
