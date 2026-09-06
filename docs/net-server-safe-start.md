@@ -18,14 +18,14 @@
 先编译：
 
 ```bash
-cd /Users/hljy/IdeaProjects/code/net-server
+cd /Users/debugcode/Documents/java/idea/code/net-server
 JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home mvn -DskipTests package
 ```
 
 再启动：
 
 ```bash
-cd /Users/hljy/IdeaProjects/code/net-server
+cd /Users/debugcode/Documents/java/idea/code/net-server
 ./scripts/run-net-server-zulu8.sh
 ```
 

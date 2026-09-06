@@ -23,7 +23,7 @@ import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
-import com.alibaba.server.nio.service.file.StorageRootResolver;
+import com.alibaba.server.nio.service.file.WindowsUploadStorageAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 
@@ -173,7 +173,7 @@ public class FileRangePullHandler extends AbstractChannelHandler {
         }
         // 查询文件是否在文件系统存在
         File file = FileDownloadPathResolver.resolve(fileDto, null,
-                StorageRootResolver.resolveRoots(BasicServer.getMap()));
+                uploadStorageRoots());
         if (file == null || !file.exists() || !file.isFile()) {
             sendAckError(socketChannelContext, taskId, requestId, 40410, "file not found");
             return;
@@ -427,5 +427,14 @@ public class FileRangePullHandler extends AbstractChannelHandler {
     public static void cleanupConnection(String remoteAddress) {
         parserMap.remove(remoteAddress);
         sessionMap.entrySet().removeIf(entry -> remoteAddress.equals(entry.getValue().getRemoteAddress()));
+    }
+
+    /** 返回所有候选存储根（含自动发现的备用盘），供下载侧遍历查找文件。 */
+    private List<String> uploadStorageRoots() {
+        List<String> roots = new java.util.ArrayList<>();
+        for (java.nio.file.Path p : WindowsUploadStorageAllocator.configuredRoots()) {
+            roots.add(p.toString());
+        }
+        return roots;
     }
 }

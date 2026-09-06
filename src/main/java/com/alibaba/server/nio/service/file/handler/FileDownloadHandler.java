@@ -28,7 +28,7 @@ import com.alibaba.server.nio.service.file.parser.FrameDownloadParser;
 import com.alibaba.server.nio.service.file.security.FileTransferAccessAuthorizer;
 import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
-import com.alibaba.server.nio.service.file.StorageRootResolver;
+import com.alibaba.server.nio.service.file.WindowsUploadStorageAllocator;
 import com.alibaba.server.util.LocalTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -211,7 +211,7 @@ public class FileDownloadHandler extends AbstractChannelHandler {
 
             // 3. 路径只能由数据库记录和服务端存储根目录解析，不能信任客户端路径
             File file = FileDownloadPathResolver.resolve(fileDto, null,
-                    StorageRootResolver.resolveRoots(BasicServer.getMap()));
+                    uploadStorageRoots());
             if (file == null || !file.exists() || !file.isFile()) {
                 log.warn("文件系统中文件不存在: path={}", fileDto.getFilePath());
                 sendErrorFrame(socketChannelContext, "文件不存在");
@@ -595,5 +595,14 @@ public class FileDownloadHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("清理下载上下文失败: taskId={}", ctx.getTaskId(), e);
         }
+    }
+
+    /** 返回所有候选存储根（含自动发现的备用盘），供下载侧遍历查找文件。 */
+    private List<String> uploadStorageRoots() {
+        List<String> roots = new java.util.ArrayList<>();
+        for (java.nio.file.Path p : WindowsUploadStorageAllocator.configuredRoots()) {
+            roots.add(p.toString());
+        }
+        return roots;
     }
 }

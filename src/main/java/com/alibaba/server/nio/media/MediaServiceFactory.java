@@ -8,10 +8,14 @@ import com.alibaba.server.nio.service.file.security.TransferTokenFactory;
 import com.alibaba.server.nio.service.file.security.TransferTokenService;
 import com.alibaba.server.nio.service.file.security.TokenSecretResolver;
 import com.alibaba.server.nio.service.file.StorageRootResolver;
+import com.alibaba.server.nio.service.file.WindowsUploadStorageAllocator;
 import com.alibaba.server.nio.tls.TlsNetworkAddressResolver;
 import org.apache.commons.lang.StringUtils;
 
 import java.net.InetAddress;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -63,13 +67,33 @@ public final class MediaServiceFactory {
                 .getBean(UserDynamicRepository.class);
         return new MediaAccessService(
                 fileService,
-                new SafeFileResolver(StorageRootResolver.resolve(config)),
+                createSafeFileResolver(config),
                 tokenService,
                 stringConfig(config, BasicConstant.MEDIA_STREAM_PUBLIC_SCHEME, "https"),
                 publicHost,
                 port,
                 // [修改] 在线播放与下载使用同一动态可见性规则，好友可播放时间线中的视频。
                 (userId, fileId) -> dynamicRepository.countVisibleMediaReferences(userId, fileId) > 0);
+    }
+
+    /**
+     * 构造安全文件解析器：Windows 场景传入全部候选根（主盘 + 备用盘 + 自动发现盘），
+     * 保证播放/缩略图能解析备用盘上的文件；非 Windows 或候选为空时回退单根。
+     */
+    private static SafeFileResolver createSafeFileResolver(Map<String, Object> config) {
+        List<String> roots = new ArrayList<>();
+        if (!StorageRootResolver.resolveWindowsRoots(config).isEmpty()) {
+            for (Path p : WindowsUploadStorageAllocator.configuredRoots()) {
+                roots.add(p.toString());
+            }
+        }
+        if (roots.isEmpty()) {
+            String single = StorageRootResolver.resolve(config);
+            if (StringUtils.isNotBlank(single)) {
+                roots.add(single);
+            }
+        }
+        return new SafeFileResolver(roots);
     }
 
     static String publicHost(
