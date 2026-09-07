@@ -1,5 +1,6 @@
 package com.alibaba.server.nio.service.file.task;
 
+import com.alibaba.server.nio.service.file.checkpoint.CheckpointManager;
 import com.alibaba.server.nio.service.file.handler.FileDownloadHandler;
 import com.alibaba.server.nio.service.file.handler.FileRangePullHandler;
 import com.alibaba.server.nio.service.file.handler.FileUploadHandler;
@@ -27,6 +28,14 @@ public class FileTransferTaskCleaner {
 
             // Clean pull-range sessions
             FileRangePullHandler.checkAndFreezeIdleTasks(IDLE_THRESHOLD);
+
+            // [修改] 清理过期上传断点和孤儿部分文件（默认24小时未完成视为过期），
+            // 兜底处理服务端重启后内存断点丢失但磁盘文件仍存在的场景。
+            // DB 层 PAUSED 记录体积小，暂不纳入定时清理；客户端主动删除时通过 UPLOAD_ABORT 帧实时清理。
+            int expiredCount = CheckpointManager.cleanExpired();
+            if (expiredCount > 0) {
+                log.info("已清理 {} 个过期上传断点及关联部分文件", expiredCount);
+            }
         } catch (Exception e) {
             log.error("文件传输任务清理失败", e);
         }

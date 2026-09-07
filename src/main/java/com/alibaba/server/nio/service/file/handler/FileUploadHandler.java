@@ -212,6 +212,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
             case END_FRAME: // 文件结束帧
                 handleEndFrame(frame, socketChannelContext, simpleChannelContext);
                 break;
+            case UPLOAD_ABORT: // 客户端删除上传任务，通知服务端清理断点和部分文件
+                handleUploadAbort(frame, socketChannelContext);
+                break;
             default:
                 log.warn("未知帧类型: {}", frame.getType());
                 break;
@@ -1308,6 +1311,157 @@ public class FileUploadHandler extends AbstractChannelHandler {
         } catch (Exception e) {
             log.error("清理上下文失败: taskId={}", ctx.getRequestTaskId(), e);
         }
+    }
+
+    /**
+     * 处理上传中止帧（UPLOAD_ABORT, 0x07）
+     *
+     * 跨平台协议：iOS / Android / macOS / C# 四端统一使用此帧通知服务端清理上传资源。
+     * 请求体复用 FileUploadRequest 字段（md5 / userId / userName / taskId / transferToken），
+     * 与 resumeCheck、metadata 帧保持一致，各端无需额外定义新 DTO。
+     *
+     * 清理范围（按优先级，全部幂等）：
+     *   1. 若该 taskId 正在上传，立即终止并释放上下文
+     *   2. 内存 Checkpoint → 删除磁盘部分文件 + 移除断点 + 删除 DB PAUSED 记录
+     *   3. 内存无断点时，按 md5+userId 查 DB PAUSED 记录兜底清理
+     *   4. 按 taskId_ 前缀扫描存储根目录，删除服务端重启后内存断点丢失的孤儿文件
+     */
+    private void handleUploadAbort(FileUploadFrame frame, SocketChannelContext socketChannelContext) {
+        String md5 = null;
+        Integer userId = null;
+        String taskId = null;
+        try {
+            // 1. 复用 FileUploadRequest 解析，与 resumeCheck/metadata 帧字段完全一致，四端通用
+            String jsonData = frame.getDataAsString();
+            FileUploadRequest req = com.alibaba.fastjson.JSONObject.parseObject(jsonData, FileUploadRequest.class);
+            if (req == null) {
+                sendAckFrame(socketChannelContext, null, "error", "请求解析失败");
+                return;
+            }
+            md5 = req.getMd5();
+            userId = req.getUserId();
+            taskId = req.getTaskId();
+            String transferToken = req.getTransferToken();
+
+            // 2. 校验 transferToken（与其他上传帧同一套鉴权，四端通用）
+            TransferTokenService.ValidationResult identity = TransferTokenFactory.getInstance()
+                    .validateToken(transferToken);
+            if (!identity.isValid()) {
+                sendAckFrame(socketChannelContext, null, "error", "身份验证失败");
+                return;
+            }
+            if (userId != null && !identity.getUserId().equals(userId.longValue())) {
+                sendAckFrame(socketChannelContext, null, "error", "用户身份不一致");
+                return;
+            }
+
+            log.info("[UploadAbort] 收到上传中止请求: md5={}, userId={}, taskId={}, userName={}",
+                    md5, userId, taskId, req.getUserName());
+
+            int cleanedFiles = 0;
+            int cleanedDbRecords = 0;
+
+            // 3. 若该 taskId 正在上传，先终止活跃上传
+            FileUploadContext activeCtx = uploadContextMap.get(taskId);
+            if (activeCtx != null) {
+                log.info("[UploadAbort] 终止活跃上传: taskId={}, uploaded={}/{}",
+                        taskId, activeCtx.getBytesWritten(), activeCtx.getFileSize());
+                cleanupContext(activeCtx);
+                uploadContextMap.remove(taskId);
+                uploadChannelContextMap.remove(taskId);
+            }
+
+            // 4. 内存 Checkpoint 清理（服务端未重启时的主路径）
+            UploadCheckpoint checkpoint = CheckpointManager.getCheckpoint(md5, userId);
+            if (checkpoint != null) {
+                if (checkpoint.getFilePath() != null) {
+                    java.nio.file.Path filePath = java.nio.file.Paths.get(checkpoint.getFilePath());
+                    if (java.nio.file.Files.exists(filePath)) {
+                        try {
+                            java.nio.file.Files.delete(filePath);
+                            cleanedFiles++;
+                            log.info("[UploadAbort] 已删除部分文件: {}", checkpoint.getFilePath());
+                        } catch (Exception e) {
+                            log.error("[UploadAbort] 删除部分文件失败: {}", checkpoint.getFilePath(), e);
+                        }
+                    }
+                }
+                if (checkpoint.getFileTaskId() != null) {
+                    try {
+                        fileTaskService.deleteById(checkpoint.getFileTaskId());
+                        cleanedDbRecords++;
+                        log.info("[UploadAbort] 已删除 DB 任务记录: fileTaskId={}", checkpoint.getFileTaskId());
+                    } catch (Exception e) {
+                        log.error("[UploadAbort] 删除 DB 记录失败: fileTaskId={}", checkpoint.getFileTaskId(), e);
+                    }
+                }
+                CheckpointManager.removeCheckpoint(md5, userId);
+            }
+            // 注：内存无断点时（服务端重启过），DB PAUSED 记录因缺少 filePath 无法直接查询，
+            // 由下方孤儿文件扫描清理磁盘文件，DB 陈旧记录由 FileTransferTaskCleaner 定时清理。
+
+            // 6. 孤儿文件扫描：按 taskId_ 前缀在默认存储根目录查找（服务端重启后内存断点丢失的场景）
+            if (taskId != null && !taskId.isEmpty()) {
+                cleanedFiles += deleteOrphanFileByTaskId(taskId);
+            }
+
+            log.info("[UploadAbort] 处理完成: md5={}, taskId={}, 删除文件={}, 删除DB记录={}",
+                    md5, taskId, cleanedFiles, cleanedDbRecords);
+            sendAckFrame(socketChannelContext, null, "aborted", "已清理服务端资源");
+        } catch (Exception e) {
+            log.error("[UploadAbort] 处理失败: md5={}, taskId={}", md5, taskId, e);
+            try {
+                sendAckFrame(socketChannelContext, null, "error", "服务端处理失败");
+            } catch (Exception ignored) {}
+        }
+    }
+
+    /**
+     * 按 taskId_ 前缀扫描默认存储根目录，删除孤儿部分文件。
+     * 用于服务端重启后内存 Checkpoint 丢失、但磁盘文件仍存在的场景。
+     *
+     * @return 删除的文件数量
+     */
+    private int deleteOrphanFileByTaskId(String taskId) {
+        int count = 0;
+        if (taskId == null || taskId.isEmpty()) {
+            return 0;
+        }
+        try {
+            // 使用服务端配置的存储根目录列表（生产环境），而非硬编码开发路径
+            java.util.List<java.nio.file.Path> roots = WindowsUploadStorageAllocator.configuredRoots();
+            if (roots.isEmpty()) {
+                // 兜底：使用 FileUploadContext 默认存储根
+                roots = java.util.Collections.singletonList(
+                        java.nio.file.Paths.get("/Users/debugcode/Downloads/西班牙的荷包蛋/"));
+            }
+            final String prefix = taskId + "_";
+            for (java.nio.file.Path storageRoot : roots) {
+                if (!java.nio.file.Files.exists(storageRoot)) {
+                    continue;
+                }
+                java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(storageRoot);
+                count += stream.filter(p -> {
+                            String name = p.getFileName().toString();
+                            return name.startsWith(prefix);
+                        })
+                        .mapToInt(p -> {
+                            try {
+                                java.nio.file.Files.delete(p);
+                                log.info("[UploadAbort] 已删除孤儿文件: {}", p);
+                                return 1;
+                            } catch (Exception e) {
+                                log.error("[UploadAbort] 删除孤儿文件失败: {}", p, e);
+                                return 0;
+                            }
+                        })
+                        .sum();
+                stream.close();
+            }
+        } catch (Exception e) {
+            log.warn("[UploadAbort] 扫描孤儿文件失败: taskId={}", taskId, e);
+        }
+        return count;
     }
 
     private static void rebalanceUploadRateLimiters() {
