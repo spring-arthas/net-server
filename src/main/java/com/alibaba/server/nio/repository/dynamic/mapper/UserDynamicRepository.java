@@ -99,10 +99,12 @@ public interface UserDynamicRepository {
     @Select("SELECT COUNT(1) FROM user_dynamic d WHERE d.del = 'N' "
             + "AND (d.user_id = #{userId} OR EXISTS (SELECT 1 FROM user_friends f "
             + "WHERE f.user_id = #{userId} AND f.friend_id = d.user_id AND f.del = 'N')) "
-            + "AND ((d.media_json IS NOT NULL AND JSON_CONTAINS(d.media_json, "
-            + "CAST(#{fileId} AS JSON), '$[*].fileId')) "
-            + "OR (d.reference_json IS NOT NULL AND JSON_CONTAINS(d.reference_json, "
-            + "CAST(#{fileId} AS JSON), '$.media[*].fileId')) "
+            // [修改] JSON_CONTAINS 不支持 $[*].fileId 通配符路径，会永远返回 NULL；
+            // 改用 JSON_SEARCH，它支持通配符路径并精确匹配 fileId 字符串值。
+            + "AND ((d.media_json IS NOT NULL AND JSON_SEARCH(d.media_json, 'one', "
+            + "CAST(#{fileId} AS CHAR), NULL, '$[*].fileId') IS NOT NULL) "
+            + "OR (d.reference_json IS NOT NULL AND JSON_SEARCH(d.reference_json, 'one', "
+            + "CAST(#{fileId} AS CHAR), NULL, '$.media[*].fileId') IS NOT NULL) "
             + "OR FIND_IN_SET(CAST(#{fileId} AS CHAR), REPLACE(COALESCE(d.image_paths, ''), ' ', '')) > 0)")
     int countVisibleMediaReferences(@Param("userId") Long userId, @Param("fileId") Long fileId);
 }
