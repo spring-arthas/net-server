@@ -1655,6 +1655,9 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
     private void handleThumbnailRequest(FileUploadFrame frame, SocketChannelContext context) {
         JSONObject response = new JSONObject();
         try {
+            // [安全修复] 鉴权：必须登录
+            Long currentUserId = requireLoggedInUserId(context);
+
             JSONObject request = JSON.parseObject(frame.getDataAsString());
             Long fileId = request.getLong("fileId");
             if (fileId == null) {
@@ -1672,17 +1675,33 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                 return;
             }
 
+            // [安全修复] 越权检查：只能访问自己的文件缩略图
+            if (fileDto.getUserId() == null
+                    || fileDto.getUserId().longValue() != currentUserId) {
+                log.warn("缩略图越权访问拒绝: userId={}, fileId={}, fileOwner={}",
+                        currentUserId, fileId, fileDto.getUserId());
+                response.put("hasThumbnail", false);
+                sendFrame(context, FrameType.THUMBNAIL_RESP, response);
+                return;
+            }
+
+            // [性能修复] 只读不生成，不阻塞 worker 线程。
+            // 不存在时 getIfExists 内部会触发异步生成，客户端回退到 range_pull 本地生成。
             byte[] thumbData = com.alibaba.server.nio.service.thumbnail.ThumbnailService
-                    .getOrGenerate(fileId, fileDto.getFilePath(), fileDto.getFileName());
+                    .getIfExists(fileId, fileDto.getFilePath(), fileDto.getFileName());
             if (thumbData != null && thumbData.length > 0) {
                 response.put("hasThumbnail", true);
                 response.put("thumbnailData", java.util.Base64.getEncoder().encodeToString(thumbData));
                 log.debug("缩略图请求成功: fileId={}, size={}B", fileId, thumbData.length);
             } else {
                 response.put("hasThumbnail", false);
-                log.debug("缩略图请求失败(不支持或生成失败): fileId={}, fileName={}",
+                log.debug("缩略图未就绪(异步生成中或不支持): fileId={}, fileName={}",
                         fileId, fileDto.getFileName());
             }
+        } catch (IllegalArgumentException e) {
+            // 未登录
+            log.warn("缩略图请求未登录: error={}", e.getMessage());
+            response.put("hasThumbnail", false);
         } catch (Exception e) {
             log.warn("缩略图请求异常: error={}", e.getMessage());
             response.put("hasThumbnail", false);
