@@ -50,7 +50,7 @@ public class WorkerThreadPool {
     // private static final ExecutorService textExecutor =
     // Executors.newSingleThreadExecutor();
     private static final ExecutorService executorService = new ThreadPoolExecutor(
-            Runtime.getRuntime().availableProcessors(), Runtime.getRuntime().availableProcessors(), 3000,
+            computePoolSize(), computePoolSize(), 3000,
             TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1000),
             new ThreadFactory() {
                 @Override
@@ -71,6 +71,18 @@ public class WorkerThreadPool {
                     }
                 }
             });
+
+    /**
+     * [修复] 线程池大小从「CPU核数」提升到「CPU核数 x 8，最少 64」。
+     * 原因：每个 SocketChannel 一个常驻 ChannelWorker 线程（poll 5s 循环），
+     * 设备一多（macOS+Android+iOS 多个控制连接 + 文件连接）线程池就被占满，
+     * 10086 控制端口表现为 TCP 能连但登录帧无响应（线程池内排队）。
+     * CPU 核数=8 时旧配置只有 8 个线程，5 个设备即可打满。
+     */
+    private static int computePoolSize() {
+        int cores = Runtime.getRuntime().availableProcessors();
+        return Math.max(64, cores * 8);
+    }
 
     /**
      * 提交读事件任务
@@ -295,16 +307,23 @@ public class WorkerThreadPool {
             // 文件传输场景无需全局锁，每个 FileUploadContext/DownloadContext 是独立的
             String handlerType = socketChannelContext.getHandlerType();
             boolean needLock = !isFileTransferType(handlerType);
+            boolean locked = false;
 
             if (needLock) {
-                // 尝试获取锁
-                while (!BasicServer.fileLock.tryLock()) {
-                    try {
-                        TimeUnit.MILLISECONDS.sleep(500);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return;
-                    }
+                // [修复] 全局锁改为有界等待：tryLock(5s) 失败则记录告警并跳过本次处理，
+                // 不再 while+sleep(500) 忙等。旧逻辑：锁被长期持有时所有控制通道
+                // 的 worker 全部卡在忙等循环，线程池被占满 → 10086 登录帧无响应。
+                try {
+                    locked = BasicServer.fileLock.tryLock(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                if (!locked) {
+                    log.error("[ " + LocalTime.formatDate(LocalDateTime.now())
+                            + " ] WorkerThreadPool | --> 通道 {} 等待全局锁超时(5s)，跳过本次数据处理，避免线程池被占满导致控制端口卡死",
+                            channelKey);
+                    return;
                 }
             }
 
@@ -326,8 +345,8 @@ public class WorkerThreadPool {
                         .getChannelPipeLine();
                 defaultChannelPipeLine.executeHandler(data, this.socketChannelContext);
             } finally {
-                // 释放锁（如果获取了锁）
-                if (needLock) {
+                // 释放锁（仅当本次确实获取到了锁）
+                if (needLock && locked) {
                     BasicServer.fileLock.unlock();
                 }
                 // 清理事务同步状态（已移除）
