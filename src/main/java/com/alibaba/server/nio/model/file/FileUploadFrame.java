@@ -296,7 +296,13 @@ public class FileUploadFrame {
         /** 删除自己的动态请求 */
         DYNAMIC_DELETE_REQ(0x68, "动态删除请求"),
         /** 删除自己的动态回执 */
-        DYNAMIC_DELETE_RESPONSE(0x69, "动态删除回执");
+        DYNAMIC_DELETE_RESPONSE(0x69, "动态删除回执"),
+
+        // ========== 缩略图帧 (0x70-0x7F) ==========
+        /** 客户端请求文件缩略图（服务端预生成，base64 返回） */
+        THUMBNAIL_REQ(0x70, "文件缩略图请求"),
+        /** 服务端返回文件缩略图 */
+        THUMBNAIL_RESP(0x71, "文件缩略图响应");
 
         private final int code;
         private final String description;

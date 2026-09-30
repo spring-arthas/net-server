@@ -871,6 +871,9 @@ public class FileUploadHandler extends AbstractChannelHandler {
                 log.warn("上传成功但终态 ACK 发送失败: taskId={}, fileId={}",
                         uploadContext.getRequestTaskId(), uploadContext.getFileId(), ackError);
             }
+            // 3.1 异步生成缩略图（不阻塞上传流程，生成失败不影响上传结果）
+            com.alibaba.server.nio.service.thumbnail.ThumbnailService.generateAsync(
+                    fileDo.getId(), uploadContext.getFilePath(), uploadContext.getFileName());
             // 4. 删除断点记录（上传完成）
             if (StringUtils.isNotBlank(uploadContext.getMd5())) {
                 CheckpointManager.removeCheckpoint(uploadContext.getMd5(), uploadContext.getUserId());

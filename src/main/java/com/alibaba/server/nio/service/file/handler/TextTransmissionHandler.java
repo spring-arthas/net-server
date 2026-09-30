@@ -221,6 +221,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
                     handleAvatarUpdate(frame, context);
                     break;
 
+                // ========== 缩略图帧 ==========
+                case THUMBNAIL_REQ:
+                    handleThumbnailRequest(frame, context);
+                    break;
+
                 // ========== 聊天消息帧 ==========
                 case CHAT_MSG_SEND_REQ: // 0x50
                     handleChatMessageSend(frame, context);
@@ -1640,6 +1645,49 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             log.error("移动文件系统异常", e);
             sendErrorResponse(context, FrameType.FILE_RESPONSE, "文件移动失败，请稍后重试", "DB_ERROR");
         }
+    }
+
+    /**
+     * 处理客户端缩略图请求。
+     * 优先读取已生成的缩略图；不存在时同步懒加载生成。
+     * 响应：{"fileId":..., "hasThumbnail":true/false, "thumbnailData":"base64..."}
+     */
+    private void handleThumbnailRequest(FileUploadFrame frame, SocketChannelContext context) {
+        JSONObject response = new JSONObject();
+        try {
+            JSONObject request = JSON.parseObject(frame.getDataAsString());
+            Long fileId = request.getLong("fileId");
+            if (fileId == null) {
+                response.put("fileId", 0);
+                response.put("hasThumbnail", false);
+                sendFrame(context, FrameType.THUMBNAIL_RESP, response);
+                return;
+            }
+            response.put("fileId", fileId);
+
+            FileDto fileDto = getFileService().getFileDetail(fileId);
+            if (fileDto == null || fileDto.getFilePath() == null) {
+                response.put("hasThumbnail", false);
+                sendFrame(context, FrameType.THUMBNAIL_RESP, response);
+                return;
+            }
+
+            byte[] thumbData = com.alibaba.server.nio.service.thumbnail.ThumbnailService
+                    .getOrGenerate(fileId, fileDto.getFilePath(), fileDto.getFileName());
+            if (thumbData != null && thumbData.length > 0) {
+                response.put("hasThumbnail", true);
+                response.put("thumbnailData", java.util.Base64.getEncoder().encodeToString(thumbData));
+                log.debug("缩略图请求成功: fileId={}, size={}B", fileId, thumbData.length);
+            } else {
+                response.put("hasThumbnail", false);
+                log.debug("缩略图请求失败(不支持或生成失败): fileId={}, fileName={}",
+                        fileId, fileDto.getFileName());
+            }
+        } catch (Exception e) {
+            log.warn("缩略图请求异常: error={}", e.getMessage());
+            response.put("hasThumbnail", false);
+        }
+        sendFrame(context, FrameType.THUMBNAIL_RESP, response);
     }
 
     private void handleFileDelete(FileUploadFrame frame, SocketChannelContext context) {
