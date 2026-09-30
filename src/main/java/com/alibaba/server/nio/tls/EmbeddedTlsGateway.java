@@ -383,7 +383,17 @@ public final class EmbeddedTlsGateway implements AutoCloseable {
                 TimeUnit.SECONDS,
                 new SynchronousQueue<Runnable>(),
                 new NamedThreadFactory(THREAD_NAME_PREFIX + role + "-"),
-                new ThreadPoolExecutor.AbortPolicy());
+                // [修复] 拒绝策略从裸 AbortPolicy 改为带明确日志的策略：
+                // 打满时记录线程池状态（帮助定位），随后仍抛 RejectedExecutionException，
+                // 由调用方（submitConnection/relay）catch 后关闭连接，不 hang。
+                (r, exec) -> {
+                    LOGGER.error(
+                            "TLS Gateway 转发线程池已打满，拒绝任务: role={}, maxThreads={}, activeCount={}, poolSize={}, queueSize={}",
+                            role, maximumThreads,
+                            exec.getActiveCount(), exec.getPoolSize(), exec.getQueue().size());
+                    throw new java.util.concurrent.RejectedExecutionException(
+                            "TLS Gateway relay executor overloaded: role=" + role);
+                });
         executor.allowCoreThreadTimeOut(true);
         return executor;
     }

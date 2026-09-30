@@ -35,6 +35,19 @@ public class WriteQueueHelper {
      * @param socketChannelContext 通道上下文
      * @param buffer               要写入的数据
      */
+    /**
+     * [修复] 写队列最大允许积压的缓冲区数量。
+     * pendingWriteQueue 为无界 ConcurrentLinkedQueue，客户端读得慢时
+     * 服务端持续入队会导致内存无限增长直至 OOM。
+     * 超过该阈值时 submitWrite 等待队列消化（有界），超时抛异常关闭连接。
+     */
+    private static final int MAX_PENDING_WRITE_BUFFERS = 200;
+
+    /**
+     * [修复] 等待写队列消化的最长时间。
+     */
+    private static final long WRITE_QUEUE_DRAIN_WAIT_MILLIS = 15000L;
+
     public static void submitWrite(SocketChannelContext socketChannelContext, ByteBuffer buffer) throws IOException {
         if (socketChannelContext == null || buffer == null || !buffer.hasRemaining()) {
             return;
@@ -57,6 +70,29 @@ public class WriteQueueHelper {
             }
 
             java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer> queue = socketChannelContext.getPendingWriteQueue();
+
+            // [修复] 写队列背压保护：积压超过阈值时等待消化，防止内存无限增长
+            if (queue.size() > MAX_PENDING_WRITE_BUFFERS) {
+                long waitStart = System.currentTimeMillis();
+                while (queue.size() > MAX_PENDING_WRITE_BUFFERS) {
+                    if (System.currentTimeMillis() - waitStart > WRITE_QUEUE_DRAIN_WAIT_MILLIS) {
+                        log.error("写队列积压超过{}个缓冲区持续{}ms仍未消化，关闭连接防止OOM: remoteAddress={}",
+                                MAX_PENDING_WRITE_BUFFERS, WRITE_QUEUE_DRAIN_WAIT_MILLIS,
+                                socketChannelContext.getRemoteAddress());
+                        throw new IOException("write queue overflow: remote=" + socketChannelContext.getRemoteAddress());
+                    }
+                    if (socketChannel == null || !socketChannel.isOpen()) {
+                        throw new IOException("通道已关闭");
+                    }
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("write queue backpressure interrupted");
+                    }
+                }
+                log.warn("写队列背压解除，继续写入: remoteAddress={}", socketChannelContext.getRemoteAddress());
+            }
 
             // 同步块：防止与 WriteEventHandler 并发修改 ByteBuffer.position()
             synchronized (queue) {

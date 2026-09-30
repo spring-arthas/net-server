@@ -64,7 +64,13 @@ public class WorkerThreadPool {
                         try {
                             log.info("[ " + LocalTime.formatDate(LocalDateTime.now())
                                     + " ] WorkerThreadPool | --> 工作线程池待处理任务数已到峰值，将阻塞直至任务提交至线程池");
-                            executor.getQueue().put(r);
+                            // [修复] 无限 put 改为有界 offer(5s)：旧实现若线程池满且队列满，
+                            // 会在 selector 线程无限阻塞，导致整个端口停摆。
+                            boolean accepted = executor.getQueue().offer(r, 5, TimeUnit.SECONDS);
+                            if (!accepted) {
+                                log.error("[ " + LocalTime.formatDate(LocalDateTime.now())
+                                        + " ] WorkerThreadPool | --> 线程池与队列均满且等待5s仍无空位，放弃提交新任务");
+                            }
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -174,6 +180,15 @@ public class WorkerThreadPool {
         private final AtomicBoolean running;
 
         /**
+         * [修复] 溢出暂存队列。
+         * 主队列满时，新数据先暂存于此（不丢数据），
+         * worker 消化主队列后回填并恢复 OP_READ。
+         * 背压下客户端会暂停发送，此队列不会无限增长。
+         */
+        private final java.util.concurrent.ConcurrentLinkedQueue<TransportDataModel> overflowQueue =
+                new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+        /**
          * 队列获取数据的超时时间（毫秒）
          * 超时后检查 running 状态，防止通道已关闭但任务仍在阻塞
          */
@@ -202,26 +217,55 @@ public class WorkerThreadPool {
         }
 
         /**
-         * 向队列中添加待处理数据
-         * 使用带超时的阻塞式 offer，队列满时等待，形成背压机制
-         * TCP 流量控制会自动通知客户端减速发送
+         * [修复] 向队列中添加待处理数据——非阻塞。
+         * 
+         * 旧实现：dataQueue.offer(data, 30, SECONDS) 阻塞等待队列空位。
+         * 而 submit() 由 selector 线程调用（ReadEventHandler → submit → offerData），
+         * 队列一满，selector 线程就被阻塞最长 30 秒 → 整个端口（10086/10088）
+         * 所有连接的事件全部停摆 → 客户端表现为 TCP 能连但请求无响应/超时。
+         * 
+         * 新实现：非阻塞 offer；队列满时暂停该连接 OP_READ（背压）。
+         * 暂停后客户端 TCP 窗口填满，自然停止发送，队列被 ChannelWorker
+         * 消化后由 worker 恢复 OP_READ。selector 线程永不阻塞。
          *
          * @param data 待处理的数据
          * @return 是否添加成功
          */
         public boolean offerData(TransportDataModel data) {
-            try {
-                // 使用阻塞式 offer，队列满时等待，形成背压
-                // 超时时间设置为30秒，防止无限阻塞
-                boolean success = dataQueue.offer(data, 30, TimeUnit.SECONDS);
-                if (!success) {
-                    log.error("ChannelWorker | --> 队列插入超时30秒，数据丢失: channelKey={}", channelKey);
+            boolean success = dataQueue.offer(data);
+            if (!success) {
+                // [修复] 队列满：不阻塞 selector，数据暂存溢出队列，暂停该连接读取（背压）
+                overflowQueue.add(data);
+                log.error("ChannelWorker | --> 队列已满, 数据暂存溢出队列({}), 暂停该连接读取(背压), channelKey={}",
+                        overflowQueue.size(), channelKey);
+                socketChannelContext.pauseReadForBackpressure();
+            }
+            return true;
+        }
+
+        /**
+         * [修复] 将溢出队列中的数据回填到主队列；
+         * 主队列有空位且溢出队列清空后，恢复该连接的 OP_READ。
+         */
+        private void drainOverflow() {
+            if (overflowQueue.isEmpty()) {
+                return;
+            }
+            while (!overflowQueue.isEmpty()) {
+                TransportDataModel pending = overflowQueue.peek();
+                if (pending == null) {
+                    break;
                 }
-                return success;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.error("ChannelWorker | --> 队列插入被中断: channelKey={}", channelKey);
-                return false;
+                if (dataQueue.offer(pending)) {
+                    overflowQueue.poll();
+                } else {
+                    // 主队列仍满，等待下一次消化
+                    break;
+                }
+            }
+            // 溢出队列清空 → 背压解除，恢复读取
+            if (overflowQueue.isEmpty() && socketChannelContext.isReadPaused()) {
+                socketChannelContext.resumeReadForBackpressure();
             }
         }
 
@@ -274,12 +318,16 @@ public class WorkerThreadPool {
                                     + " ] ChannelWorker | --> 通道 {} 已关闭，退出任务", channelKey);
                             break;
                         }
+                        // [修复] 空闲等待期间也回填溢出队列（主队列空、溢出队列有数据时立即处理）
+                        this.drainOverflow();
                         // 通道仍然打开，继续等待数据
                         continue;
                     }
 
                     // 处理数据
                     this.processData(data);
+                    // [修复] 处理完后回填溢出队列数据（背压解除后恢复 OP_READ）
+                    this.drainOverflow();
 
                 } catch (InterruptedException e) {
                     log.warn("ChannelWorker | --> 通道 {} 的任务被中断", channelKey);

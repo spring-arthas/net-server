@@ -38,9 +38,12 @@
         <property name="password"
             value="#{systemEnvironment.containsKey('NET_SERVER_DB_PASSWORD') ? systemEnvironment['NET_SERVER_DB_PASSWORD'] : @localDatabaseProperties['password']}" />
         <!-- 配置初始化大小、最小、最大 -->
-        <property name="initialSize" value="1" />
-        <property name="minIdle" value="1" />
-        <property name="maxActive" value="50" />
+        <property name="initialSize" value="5" />
+        <property name="minIdle" value="5" />
+        <!-- [修复] maxActive 从 50 提升到 200：控制端口业务（目录/聊天/登录）
+             都走 SQL，多设备并发查询时 50 连接 + 10s maxWait 会被打满导致
+             请求等待 10 秒后报错。200 覆盖多设备高并发场景。 -->
+        <property name="maxActive" value="200" />
         <!-- 配置获取连接等待超时的时间 -->
         <property name="maxWait" value="10000" />
         <!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->

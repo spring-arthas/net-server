@@ -90,6 +90,13 @@ public class SocketChannelContext {
     private volatile boolean isReadPaused = false;
 
     /**
+     * [修复] 通道对应的 SelectionKey 引用。
+     * 注册时由 Acceptor 写入，用于 WorkerThreadPool 队列满时
+     * 暂停/恢复该连接的 OP_READ（背压），避免 selector 线程被阻塞。
+     */
+    private volatile java.nio.channels.SelectionKey selectionKey;
+
+    /**
      * 待执行的限速恢复任务（用于连接断开时取消）
      */
     private volatile java.util.concurrent.ScheduledFuture<?> pendingResumeTask;
@@ -104,6 +111,63 @@ public class SocketChannelContext {
      */
     public Object getReadPauseLock() {
         return readPauseLock;
+    }
+
+    /**
+     * [修复] 队列背压：暂停本通道 OP_READ。
+     * 当 ChannelWorker 队列已满、无法继续接收数据时调用。
+     * 暂停后 TCP 接收窗口会填满，客户端自然减速，队列得以消化。
+     * 不阻塞调用线程（selector），仅取消 OP_READ 注册。
+     */
+    public void pauseReadForBackpressure() {
+        synchronized (readPauseLock) {
+            if (isReadPaused) {
+                return;
+            }
+            java.nio.channels.SelectionKey key = this.selectionKey;
+            if (key == null || !key.isValid()) {
+                return;
+            }
+            try {
+                key.interestOps(key.interestOps() & ~java.nio.channels.SelectionKey.OP_READ);
+                this.isReadPaused = true;
+                logBackpressure("暂停读取(队列背压)");
+            } catch (java.nio.channels.CancelledKeyException e) {
+                // 键已取消，无需处理
+            }
+        }
+    }
+
+    /**
+     * [修复] 队列背压：恢复本通道 OP_READ。
+     * 由 ChannelWorker 在队列消化到低水位后调用。
+     */
+    public void resumeReadForBackpressure() {
+        synchronized (readPauseLock) {
+            if (!isReadPaused) {
+                return;
+            }
+            java.nio.channels.SelectionKey key = this.selectionKey;
+            if (key == null || !key.isValid()) {
+                this.isReadPaused = false;
+                return;
+            }
+            try {
+                key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_READ);
+                key.selector().wakeup();
+                this.isReadPaused = false;
+                logBackpressure("恢复读取(队列已消化)");
+            } catch (java.nio.channels.CancelledKeyException e) {
+                this.isReadPaused = false;
+            }
+        }
+    }
+
+    private void logBackpressure(String action) {
+        // 用最轻量的方式记录，避免每个连接高频打印
+        if (System.currentTimeMillis() % 100 < 5) {
+            System.out.println("[SocketChannelContext] " + action + ", remote=" + remoteAddress);
+        }
     }
 
     /**

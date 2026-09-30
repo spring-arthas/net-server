@@ -73,6 +73,8 @@ public class MainFileDownloadAcceptor extends AbstractAcceptor implements Runnab
         socketChannelContext.setHandlerType("DOWNLOAD");
         NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE)
                 .attach(socketChannelContext);
+        // [修复] 保存 SelectionKey 引用，供队列背压时暂停/恢复 OP_READ
+        socketChannelContext.setSelectionKey(socketChannel.keyFor(this.selector));
         log.info("文件下载客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功, 远程客户端地址 = {}",
                 socketChannelContext.getRemoteAddress());
     }

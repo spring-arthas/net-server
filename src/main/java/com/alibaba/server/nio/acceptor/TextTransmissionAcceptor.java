@@ -70,6 +70,8 @@ public class TextTransmissionAcceptor extends AbstractAcceptor implements Runnab
         // 设置为文本传输类型，用于 Handler 选择
         socketChannelContext.setHandlerType("TEXT");
         NioServerContext.EventRegister(socketChannel, this.selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE).attach(socketChannelContext);
+        // [修复] 保存 SelectionKey 引用，供队列背压时暂停/恢复 OP_READ
+        socketChannelContext.setSelectionKey(socketChannel.keyFor(this.selector));
         log.info("文本传输客户端通道成功接入，并完成该 [{}] 连接地址的socketChannel注册selector成功, 远程客户端地址 = {}",
                 socketChannelContext.getRemoteAddress());
     }
