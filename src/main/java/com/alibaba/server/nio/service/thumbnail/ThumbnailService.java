@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -81,6 +82,15 @@ public final class ThumbnailService {
     /** 最近生成失败的 fileId → 失败时间戳（冷却期内不重试） */
     private static final ConcurrentHashMap<Long, Long> FAILED = new ConcurrentHashMap<>();
 
+    /** 内存缓存：最近访问的缩略图字节数据（LRU，最多 200 张，约 4-10MB），避免每次读磁盘 */
+    private static final java.util.Map<Long, byte[]> MEM_CACHE = Collections.synchronizedMap(
+            new java.util.LinkedHashMap<Long, byte[]>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<Long, byte[]> eldest) {
+                    return size() > 200;
+                }
+            });
+
     /** 缩略图生成专用线程池（单线程顺序处理，避免大文件抽帧占用过多 CPU） */
     private static final ExecutorService GENERATOR = Executors.newSingleThreadExecutor(new ThreadFactory() {
         private final AtomicInteger seq = new AtomicInteger(0);
@@ -128,11 +138,17 @@ public final class ThumbnailService {
         if (fileId == null || filePath == null || !supports(fileName)) {
             return null;
         }
+        // [优化] 先查内存缓存（LRU 200 张），命中直接返回，避免读磁盘
+        byte[] cached = MEM_CACHE.get(fileId);
+        if (cached != null) {
+            return cached;
+        }
         Path thumbPath = thumbnailPath(filePath, fileId);
         try {
             if (Files.exists(thumbPath)) {
                 byte[] data = Files.readAllBytes(thumbPath);
                 if (data != null && data.length > 0) {
+                    MEM_CACHE.put(fileId, data);
                     return data;
                 }
             }
