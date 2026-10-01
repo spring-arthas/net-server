@@ -35,3 +35,12 @@ hs_err_pid*.log
 .trellis/.current-task
 .trellis/.current-task
 .trellis/workspace
+
+# Doubao agent runtime data (never commit)
+config.json
+events.jsonl
+labels/
+problem/
+sessions/
+statuses/
+views.json
