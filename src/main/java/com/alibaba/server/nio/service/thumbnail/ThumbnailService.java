@@ -91,8 +91,8 @@ public final class ThumbnailService {
                 }
             });
 
-    /** 缩略图生成专用线程池（单线程顺序处理，避免大文件抽帧占用过多 CPU） */
-    private static final ExecutorService GENERATOR = Executors.newSingleThreadExecutor(new ThreadFactory() {
+    /** 缩略图生成专用线程池（2 线程并行，图片生成快/视频抽帧慢，2 线程减少排队） */
+    private static final ExecutorService GENERATOR = Executors.newFixedThreadPool(2, new ThreadFactory() {
         private final AtomicInteger seq = new AtomicInteger(0);
         @Override
         public Thread newThread(Runnable r) {
