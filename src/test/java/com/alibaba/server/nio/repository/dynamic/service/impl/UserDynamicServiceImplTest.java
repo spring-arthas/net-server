@@ -238,8 +238,8 @@ public class UserDynamicServiceImplTest {
         interactionRepository.replyCount = 2;
         interactionRepository.repostCount = 3;
 
-        DynamicActionResult result = service.action(7L, 101L, "LIKE", null);
-        service.action(7L, 101L, "LIKE", null);
+        DynamicActionResult result = service.action(7L, 101L, "LIKE", null, null);
+        service.action(7L, 101L, "LIKE", null, null);
 
         Assert.assertEquals(2, interactionRepository.upsertLikeCalls);
         Assert.assertEquals(5, result.getLikeCount());
@@ -251,7 +251,7 @@ public class UserDynamicServiceImplTest {
     public void unlikeOnlyDeactivatesCurrentUsersLike() {
         dynamicRepository.visibleDynamic = visibleDynamic(101L, 9L);
 
-        DynamicActionResult result = service.action(7L, 101L, "UNLIKE", null);
+        DynamicActionResult result = service.action(7L, 101L, "UNLIKE", null, null);
 
         Assert.assertEquals(Long.valueOf(101L), interactionRepository.deactivatedDynamicId);
         Assert.assertEquals(Long.valueOf(7L), interactionRepository.deactivatedUserId);
@@ -264,8 +264,8 @@ public class UserDynamicServiceImplTest {
         dynamicRepository.visibleDynamic = visibleDynamic(101L, 9L);
         interactionRepository.repostCount = 1;
 
-        DynamicActionResult repost = service.action(7L, 101L, "REPOST", null);
-        DynamicActionResult unrepost = service.action(7L, 101L, "UNREPOST", null);
+        DynamicActionResult repost = service.action(7L, 101L, "REPOST", null, null);
+        DynamicActionResult unrepost = service.action(7L, 101L, "UNREPOST", null, null);
 
         Assert.assertEquals(1, interactionRepository.upsertRepostCalls);
         Assert.assertTrue(repost.isReposted());
@@ -279,7 +279,7 @@ public class UserDynamicServiceImplTest {
         dynamicRepository.visibleDynamic = visibleDynamic(101L, 9L);
         interactionRepository.replyCount = 4;
 
-        DynamicActionResult result = service.action(7L, 101L, "REPLY", "  收到  ");
+        DynamicActionResult result = service.action(7L, 101L, "REPLY", "  收到  ", null);
 
         Assert.assertEquals("收到", interactionRepository.lastReplyContent);
         Assert.assertEquals("收到", result.getContent());
@@ -291,7 +291,7 @@ public class UserDynamicServiceImplTest {
         dynamicRepository.visibleDynamic = visibleDynamic(101L, 9L);
         char[] chars = new char[281];
         Arrays.fill(chars, 'a');
-        service.action(7L, 101L, "REPLY", new String(chars));
+        service.action(7L, 101L, "REPLY", new String(chars), null);
     }
 
     @Test
@@ -315,7 +315,7 @@ public class UserDynamicServiceImplTest {
     @Test(expected = SecurityException.class)
     public void actionRejectsDynamicOutsideCurrentUsersVisibility() {
         dynamicRepository.visibleDynamic = null;
-        service.action(7L, 101L, "LIKE", null);
+        service.action(7L, 101L, "LIKE", null, null);
     }
 
     @Test(expected = SecurityException.class)
