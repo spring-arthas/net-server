@@ -110,7 +110,7 @@ public class UserDynamicServiceImpl implements UserDynamicService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public DynamicActionResult action(Long userId, Long dynamicId, String action, String content) {
+    public DynamicActionResult action(Long userId, Long dynamicId, String action, String content, Long parentId) {
         UserDynamicDO dynamic = requireVisibleDynamic(userId, dynamicId);
         String normalizedAction = normalizeAction(action);
         String normalizedContent = null;
@@ -119,6 +119,7 @@ public class UserDynamicServiceImpl implements UserDynamicService {
             normalizedContent = normalizeReply(content);
             UserDynamicInteractionDO reply = interaction(dynamicId, userId, "REPLY", normalizedContent,
                     "REPLY:" + UUID.randomUUID().toString());
+            reply.setParentId(parentId != null && parentId > 0 ? parentId : null);
             interactionRepository.upsertActive(reply);
         } else if ("LIKE".equals(normalizedAction) || "REPOST".equals(normalizedAction)) {
             interactionRepository.upsertActive(interaction(dynamicId, userId, normalizedAction, null,
@@ -131,8 +132,8 @@ public class UserDynamicServiceImpl implements UserDynamicService {
 
         DynamicActionResult result = canonicalActionResult(userId, dynamic.getId(), normalizedAction);
         result.setContent(normalizedContent);
-        log.info("动态互动完成, userId={}, dynamicId={}, action={}, likeCount={}, replyCount={}, repostCount={}",
-                userId, dynamicId, normalizedAction, result.getLikeCount(), result.getReplyCount(),
+        log.info("动态互动完成, userId={}, dynamicId={}, action={}, parentId={}, likeCount={}, replyCount={}, repostCount={}",
+                userId, dynamicId, normalizedAction, parentId, result.getLikeCount(), result.getReplyCount(),
                 result.getRepostCount());
         return result;
     }
@@ -347,6 +348,7 @@ public class UserDynamicServiceImpl implements UserDynamicService {
         value.setAuthor(new DynamicAuthorDTO(reply.getUserId(), empty(reply.getUserName()),
                 firstNonBlank(reply.getNickName(), reply.getUserName()), reply.getAvatar()));
         value.setContent(empty(reply.getContent()));
+        value.setReplyToCommentId(reply.getParentId());
         value.setCreatedAt(time(reply.getGmtCreated()));
         value.setMine(viewerId.equals(reply.getUserId()));
         return value;

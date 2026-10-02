@@ -19,6 +19,7 @@ public class DynamicPostDTO {
     private boolean liked;
     private boolean reposted;
     private DynamicPostDTO originalPost;
+    private Long replyToCommentId;
     private long createdAt;
     private boolean mine;
 }

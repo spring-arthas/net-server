@@ -1876,10 +1876,11 @@ public class TextTransmissionHandler extends AbstractChannelHandler {
             if (userId == null) return;
             JSONObject request = parseDynamicRequest(frame);
             DynamicActionResult result = getUserDynamicService().action(userId,
-                    request.getLong("dynamicId"), request.getString("action"), request.getString("content"));
+                    request.getLong("dynamicId"), request.getString("action"), request.getString("content"),
+                    request.getLong("parentId"));
             sendSuccessResponse(context, FrameType.DYNAMIC_ACTION_RESPONSE, "动态操作成功", result);
-            log.info("动态互动请求完成, userId={}, dynamicId={}, action={}",
-                    userId, result.getDynamicId(), result.getAction());
+            log.info("动态互动请求完成, userId={}, dynamicId={}, action={}, parentId={}",
+                    userId, result.getDynamicId(), result.getAction(), request.getLong("parentId"));
         } catch (JSONException e) {
             sendDynamicInvalidJson(context, FrameType.DYNAMIC_ACTION_RESPONSE);
         } catch (SecurityException e) {

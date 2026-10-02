@@ -13,7 +13,7 @@ public interface UserDynamicService {
 
     DynamicTimelinePage timeline(Long userId, String scope, Long beforeId, int limit);
 
-    DynamicActionResult action(Long userId, Long dynamicId, String action, String content);
+    DynamicActionResult action(Long userId, Long dynamicId, String action, String content, Long parentId);
 
     DynamicDetailResult detail(Long userId, Long dynamicId, Long beforeReplyId, int limit);
 

@@ -12,6 +12,7 @@ public class UserDynamicInteractionDO extends BaseDO {
     private Long userId;
     private String actionType;
     private String content;
+    private Long parentId;
     private String idempotencyKey;
 
     // [修改] 回复详情联表展示字段。

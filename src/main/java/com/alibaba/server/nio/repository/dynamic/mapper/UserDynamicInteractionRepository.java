@@ -12,11 +12,11 @@ import java.util.List;
 @Mapper
 public interface UserDynamicInteractionRepository {
 
-    @Insert("INSERT INTO user_dynamic_interaction(dynamic_id, user_id, action_type, content, "
+    @Insert("INSERT INTO user_dynamic_interaction(dynamic_id, user_id, action_type, content, parent_id, "
             + "idempotency_key, del, del_time, gmt_created, gmt_modified) "
-            + "VALUES(#{dynamicId}, #{userId}, #{actionType}, #{content}, #{idempotencyKey}, "
+            + "VALUES(#{dynamicId}, #{userId}, #{actionType}, #{content}, #{parentId}, #{idempotencyKey}, "
             + "'N', NULL, NOW(3), NOW(3)) ON DUPLICATE KEY UPDATE del = 'N', del_time = NULL, "
-            + "content = VALUES(content), gmt_modified = NOW(3)")
+            + "content = VALUES(content), parent_id = VALUES(parent_id), gmt_modified = NOW(3)")
     int upsertActive(UserDynamicInteractionDO interaction);
 
     @Update("UPDATE user_dynamic_interaction SET del = 'Y', del_time = NOW(3), "
@@ -35,7 +35,7 @@ public interface UserDynamicInteractionRepository {
             @Param("actionType") String actionType);
 
     @Select({"<script>",
-            "SELECT i.id, i.dynamic_id, i.user_id, i.action_type, i.content, i.idempotency_key,",
+            "SELECT i.id, i.dynamic_id, i.user_id, i.action_type, i.content, i.parent_id, i.idempotency_key,",
             "i.del, i.del_time, i.gmt_created, i.gmt_modified,",
             "u.user_name, u.nick_name, u.avatar",
             "FROM user_dynamic_interaction i",
