@@ -445,6 +445,8 @@ public class UserDynamicServiceImplTest {
         private List<UserDynamicInteractionDO> replies = Collections.emptyList();
         private Long replyBeforeId;
         private int replyLimit;
+        private UserDynamicInteractionDO replyByIdResult;
+        private Long replyByIdRequestedId;
 
         @Override
         public int upsertActive(UserDynamicInteractionDO interaction) {
@@ -488,6 +490,12 @@ public class UserDynamicServiceImplTest {
             replyBeforeId = beforeId;
             replyLimit = limit;
             return replies;
+        }
+
+        @Override
+        public UserDynamicInteractionDO selectReplyById(Long id) {
+            replyByIdRequestedId = id;
+            return replyByIdResult;
         }
     }
 
