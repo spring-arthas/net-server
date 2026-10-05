@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -145,15 +146,54 @@ public class UserDynamicServiceImpl implements UserDynamicService {
     public DynamicDetailResult detail(Long userId, Long dynamicId, Long beforeReplyId, int limit) {
         UserDynamicDO dynamic = requireVisibleDynamic(userId, dynamicId);
         int pageSize = normalizeLimit(limit);
-        List<UserDynamicInteractionDO> rows = safeList(interactionRepository.selectReplies(
-                dynamicId, beforeReplyId, pageSize + 1));
-        boolean hasMore = rows.size() > pageSize;
-        List<UserDynamicInteractionDO> pageRows = hasMore ? rows.subList(0, pageSize) : rows;
-        List<DynamicPostDTO> replies = pageRows.stream()
+
+        // 1. 查询顶级评论（按时间倒序分页）
+        List<UserDynamicInteractionDO> topLevelRows;
+        if (beforeReplyId != null) {
+            // 分页：查询 beforeReplyId 之前的顶级评论
+            topLevelRows = safeList(interactionRepository.selectReplies(
+                    dynamicId, beforeReplyId, pageSize + 1));
+            // 过滤出顶级评论（parent_id IS NULL）
+            topLevelRows = topLevelRows.stream()
+                    .filter(r -> r.getParentId() == null)
+                    .collect(Collectors.toList());
+        } else {
+            // 首次加载：查询最新的 pageSize 条顶级评论
+            topLevelRows = safeList(interactionRepository.selectTopLevelReplies(dynamicId, pageSize + 1));
+        }
+
+        boolean hasMore = topLevelRows.size() > pageSize;
+        List<UserDynamicInteractionDO> pageTopLevel = hasMore ? topLevelRows.subList(0, pageSize) : topLevelRows;
+
+        // 2. 查询这些顶级评论的所有回复
+        List<UserDynamicInteractionDO> allReplies = new ArrayList<>();
+        if (!pageTopLevel.isEmpty()) {
+            List<Long> topLevelIds = pageTopLevel.stream()
+                    .map(UserDynamicInteractionDO::getId)
+                    .collect(Collectors.toList());
+            allReplies = safeList(interactionRepository.selectRepliesByParentIds(dynamicId, topLevelIds));
+        }
+
+        // 3. 合并：顶级评论按时间倒序，回复按时间正序跟在对应顶级评论后面
+        List<UserDynamicInteractionDO> merged = new ArrayList<>();
+        Set<Long> replyIds = new HashSet<>();
+        for (UserDynamicInteractionDO top : pageTopLevel) {
+            merged.add(top);
+            for (UserDynamicInteractionDO reply : allReplies) {
+                if (top.getId().equals(reply.getParentId()) && !replyIds.contains(reply.getId())) {
+                    merged.add(reply);
+                    replyIds.add(reply.getId());
+                }
+            }
+        }
+
+        List<DynamicPostDTO> replies = merged.stream()
                 .map(row -> toReply(row, userId))
                 .collect(Collectors.toList());
-        Long nextBeforeReplyId = hasMore && !pageRows.isEmpty()
-                ? pageRows.get(pageRows.size() - 1).getId() : null;
+
+        Long nextBeforeReplyId = hasMore && !pageTopLevel.isEmpty()
+                ? pageTopLevel.get(pageTopLevel.size() - 1).getId() : null;
+
         return new DynamicDetailResult(toPost(dynamic, userId), replies, nextBeforeReplyId, hasMore);
     }
 

@@ -47,6 +47,33 @@ public interface UserDynamicInteractionRepository {
     List<UserDynamicInteractionDO> selectReplies(@Param("dynamicId") Long dynamicId,
             @Param("beforeId") Long beforeId, @Param("limit") int limit);
 
+    /** 查询最新的 N 条顶级评论（parent_id IS NULL） */
+    @Select("SELECT i.id, i.dynamic_id, i.user_id, i.action_type, i.content, i.parent_id, i.idempotency_key, "
+            + "i.del, i.del_time, i.gmt_created, i.gmt_modified, "
+            + "u.user_name, u.nick_name, u.avatar "
+            + "FROM user_dynamic_interaction i "
+            + "JOIN `user` u ON u.id = i.user_id AND u.del = 'N' "
+            + "WHERE i.dynamic_id = #{dynamicId} AND i.action_type = 'REPLY' AND i.del = 'N' "
+            + "AND i.parent_id IS NULL "
+            + "ORDER BY i.id DESC LIMIT #{limit}")
+    List<UserDynamicInteractionDO> selectTopLevelReplies(@Param("dynamicId") Long dynamicId,
+            @Param("limit") int limit);
+
+    /** 根据 parent_id 列表查询所有回复 */
+    @Select({"<script>",
+            "SELECT i.id, i.dynamic_id, i.user_id, i.action_type, i.content, i.parent_id, i.idempotency_key,",
+            "i.del, i.del_time, i.gmt_created, i.gmt_modified,",
+            "u.user_name, u.nick_name, u.avatar",
+            "FROM user_dynamic_interaction i",
+            "JOIN `user` u ON u.id = i.user_id AND u.del = 'N'",
+            "WHERE i.dynamic_id = #{dynamicId} AND i.action_type = 'REPLY' AND i.del = 'N'",
+            "AND i.parent_id IN",
+            "<foreach collection='parentIds' item='pid' open='(' separator=',' close=')'>#{pid}</foreach>",
+            "ORDER BY i.id ASC",
+            "</script>"})
+    List<UserDynamicInteractionDO> selectRepliesByParentIds(@Param("dynamicId") Long dynamicId,
+            @Param("parentIds") List<Long> parentIds);
+
     @Select("SELECT i.id, i.dynamic_id, i.user_id, i.action_type, i.content, i.parent_id, i.idempotency_key, "
             + "i.del, i.del_time, i.gmt_created, i.gmt_modified, "
             + "u.user_name, u.nick_name, u.avatar "
