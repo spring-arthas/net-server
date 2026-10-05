@@ -20,6 +20,7 @@ public class DynamicPostDTO {
     private boolean reposted;
     private DynamicPostDTO originalPost;
     private Long replyToCommentId;
+    private Long dynamicId;
     private long createdAt;
     private boolean mine;
 }

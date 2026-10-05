@@ -345,6 +345,7 @@ public class UserDynamicServiceImpl implements UserDynamicService {
     private DynamicPostDTO toReply(UserDynamicInteractionDO reply, Long viewerId) {
         DynamicPostDTO value = new DynamicPostDTO();
         value.setId(reply.getId());
+        value.setDynamicId(reply.getDynamicId());
         value.setAuthor(new DynamicAuthorDTO(reply.getUserId(), empty(reply.getUserName()),
                 firstNonBlank(reply.getNickName(), reply.getUserName()), reply.getAvatar()));
         value.setContent(empty(reply.getContent()));
