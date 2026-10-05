@@ -119,7 +119,9 @@ public class UserDynamicServiceImpl implements UserDynamicService {
             normalizedContent = normalizeReply(content);
             UserDynamicInteractionDO reply = interaction(dynamicId, userId, "REPLY", normalizedContent,
                     "REPLY:" + UUID.randomUUID().toString());
-            reply.setParentId(parentId != null && parentId > 0 ? parentId : null);
+            // 两级评论结构校验：如果 parentId 指向的是二级评论，自动归到它的顶级评论
+            Long resolvedParentId = resolveTopLevelParentId(parentId);
+            reply.setParentId(resolvedParentId);
             interactionRepository.upsertActive(reply);
         } else if ("LIKE".equals(normalizedAction) || "REPOST".equals(normalizedAction)) {
             interactionRepository.upsertActive(interaction(dynamicId, userId, normalizedAction, null,
@@ -409,6 +411,25 @@ public class UserDynamicServiceImpl implements UserDynamicService {
         if (value.isEmpty()) throw new IllegalArgumentException("回复内容不能为空");
         if (value.length() > MAX_REPLY_LENGTH) throw new IllegalArgumentException("回复不能超过280个字符");
         return value;
+    }
+
+    /**
+     * 解析顶级评论 ID：保证评论只有两级结构。
+     * 如果 parentId 指向的是二级评论（即该评论本身有 parent_id），则归到它的顶级评论。
+     */
+    private Long resolveTopLevelParentId(Long parentId) {
+        if (parentId == null || parentId <= 0) {
+            return null;
+        }
+        UserDynamicInteractionDO parent = interactionRepository.selectReplyById(parentId);
+        if (parent == null) {
+            return null;
+        }
+        // 如果父评论本身有 parent_id，说明是二级评论，归到它的顶级评论
+        if (parent.getParentId() != null && parent.getParentId() > 0) {
+            return parent.getParentId();
+        }
+        return parentId;
     }
 
     private String normalizeMediaKind(String kind, String mimeType) {

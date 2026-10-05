@@ -46,4 +46,12 @@ public interface UserDynamicInteractionRepository {
             "</script>"})
     List<UserDynamicInteractionDO> selectReplies(@Param("dynamicId") Long dynamicId,
             @Param("beforeId") Long beforeId, @Param("limit") int limit);
+
+    @Select("SELECT i.id, i.dynamic_id, i.user_id, i.action_type, i.content, i.parent_id, i.idempotency_key, "
+            + "i.del, i.del_time, i.gmt_created, i.gmt_modified, "
+            + "u.user_name, u.nick_name, u.avatar "
+            + "FROM user_dynamic_interaction i "
+            + "JOIN `user` u ON u.id = i.user_id AND u.del = 'N' "
+            + "WHERE i.id = #{id} AND i.action_type = 'REPLY' AND i.del = 'N'")
+    UserDynamicInteractionDO selectReplyById(@Param("id") Long id);
 }
