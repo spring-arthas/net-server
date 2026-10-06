@@ -104,9 +104,44 @@ public class UserDynamicServiceImpl implements UserDynamicService {
         List<DynamicPostDTO> posts = pageRows.stream()
                 .map(row -> toPost(row, userId))
                 .collect(Collectors.toList());
+        // 批量加载每条动态的评论（5条顶级评论+所有回复）
+        for (DynamicPostDTO post : posts) {
+            post.setReplies(loadRepliesForTimeline(userId, post.getId()));
+        }
         Long nextBeforeId = hasMore && !pageRows.isEmpty()
                 ? pageRows.get(pageRows.size() - 1).getId() : null;
         return new DynamicTimelinePage(posts, nextBeforeId, hasMore);
+    }
+
+    /** 加载时间线中每条动态的评论（5条顶级评论+所有回复） */
+    private List<DynamicPostDTO> loadRepliesForTimeline(Long userId, Long dynamicId) {
+        // 1. 查询最新的5条顶级评论
+        List<UserDynamicInteractionDO> topLevel = safeList(
+                interactionRepository.selectTopLevelReplies(dynamicId, 5));
+        if (topLevel.isEmpty()) {
+            return Collections.emptyList();
+        }
+        // 2. 查询这些顶级评论的所有回复
+        List<Long> topLevelIds = topLevel.stream()
+                .map(UserDynamicInteractionDO::getId)
+                .collect(Collectors.toList());
+        List<UserDynamicInteractionDO> allReplies = safeList(
+                interactionRepository.selectRepliesByParentIds(dynamicId, topLevelIds));
+        // 3. 合并：顶级评论按时间倒序，回复按时间正序跟在对应顶级评论后面
+        List<UserDynamicInteractionDO> merged = new ArrayList<>();
+        Set<Long> replyIds = new HashSet<>();
+        for (UserDynamicInteractionDO top : topLevel) {
+            merged.add(top);
+            for (UserDynamicInteractionDO reply : allReplies) {
+                if (top.getId().equals(reply.getParentId()) && !replyIds.contains(reply.getId())) {
+                    merged.add(reply);
+                    replyIds.add(reply.getId());
+                }
+            }
+        }
+        return merged.stream()
+                .map(row -> toReply(row, userId))
+                .collect(Collectors.toList());
     }
 
     @Override

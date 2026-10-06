@@ -23,4 +23,6 @@ public class DynamicPostDTO {
     private Long dynamicId;
     private long createdAt;
     private boolean mine;
+    /** 该动态的评论列表（时间线接口返回，包含5条顶级评论+所有回复） */
+    private List<DynamicPostDTO> replies = Collections.emptyList();
 }
