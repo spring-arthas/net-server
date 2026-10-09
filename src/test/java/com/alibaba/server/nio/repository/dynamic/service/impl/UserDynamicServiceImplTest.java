@@ -497,6 +497,16 @@ public class UserDynamicServiceImplTest {
             replyByIdRequestedId = id;
             return replyByIdResult;
         }
+
+        @Override
+        public List<UserDynamicInteractionDO> selectTopLevelReplies(Long dynamicId, int limit) {
+            return replies;
+        }
+
+        @Override
+        public List<UserDynamicInteractionDO> selectRepliesByParentIds(Long dynamicId, List<Long> parentIds) {
+            return Collections.emptyList();
+        }
     }
 
     private static class UserDynamicMediaAccessRepositorySpy implements UserDynamicMediaAccessRepository {

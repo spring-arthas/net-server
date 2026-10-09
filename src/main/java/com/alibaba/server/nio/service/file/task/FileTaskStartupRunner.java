@@ -1,17 +1,25 @@
 package com.alibaba.server.nio.service.file.task;
 
+import com.alibaba.server.nio.core.server.BasicServer;
 import com.alibaba.server.common.FileTaskStatusEnum;
 import com.alibaba.server.nio.repository.file.service.FileTaskService;
 import com.alibaba.server.nio.repository.file.service.dto.FileTaskDto;
+import com.alibaba.server.nio.service.file.StorageRootResolver;
 import com.alibaba.server.nio.service.file.adaptive.ServerResourceMonitor;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 
 import javax.annotation.Resource;
-
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 文件传输任务恢复守护进程
@@ -26,6 +34,10 @@ public class FileTaskStartupRunner implements InitializingBean {
     public void afterPropertiesSet() throws Exception {
         // [修改] 预热资源监控器，确保服务启动后立即开始采样，不等第一个请求触发
         ServerResourceMonitor.getInstance();
+
+        // [修改] 启动时自动创建存储根目录，确保跨机器部署无需手动创建
+        ensureStorageDirectories();
+
         log.info("执行启动恢复任务: 将异常中断的任务标记为 PAUSED...");
         try {
             // 1. 应用重启后查询file_task表如果存在状态为【上传中】的任务时需要将其更新为暂停状态
@@ -37,6 +49,56 @@ public class FileTaskStartupRunner implements InitializingBean {
             log.info("启动恢复任务完成。");
         } catch (Exception e) {
             log.error("启动恢复任务执行失败", e);
+        }
+    }
+
+    /**
+     * 启动时自动创建所有存储根目录，并确保具备读写权限。
+     * 支持 Windows 多磁盘和 Mac/Linux 单目录两种场景。
+     */
+    private void ensureStorageDirectories() {
+        try {
+            // 从 BasicServer.getMap() 获取配置（和运行时保持一致）
+            java.util.Map<String, Object> config = BasicServer.getMap();
+            List<String> roots = StorageRootResolver.resolveRoots(config);
+
+            if (roots.isEmpty()) {
+                log.warn("未配置任何存储根目录，跳过目录初始化");
+                return;
+            }
+
+            for (String rootPath : roots) {
+                Path path = Paths.get(rootPath);
+                if (!Files.exists(path)) {
+                    Files.createDirectories(path);
+                    log.info("自动创建存储根目录: {}", rootPath);
+                }
+
+                // 设置 POSIX 权限（仅 Unix/Mac/Linux 生效，Windows 自动跳过）
+                try {
+                    Set<PosixFilePermission> permissions = new HashSet<>();
+                    permissions.add(PosixFilePermission.OWNER_READ);
+                    permissions.add(PosixFilePermission.OWNER_WRITE);
+                    permissions.add(PosixFilePermission.OWNER_EXECUTE);
+                    permissions.add(PosixFilePermission.GROUP_READ);
+                    permissions.add(PosixFilePermission.GROUP_EXECUTE);
+                    permissions.add(PosixFilePermission.OTHERS_READ);
+                    permissions.add(PosixFilePermission.OTHERS_EXECUTE);
+                    Files.setPosixFilePermissions(path, permissions);
+                } catch (UnsupportedOperationException e) {
+                    // Windows 文件系统不支持 POSIX 权限，忽略
+                    log.debug("当前系统不支持 POSIX 权限设置，跳过: {}", rootPath);
+                }
+
+                // 验证目录可写
+                if (!Files.isWritable(path)) {
+                    log.error("存储根目录无写权限: {}", rootPath);
+                } else {
+                    log.info("存储根目录就绪: {}", rootPath);
+                }
+            }
+        } catch (Exception e) {
+            log.error("启动时初始化存储目录失败", e);
         }
     }
 

@@ -32,8 +32,8 @@ public final class StorageRootResolver {
             return Collections.emptyList();
         }
         List<String> roots = new ArrayList<>();
-        addIfPresent(roots, value(configuration, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS));
-        addIfPresent(roots, value(configuration, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS_SECONDARY));
+        addIfPresent(roots, expandUserHome(value(configuration, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS)));
+        addIfPresent(roots, expandUserHome(value(configuration, BasicConstant.NIO_FILE_BASE_PATH_WINDOWS_SECONDARY)));
         return roots;
     }
 
@@ -59,7 +59,22 @@ public final class StorageRootResolver {
         String key = osName.toLowerCase(Locale.ROOT).contains("win")
                 ? BasicConstant.NIO_FILE_BASE_PATH_WINDOWS
                 : BasicConstant.NIO_FILE_BASE_PATH_LINUX_MAC;
-        return StringUtils.defaultIfBlank(value(configuration, key), defaultValue).trim();
+        String path = StringUtils.defaultIfBlank(value(configuration, key), defaultValue).trim();
+        return expandUserHome(path);
+    }
+
+    /**
+     * 展开配置路径中的 ${user.home} 占位符，支持跨机器部署无需修改代码。
+     */
+    private static String expandUserHome(String path) {
+        if (path == null || !path.contains("${user.home}")) {
+            return path;
+        }
+        String userHome = System.getProperty("user.home");
+        if (StringUtils.isBlank(userHome)) {
+            throw new IllegalStateException("无法展开存储路径：user.home 系统属性为空");
+        }
+        return path.replace("${user.home}", userHome);
     }
 
     private static String value(Map<String, Object> configuration, String key) {

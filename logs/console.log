@@ -1,0 +1,139 @@
+ INFO [main] - [2026-09-22 12:00:06] App | --> 当前操作系统类型: Mac OS X, 可支持的最大线程数: 8
+ INFO [main] - BasicServer：读取配置文件[server.properties], result = success, Server print Config
+/+------------------------------------------ 开始读取配置 ------------------------------------------+/
+
+/+------------------------------------------ NIO.TEXT.PORT = 10086 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.MAX.CONNECTIONS = 512 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.KEYSTORE.PATH.WINDOWS = ${user.home}/.net-server/tls/net-server.p12 ------------------------------------------+/
+/+------------------------------------------ NIO.MEDIA.STREAM.PORT = 10188 ------------------------------------------+/
+/+------------------------------------------ SOCKET.SEND.BUFFER.SIZE = 32500 ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.ADAPTIVE.CHUNK.MAX.BYTES = 524288 ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.GLOBAL.RATE.BPS = 104857600 ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.ADAPTIVE.ACK.INITIAL.BYTES = 1048576 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.IDLE.TIMEOUT.MILLIS = 300000 ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.TOKEN.EXPIRE.SECONDS = 300 ------------------------------------------+/
+/+------------------------------------------ BYTE.BUFFER = 40000 ------------------------------------------+/
+/+------------------------------------------ os.name = Mac OS X ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.KEYSTORE.PATH.MACOS = ${user.home}/.net-server/tls/net-server.p12 ------------------------------------------+/
+/+------------------------------------------ WRITE.MAX.WAIT.COUNT = 5 ------------------------------------------+/
+/+------------------------------------------ SELECTOR.WRITE.EVENT.HANDLER.TIME = 10000 ------------------------------------------+/
+/+------------------------------------------ SELECTOR.POLL.TIMEOUT = 2000 ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.MAX.CONCURRENT.UPLOADS = 30 ------------------------------------------+/
+/+------------------------------------------ SOCKET.RECONNECTED.COUNT = 5 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.KEYSTORE.PATH.LINUX = ${user.home}/.net-server/tls/net-server.p12 ------------------------------------------+/
+/+------------------------------------------ FILE.TRANSFER.TOKEN.EXPIRE.SECONDS = 86400 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.HANDSHAKE.TIMEOUT.MILLIS = 10000 ------------------------------------------+/
+/+------------------------------------------ NIO.FILE.RESUME.DOWNLOAD.PORT = 10090 ------------------------------------------+/
+/+------------------------------------------ USER.SESSION.TOKEN.EXPIRE.SECONDS = 604800 ------------------------------------------+/
+/+------------------------------------------ SOCKET.RECEIVE.BUFFER.SIZE = 32500 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.CONNECT.TIMEOUT.MILLIS = 10000 ------------------------------------------+/
+/+------------------------------------------ NIO.MEDIA.STREAM.BIND.IP = 0.0.0.0 ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.BUCKET.CAPACITY.MULTIPLIER = 2 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.KEYSTORE.AUTO.CREATE = true ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.BUFFER.SIZE = 65536 ------------------------------------------+/
+/+------------------------------------------ NIO.WEBSOCKET.PORT = 10089 ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.TOKEN.SECRET = [REDACTED] ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.ADAPTIVE.CHUNK.MIN.BYTES = 32768 ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.PUBLIC.HOST = auto ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.ADAPTIVE.CHUNK.INITIAL.BYTES = 65536 ------------------------------------------+/
+/+------------------------------------------ FILE.TRANSFER.TOKEN.SECRET = [REDACTED] ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.ENABLED = false ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.ADAPTIVE.ACK.MAX.BYTES = 8388608 ------------------------------------------+/
+/+------------------------------------------ NIO.FILE.UPLOAD.PORT = 10087 ------------------------------------------+/
+/+------------------------------------------ NETTY.SERVER.PROTOCOL.PORT = 60100,60101,60102 ------------------------------------------+/
+/+------------------------------------------ NIO.FILE.DOWNLOAD.PORT = 10088 ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.PER.CONNECTION.MAX.RATE.BPS = 52428800 ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.MAX.CONNECTIONS.PER.USER = 8 ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.KEYSTORE.PATH = ${user.home}/.net-server/tls/net-server.p12 ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.PUBLIC.SCHEME = http ------------------------------------------+/
+/+------------------------------------------ FILE.UPLOAD.ENABLE.DYNAMIC.RATE.ADJUSTMENT = true ------------------------------------------+/
+/+------------------------------------------ DOWNLOAD.SEND.BYTE.BUFFER = 32500 ------------------------------------------+/
+/+------------------------------------------ SERVER.IP = localhost ------------------------------------------+/
+/+------------------------------------------ NIO.FILE.BASE.PATH.LINUX.MAC = /Users/hljy/Documents/storages/ ------------------------------------------+/
+/+------------------------------------------ TLS.GATEWAY.PUBLIC.IP = auto ------------------------------------------+/
+/+------------------------------------------ USER.SESSION.TOKEN.SECRET = [REDACTED] ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.MAX.THREADS = 64 ------------------------------------------+/
+/+------------------------------------------ USER = {} ------------------------------------------+/
+/+------------------------------------------ CPU.CORE.COUNT = 8 ------------------------------------------+/
+/+------------------------------------------ MEDIA.STREAM.BUFFER.SIZE = 262144 ------------------------------------------+/
+/+------------------------------------------ NIO.FILE.RESUME.UPLOAD.PORT = 10089 ------------------------------------------+/
+/+------------------------------------------ NIO.BIND.IP = 0.0.0.0 ------------------------------------------+/
+/+------------------------------------------ NIO.FILE.BASE.PATH.WINDOWS = E:\storage\upload\file ------------------------------------------+/
+
+/+------------------------------------------ 配置读取完成 ------------------------------------------+/
+ INFO [main] - BasicServer：读取配置文件[server.properties], result = success, Server print Config
+DEBUG [main] - Refreshing org.springframework.context.support.ClassPathXmlApplicationContext@574caa3f
+DEBUG [main] - Loaded 22 bean definitions from class path resource [spring/applicationContext.xml]
+DEBUG [main] - Creating shared instance of singleton bean 'mapperScannerConfigurer'
+DEBUG [main] - Logging initialized using 'class org.apache.ibatis.logging.slf4j.Slf4jImpl' adapter.
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/user/mapper/UserRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/dynamic/mapper/UserDynamicInteractionRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/chat/mapper/UserFriendMessageRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/task/mapper/TaskRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/file/mapper/FileTaskRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/file/mapper/FileRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/user/mapper/UserFriendsRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/user/mapper/UserFriendApplyRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/dynamic/mapper/UserDynamicRepository.class]
+DEBUG [main] - Identified candidate component class: URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/com/alibaba/server/nio/repository/dynamic/mapper/UserDynamicMediaAccessRepository.class]
+DEBUG [main] - Creating MapperFactoryBean with name 'userRepository' and 'com.alibaba.server.nio.repository.user.mapper.UserRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'userDynamicInteractionRepository' and 'com.alibaba.server.nio.repository.dynamic.mapper.UserDynamicInteractionRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'userFriendMessageRepository' and 'com.alibaba.server.nio.repository.chat.mapper.UserFriendMessageRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'taskRepository' and 'com.alibaba.server.nio.repository.task.mapper.TaskRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'fileTaskRepository' and 'com.alibaba.server.nio.repository.file.mapper.FileTaskRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'fileRepository' and 'com.alibaba.server.nio.repository.file.mapper.FileRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'userFriendsRepository' and 'com.alibaba.server.nio.repository.user.mapper.UserFriendsRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'userFriendApplyRepository' and 'com.alibaba.server.nio.repository.user.mapper.UserFriendApplyRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'userDynamicRepository' and 'com.alibaba.server.nio.repository.dynamic.mapper.UserDynamicRepository' mapperInterface
+DEBUG [main] - Creating MapperFactoryBean with name 'userDynamicMediaAccessRepository' and 'com.alibaba.server.nio.repository.dynamic.mapper.UserDynamicMediaAccessRepository' mapperInterface
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.context.annotation.internalConfigurationAnnotationProcessor'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.context.event.internalEventListenerProcessor'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.transaction.config.internalTransactionalEventListenerFactory'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.context.event.internalEventListenerFactory'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.context.annotation.internalAutowiredAnnotationProcessor'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.context.annotation.internalCommonAnnotationProcessor'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.aop.config.internalAutoProxyCreator'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.transaction.annotation.AnnotationTransactionAttributeSource#0'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.transaction.config.internalTransactionAdvisor'
+DEBUG [main] - Creating shared instance of singleton bean 'org.springframework.transaction.interceptor.TransactionInterceptor#0'
+DEBUG [main] - Creating shared instance of singleton bean 'localDatabaseProperties'
+DEBUG [main] - Creating shared instance of singleton bean 'dataSource'
+ INFO [main] - {dataSource-1} inited
+DEBUG [main] - Creating shared instance of singleton bean 'sqlSessionFactory'
+DEBUG [main] - Creating shared instance of singleton bean 'mapConfiguration'
+DEBUG [main] - Creating shared instance of singleton bean 'paginatedListObjFactory'
+DEBUG [main] - Creating shared instance of singleton bean 'paginatedListWrapperFactory'
+DEBUG [main] - Registered plugin: 'com.alibaba.server.nio.core.repository.PageInterceptor@522a32b1'
+DEBUG [main] - Parsed mapper file: 'URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/mappers/fileTaskMapper.xml]'
+DEBUG [main] - Parsed mapper file: 'URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/mappers/userMapper.xml]'
+DEBUG [main] - Parsed mapper file: 'URL [jar:file:/Users/hljy/IdeaProjects/code/net-server/target/net-server-1.0-SNAPSHOT.jar!/mappers/fileMapper.xml]'
+DEBUG [main] - Creating shared instance of singleton bean 'transactionManager'
+DEBUG [main] - Creating shared instance of singleton bean 'userService'
+DEBUG [main] - Creating shared instance of singleton bean 'userRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'userFriendsService'
+DEBUG [main] - Creating shared instance of singleton bean 'userFriendsRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'userFriendApplyService'
+DEBUG [main] - Creating shared instance of singleton bean 'userFriendApplyRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'friendshipService'
+DEBUG [main] - Autowiring by type from bean name 'friendshipService' via constructor to bean named 'userFriendApplyRepository'
+DEBUG [main] - Autowiring by type from bean name 'friendshipService' via constructor to bean named 'userFriendsRepository'
+DEBUG [main] - Autowiring by type from bean name 'friendshipService' via constructor to bean named 'userRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'userFriendMessageService'
+DEBUG [main] - Creating shared instance of singleton bean 'userFriendMessageRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'userDynamicService'
+DEBUG [main] - Creating shared instance of singleton bean 'userDynamicRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'userDynamicInteractionRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'userDynamicMediaAccessRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'taskService'
+DEBUG [main] - Creating shared instance of singleton bean 'taskRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'fileService'
+DEBUG [main] - Creating shared instance of singleton bean 'fileRepository'
+DEBUG [main] - Creating shared instance of singleton bean 'fileTaskService'
+DEBUG [main] - Creating shared instance of singleton bean 'fileTaskRepository'
+ INFO [main] - net server IOC container初始化成功, threadName = main
+ INFO [NIO.SERVER.MAIN.CORE.FILE.SELECTOR.THREAD] - 文件上传Selector线程启动成功，开始监听文件上传相关事件
+ INFO [FILE_UPLOAD.ACCEPTOR.THREAD] - [FILE_UPLOAD.ACCEPTOR.THREAD ] AbstractAcceptor | --> [ NIO.SERVER.MAIN.CORE.FILE.UPLOAD.ACCEPTOR ] 服务端通道构建成功, 正在等待客户端连接, 监听地址为 = /0.0.0.0:10087, 本监听器对应线程名称 = FILE_UPLOAD.ACCEPTOR.THREAD
+ INFO [FILE_DOWNLOAD.ACCEPTOR.THREAD] - [FILE_DOWNLOAD.ACCEPTOR.THREAD ] AbstractAcceptor | --> [ NIO.SERVER.MAIN.CORE.FILE.DOWNLOAD.ACCEPTOR ] 服务端通道构建成功, 正在等待客户端连接, 监听地址为 = /0.0.0.0:10088, 本监听器对应线程名称 = FILE_DOWNLOAD.ACCEPTOR.THREAD
+ INFO [TEXT_TRANSMISSION.ACCEPTOR.THREAD] - [TEXT_TRANSMISSION.ACCEPTOR.THREAD ] AbstractAcceptor | --> [ NIO.SERVER.MAIN.CORE.TEXT.ACCEPTOR ] 服务端通道构建成功, 正在等待客户端连接, 监听地址为 = /0.0.0.0:10086, 本监听器对应线程名称 = TEXT_TRANSMISSION.ACCEPTOR.THREAD
+ INFO [main] - TLS Gateway 已自动选择本机网络地址: 172.21.33.231
+ INFO [main] - MediaStreamServer started on 0.0.0.0:10188
